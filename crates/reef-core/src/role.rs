@@ -9,6 +9,10 @@ pub struct Role {
     pub version: u32,
     pub name: RoleName,
     pub image: ImageRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub init: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<EnvKey, String>,
     pub resources: Resources,
     pub network: Network,
     #[serde(default)]
@@ -86,6 +90,31 @@ pub fn parse_role(text: &str) -> Result<Role, RoleError> {
 impl Role {
     fn problems(&self) -> Vec<String> {
         let mut out = Vec::new();
+        if let Some(init) = &self.init {
+            match init.first() {
+                None => out.push("init: must name a program".to_owned()),
+                Some(cmd) if !cmd.starts_with('/') || cmd.contains('\\') => {
+                    out.push(format!("init: {cmd:?} must be an absolute guest path"));
+                }
+                _ => {}
+            }
+            if init.iter().any(|part| part.contains('\0')) {
+                out.push("init: NUL bytes are not allowed".to_owned());
+            }
+        }
+        for (key, value) in &self.env {
+            if key.as_str().starts_with("MSB_") {
+                out.push(format!(
+                    "env.{key}: the MSB_ prefix is reserved by the runtime"
+                ));
+            }
+            if self.secrets.contains_key(key) {
+                out.push(format!("env.{key}: also declared in secrets"));
+            }
+            if value.contains('\0') {
+                out.push(format!("env.{key}: NUL bytes are not allowed"));
+            }
+        }
         if self.resources.vcpus == 0 {
             out.push("resources.vcpus: must be at least 1".to_owned());
         }
@@ -108,13 +137,13 @@ impl Role {
             }
         }
         for (key, binding) in &self.secrets {
+            if key.as_str().starts_with("MSB_") {
+                out.push(format!(
+                    "secrets.{key}: the MSB_ prefix is reserved by the runtime"
+                ));
+            }
             let host = binding.host.as_str();
-            let reachable = self
-                .network
-                .egress
-                .iter()
-                .any(|rule| rule.as_str() == host || rule.covers(host));
-            if !reachable {
+            if !self.network.egress.iter().any(|rule| rule.covers(host)) {
                 out.push(format!(
                     "secrets.{key}: host {host} is not covered by network.egress"
                 ));
@@ -127,6 +156,13 @@ impl Role {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn invalid(text: &str) -> Vec<String> {
+        match parse_role(text) {
+            Err(RoleError::Invalid(problems)) => problems,
+            other => panic!("expected invalid, got {other:?}"),
+        }
+    }
 
     const GOOD: &str = r#"
 version = 1
@@ -180,23 +216,10 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
             r#"host = "api.anthropic.com""#,
             r#"host = "api.openai.com""#,
         );
-        match parse_role(&text) {
-            Err(RoleError::Invalid(problems)) => {
-                assert_eq!(problems.len(), 1);
-                assert!(problems[0].contains("ANTHROPIC_API_KEY"), "{problems:?}");
-                assert!(problems[0].contains("api.openai.com"), "{problems:?}");
-            }
-            other => panic!("expected invalid, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn wildcard_egress_covers_secret_host() {
-        let role = parse_role(GOOD).unwrap();
-        assert!(
-            role.secrets
-                .contains_key(&EnvKey::try_from("RAW_TOKEN".to_owned()).unwrap())
-        );
+        let problems = invalid(&text);
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("ANTHROPIC_API_KEY"), "{problems:?}");
+        assert!(problems[0].contains("api.openai.com"), "{problems:?}");
     }
 
     #[test]
@@ -208,22 +231,57 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
     #[test]
     fn single_label_wildcards_are_rejected() {
         let text = GOOD.replace(r#""*.githubusercontent.com""#, r#""*.internal""#);
-        match parse_role(&text) {
-            Err(RoleError::Invalid(problems)) => {
-                assert!(problems[0].contains("*.internal"), "{problems:?}")
-            }
-            other => panic!("expected invalid, got {other:?}"),
-        }
+        let problems = invalid(&text);
+        assert!(problems[0].contains("*.internal"), "{problems:?}");
+    }
+
+    #[test]
+    fn init_is_optional_absolute_exec_form() {
+        let role = parse_role(GOOD).unwrap();
+        assert_eq!(role.init, None);
+
+        let text = GOOD.replace("[resources]", "init = [\"/init\", \"--flag\"]\n[resources]");
+        let role = parse_role(&text).unwrap();
+        assert_eq!(role.init.unwrap(), ["/init", "--flag"]);
+
+        let text = GOOD.replace("[resources]", "init = [\"nginx\"]\n[resources]");
+        assert!(invalid(&text)[0].contains("absolute"));
+
+        let text = GOOD.replace("[resources]", "init = []\n[resources]");
+        assert!(invalid(&text)[0].contains("init"));
+
+        let text = GOOD.replace(
+            "[resources]",
+            "init = [\"/init\", \"a\\u0000b\"]\n[resources]",
+        );
+        assert!(invalid(&text)[0].contains("NUL"));
+    }
+
+    #[test]
+    fn env_is_plain_and_disjoint_from_secrets() {
+        let role = parse_role(GOOD).unwrap();
+        assert!(role.env.is_empty());
+
+        let text = GOOD.replace("[network]", "[env]\nHERMES_DASHBOARD = \"1\"\n\n[network]");
+        let role = parse_role(&text).unwrap();
+        assert_eq!(role.env.len(), 1);
+
+        let text = GOOD.replace("[network]", "[env]\nMSB_HOME = \"/tmp\"\n\n[network]");
+        assert!(invalid(&text)[0].contains("MSB_"));
+
+        let text = GOOD.replace("ANTHROPIC_API_KEY =", "MSB_KEY =");
+        assert!(invalid(&text)[0].contains("MSB_"));
+
+        let text = GOOD.replace("[network]", "[env]\nBAD = \"a\\u0000b\"\n\n[network]");
+        assert!(invalid(&text)[0].contains("NUL"));
+
+        let text = GOOD.replace("[network]", "[env]\nANTHROPIC_API_KEY = \"x\"\n\n[network]");
+        assert!(invalid(&text)[0].contains("secrets"));
     }
 
     #[test]
     fn zero_resources_are_named() {
         let text = GOOD.replace("vcpus = 2", "vcpus = 0");
-        match parse_role(&text) {
-            Err(RoleError::Invalid(problems)) => {
-                assert!(problems[0].contains("vcpus"), "{problems:?}")
-            }
-            other => panic!("expected invalid, got {other:?}"),
-        }
+        assert!(invalid(&text)[0].contains("vcpus"));
     }
 }

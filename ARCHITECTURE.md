@@ -26,7 +26,7 @@ drives the VM toward the record, then returns. There is no daemon: VMs are
 created detached, outlive reef, and are re-discovered by name on the next
 command.
 
-Invariants, each held by a test:
+Invariants:
 
 - Stop/start never destroys a VM. Only a role-version change recreates one.
 - A workspace survives everything, including recreate and `agent rm`.
@@ -54,17 +54,18 @@ The split is compiler-enforced: decision logic cannot touch I/O.
 Flow: `role apply` parses and validates a role (line-and-column errors, all
 problems at once), stores it content-addressed by digest, and marks it active.
 `agent create` writes the record, then reconciles: the pure function
-`plan(Facts) -> Vec<Action>` decides Create/Start/Stop/Remove from three
+`plan(Facts) -> &[Action]` decides Create/Start/Stop/Remove from three
 inputs (desired state, VM-matches-role, observed VM), and the executor applies
-each action through the six-method `Vmm` trait. `msb.rs` is the only module
+each action through the five-method `Vmm` trait. `msb.rs` is the only module
 that names a microsandbox type — the blast door for a pre-1.0 dependency
-pinned at `=0.6.9` (upgrades are a deliberate task gated on the real-VM smoke
+pinned at `=0.6.10` (upgrades are a deliberate task gated on the real-VM smoke
 test, never a routine bump).
 
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
 status and an append-only event log. Observed VM state is never cached — it is
 re-read from the runtime on every command. microsandbox's own state under
-`~/.microsandbox` is treated as the runtime's property; reef never reads it.
+`~/.microsandbox` is treated as the runtime's property; reef never reads its
+contents (doctor only checks the directory's mode).
 
 Secrets: roles hold `reef://store/name` references (a pasted literal is a
 parse error). Values resolve host-side at VM create from `secrets.toml` —
@@ -77,10 +78,10 @@ reef holds no credential for the credential store.
 
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
-  exception, and it stays at six methods.
-- Data structures first; illegal states unrepresentable (`Running` cannot
-  lack what it needs; `Failed` cannot lack a reason; invalid names do not
-  construct).
+  exception, and it holds only the five methods the reconciler drives —
+  operator commands (`exec`, `forward`) live on the adapter itself.
+- Data structures first; illegal states unrepresentable (`Failed` cannot lack
+  a reason; invalid names do not construct).
 - No inline comments — the code carries its meaning; clap doc-comments are
   help text and stay. No dead code, no field nothing reads, no config nothing
   honors, no doc sentence the code does not back.
@@ -89,7 +90,7 @@ reef holds no credential for the credential store.
 - Verify on real hardware: `cargo test -p reef -- --ignored` boots an actual
   microVM and runs the whole journey.
 
-## Deliberately absent (v1)
+## Deliberately absent
 
 HTTP API and auth (the CLI is a local tool; the API will not ship without
 auth), budgets and metering, teams and projects, a web UI, multi-host,

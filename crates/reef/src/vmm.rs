@@ -1,23 +1,18 @@
 use crate::secrets::Secret;
 use anyhow::Result;
-use reef_core::VmStatus;
+use reef_core::{Domain, EnvKey, Role, VmStatus};
 
-pub struct VmConfig {
+pub struct VmConfig<'a> {
     pub name: String,
-    pub image: String,
-    pub vcpus: u8,
-    pub memory_mib: u32,
-    pub disk_gib: Option<u32>,
-    pub max_pids: Option<u32>,
-    pub egress: Vec<String>,
-    pub secrets: Vec<SecretEnv>,
+    pub role: &'a Role,
+    pub secrets: Vec<SecretEnv<'a>>,
     pub volume: Option<VolumeMount>,
 }
 
-pub struct SecretEnv {
-    pub key: String,
+pub struct SecretEnv<'a> {
+    pub key: &'a EnvKey,
     pub value: Secret,
-    pub host: String,
+    pub host: &'a Domain,
 }
 
 pub struct VolumeMount {
@@ -27,9 +22,8 @@ pub struct VolumeMount {
 
 pub trait Vmm {
     async fn status(&self, name: &str) -> Result<Option<VmStatus>>;
-    async fn create(&self, config: VmConfig) -> Result<()>;
+    async fn create(&self, config: VmConfig<'_>) -> Result<()>;
     async fn start(&self, name: &str) -> Result<()>;
     async fn stop(&self, name: &str) -> Result<()>;
     async fn remove(&self, name: &str) -> Result<()>;
-    async fn exec(&self, name: &str, command: &[String]) -> Result<i32>;
 }

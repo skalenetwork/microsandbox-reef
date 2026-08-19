@@ -2,7 +2,7 @@ use crate::secrets::Secrets;
 use crate::store::Store;
 use crate::vmm::{SecretEnv, VmConfig, Vmm, VolumeMount};
 use anyhow::{Context, Result};
-use reef_core::{Action, Agent, AgentName, Facts, Lifecycle, Role, plan};
+use reef_core::{Action, Agent, AgentName, Desired, Facts, Lifecycle, Role, plan};
 
 pub fn sandbox_name(agent: &AgentName) -> String {
     format!("reef-{agent}")
@@ -25,20 +25,19 @@ pub async fn reconcile<V: Vmm>(
         vm,
     });
 
-    let result = run(store, secrets, vmm, &mut agent, &sandbox, &steps).await;
+    let result = run(store, secrets, vmm, &mut agent, &sandbox, steps).await;
     agent.status.lifecycle = match result {
         Ok(()) => {
             agent.status.applied_generation = agent.generation;
             match agent.spec.desired {
-                reef_core::Desired::Running => Lifecycle::Running,
-                reef_core::Desired::Stopped => Lifecycle::Stopped,
+                Desired::Running => Lifecycle::Running,
+                Desired::Stopped => Lifecycle::Stopped,
             }
         }
         Err(ref e) => {
-            store.record(name, "failed", &format!("{e:#}"))?;
-            Lifecycle::Failed {
-                reason: format!("{e:#}"),
-            }
+            let reason = format!("{e:#}");
+            store.record(name, "failed", &reason)?;
+            Lifecycle::Failed { reason }
         }
     };
     store.set_status(name, &agent.status)?;
@@ -65,18 +64,18 @@ async fn run<V: Vmm>(
             Action::Stop => vmm.stop(sandbox).await?,
             Action::Remove => vmm.remove(sandbox).await?,
         }
-        store.record(&agent.name, action_label(*step), sandbox)?;
+        store.record(&agent.name, step.label(), sandbox)?;
     }
     Ok(())
 }
 
-fn vm_config(
+fn vm_config<'a>(
     store: &Store,
     secrets: &Secrets,
     agent: &Agent,
-    role: &Role,
+    role: &'a Role,
     sandbox: &str,
-) -> Result<VmConfig> {
+) -> Result<VmConfig<'a>> {
     let volume = agent
         .spec
         .workspace
@@ -93,37 +92,18 @@ fn vm_config(
         .iter()
         .map(|(key, binding)| {
             secrets.resolve(&binding.secret).map(|value| SecretEnv {
-                key: key.to_string(),
+                key,
                 value,
-                host: binding.host.to_string(),
+                host: &binding.host,
             })
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(VmConfig {
         name: sandbox.to_owned(),
-        image: role.image.to_string(),
-        vcpus: role.resources.vcpus,
-        memory_mib: role.resources.memory_mib,
-        disk_gib: role.resources.disk_gib,
-        max_pids: role.resources.max_pids,
-        egress: role
-            .network
-            .egress
-            .iter()
-            .map(ToString::to_string)
-            .collect(),
+        role,
         secrets: secret_envs,
         volume,
     })
-}
-
-fn action_label(action: Action) -> &'static str {
-    match action {
-        Action::Create => "create",
-        Action::Start => "start",
-        Action::Stop => "stop",
-        Action::Remove => "remove",
-    }
 }
 
 #[cfg(test)]
@@ -145,7 +125,7 @@ mod tests {
             Ok(self.vms.lock().unwrap().get(name).copied())
         }
 
-        async fn create(&self, config: VmConfig) -> Result<()> {
+        async fn create(&self, config: VmConfig<'_>) -> Result<()> {
             if self.fail_create {
                 bail!("image pull failed");
             }
@@ -176,10 +156,6 @@ mod tests {
             self.vms.lock().unwrap().remove(name);
             Ok(())
         }
-
-        async fn exec(&self, _name: &str, _command: &[String]) -> Result<i32> {
-            Ok(0)
-        }
     }
 
     const ROLE: &str = r#"
@@ -191,14 +167,9 @@ network = { egress = ["example.com"] }
 "#;
 
     fn setup() -> (Store, Secrets, Digest, AgentName) {
-        let dir = std::env::temp_dir();
-        let store = Store::open(&dir.join(format!(
-            "reef-reconcile-{}-{:?}.db",
-            std::process::id(),
-            std::time::Instant::now()
-        )))
-        .unwrap();
-        let secrets = Secrets::load(&dir.join("reef-no-secrets.toml")).unwrap();
+        let store = Store::open_temp();
+        let secrets =
+            Secrets::load(std::path::Path::new("/nonexistent/reef-secrets.toml")).unwrap();
         let role = parse_role(ROLE).unwrap();
         let digest: Digest = "b".repeat(64).parse().unwrap();
         let json = serde_json::to_string(&role).unwrap();
@@ -210,7 +181,7 @@ network = { egress = ["example.com"] }
                 name: name.clone(),
                 generation: 1,
                 spec: AgentSpec {
-                    owner: "test".into(),
+                    owner: "test".to_owned(),
                     role: role.name,
                     role_digest: digest.clone(),
                     workspace: None,

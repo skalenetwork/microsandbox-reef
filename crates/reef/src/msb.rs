@@ -1,14 +1,17 @@
 use crate::vmm::{VmConfig, Vmm};
 use anyhow::{Context, Result, bail};
-use microsandbox::backend::{Backend, LocalBackend};
+use microsandbox::backend::LocalBackend;
+use microsandbox::protocol::message::MessageType;
+use microsandbox::protocol::tcp::{TcpClose, TcpConnect, TcpConnected, TcpData, TcpEof, TcpFailed};
 use microsandbox::sandbox::{RlimitResource, SandboxHandle, SandboxStatus};
 use microsandbox::size::SizeExt;
-use microsandbox::{ExecEvent, MicrosandboxError, NetworkPolicy, Sandbox};
-use reef_core::VmStatus;
+use microsandbox::{AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, Sandbox};
+use reef_core::{Domain, VmStatus};
 use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const STATE_LABEL: &str = "reef.state";
 
@@ -17,14 +20,14 @@ pub struct Msb {
 }
 
 impl Msb {
-    pub fn new(state_dir: &Path) -> Result<Self> {
-        microsandbox::set_default_backend(Arc::new(LocalBackend::lazy()) as Arc<dyn Backend>);
+    pub fn new(state_dir: &Path) -> Self {
+        microsandbox::set_default_backend(LocalBackend::lazy());
         let canonical = state_dir
             .canonicalize()
             .unwrap_or_else(|_| state_dir.to_owned());
         let hash = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
         let state_id = hash.iter().take(4).map(|b| format!("{b:02x}")).collect();
-        Ok(Self { state_id })
+        Self { state_id }
     }
 
     fn owned(&self, handle: &SandboxHandle) -> Result<bool> {
@@ -46,31 +49,38 @@ impl Vmm for Msb {
         }
     }
 
-    async fn create(&self, config: VmConfig) -> Result<()> {
+    async fn create(&self, config: VmConfig<'_>) -> Result<()> {
+        let role = config.role;
         let mut builder = Sandbox::builder(&config.name)
-            .image(config.image.as_str())
-            .cpus(config.vcpus)
-            .memory(config.memory_mib)
+            .image(role.image.as_str())
+            .cpus(role.resources.vcpus)
+            .memory(role.resources.memory_mib)
             .label(STATE_LABEL, &self.state_id)
             .replace();
-        if let Some(gib) = config.disk_gib {
+        if let Some((cmd, args)) = role.init.as_deref().and_then(<[String]>::split_first) {
+            builder = builder.init_with(cmd, |init| init.args(args));
+        }
+        for (key, value) in &role.env {
+            builder = builder.env(key.as_str(), value);
+        }
+        if let Some(gib) = role.resources.disk_gib {
             builder = builder.root_disk(gib.gib());
         }
-        if let Some(pids) = config.max_pids {
+        if let Some(pids) = role.resources.max_pids {
             builder = builder.rlimit(RlimitResource::Nproc, u64::from(pids));
         }
         if let Some(mount) = &config.volume {
             let volume = mount.volume.clone();
             builder = builder.volume(&mount.dest, |m| m.named_with(volume, |n| n.ensure_exists()));
         }
-        let policy = egress_policy(&config.egress)?;
+        let policy = egress_policy(&role.network.egress)?;
         builder = builder.network(|n| n.policy(policy));
         for secret in &config.secrets {
             builder = builder.secret(|s| {
-                let s = s.env(&secret.key).value(secret.value.expose());
-                match secret.host.strip_prefix("*.") {
-                    Some(_) => s.allow_host_pattern(&secret.host),
-                    None => s.allow_host(&secret.host),
+                let s = s.env(secret.key.as_str()).value(secret.value.expose());
+                match secret.host.wildcard_suffix() {
+                    Some(_) => s.allow_host_pattern(secret.host.as_str()),
+                    None => s.allow_host(secret.host.as_str()),
                 }
             });
         }
@@ -106,8 +116,10 @@ impl Vmm for Msb {
         Sandbox::remove(name).await?;
         Ok(())
     }
+}
 
-    async fn exec(&self, name: &str, command: &[String]) -> Result<i32> {
+impl Msb {
+    pub async fn exec(&self, name: &str, command: &[String]) -> Result<i32> {
         let (cmd, args) = command.split_first().context("empty command")?;
         let sandbox = Sandbox::get(name)
             .await?
@@ -134,28 +146,146 @@ impl Vmm for Msb {
             }
         }
     }
+
+    pub async fn forward(&self, name: &str, ports: &[(u16, u16)]) -> Result<()> {
+        let sandbox = Sandbox::get(name)
+            .await?
+            .connect()
+            .await
+            .context("agent VM is not running")?;
+        let client = sandbox.client_arc();
+        if !client.supports(MessageType::TcpConnect) {
+            bail!(
+                "this VM's runtime predates port forwarding; restart the agent (stop, then start)"
+            );
+        }
+        let mut serve = tokio::task::JoinSet::new();
+        for &(local, guest) in ports {
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", local))
+                .await
+                .with_context(|| format!("cannot bind 127.0.0.1:{local}"))?;
+            println!(
+                "forwarding http://{} -> {name}:{guest}",
+                listener.local_addr()?
+            );
+            let client = client.clone();
+            serve.spawn(async move {
+                loop {
+                    match listener.accept().await {
+                        Ok((socket, _)) => {
+                            let client = client.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = tunnel(client, socket, guest).await {
+                                    eprintln!("forward to :{guest}: {e:#}");
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("accept for :{guest}: {e}");
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+                    }
+                }
+            });
+        }
+        let vanished = async {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                if matches!(
+                    self.status(name).await,
+                    Ok(None) | Ok(Some(VmStatus::Stopped))
+                ) {
+                    return;
+                }
+            }
+        };
+        tokio::select! {
+            () = vanished => bail!("agent VM is no longer running"),
+            _ = serve.join_all() => Ok(()),
+        }
+    }
 }
 
-fn egress_policy(domains: &[String]) -> Result<NetworkPolicy> {
+async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: u16) -> Result<()> {
+    let connect = TcpConnect {
+        host: "127.0.0.1".to_owned(),
+        port: guest,
+    };
+    let (id, mut rx) = client.stream(MessageType::TcpConnect, &connect).await?;
+    match rx.recv().await {
+        Some(msg) if msg.t == MessageType::TcpConnected => {
+            let _: TcpConnected = msg.payload()?;
+        }
+        Some(msg) if msg.t == MessageType::TcpFailed => {
+            let failed: TcpFailed = msg.payload()?;
+            bail!("guest refused :{guest}: {}", failed.error);
+        }
+        _ => bail!("agent closed the tunnel before it connected"),
+    }
+    let (mut local_read, mut local_write) = socket.into_split();
+    let outbound = tokio::spawn({
+        let client = client.clone();
+        async move {
+            let mut buf = vec![0u8; 32 * 1024];
+            loop {
+                match local_read.read(&mut buf).await {
+                    Ok(0) => {
+                        let _ = client.send(id, MessageType::TcpEof, &TcpEof {}).await;
+                        return;
+                    }
+                    Err(_) => {
+                        let _ = client.send(id, MessageType::TcpClose, &TcpClose {}).await;
+                        return;
+                    }
+                    Ok(n) => {
+                        let data = TcpData {
+                            data: buf[..n].to_vec(),
+                        };
+                        if client.send(id, MessageType::TcpData, &data).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    let inbound = async {
+        while let Some(msg) = rx.recv().await {
+            match msg.t {
+                MessageType::TcpData => {
+                    let data: TcpData = msg.payload()?;
+                    local_write.write_all(&data.data).await?;
+                }
+                MessageType::TcpEof => local_write.shutdown().await?,
+                MessageType::TcpClosed => break,
+                MessageType::TcpFailed => {
+                    let failed: TcpFailed = msg.payload()?;
+                    eprintln!("forward to :{guest}: guest side failed: {}", failed.error);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        anyhow::Ok(())
+    };
+    let result = inbound.await;
+    outbound.abort();
+    let _ = client.send(id, MessageType::TcpClose, &TcpClose {}).await;
+    result
+}
+
+fn egress_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
     let mut exact = Vec::new();
     let mut suffixes = Vec::new();
     for domain in domains {
-        match domain.strip_prefix("*.") {
-            Some(suffix) => suffixes.push(suffix.to_owned()),
-            None => exact.push(domain.clone()),
+        match domain.wildcard_suffix() {
+            Some(suffix) => suffixes.push(suffix),
+            None => exact.push(domain.as_str()),
         }
     }
     NetworkPolicy::builder()
         .default_deny()
-        .egress(move |mut rule| {
-            if !exact.is_empty() {
-                rule = rule.allow_domains(exact);
-            }
-            if !suffixes.is_empty() {
-                rule = rule.allow_domain_suffixes(suffixes);
-            }
-            rule
-        })
+        .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
         .build()
         .context("egress policy")
 }
@@ -190,7 +320,7 @@ pub fn doctor() -> Result<()> {
         msb.display()
     );
     #[cfg(target_os = "linux")]
-    if !std::path::Path::new("/dev/kvm").exists() {
+    if !Path::new("/dev/kvm").exists() {
         bail!("/dev/kvm is missing: this host cannot run microVMs");
     }
     let home = std::env::var("MSB_HOME")

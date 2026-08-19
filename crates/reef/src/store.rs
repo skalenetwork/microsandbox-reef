@@ -107,7 +107,8 @@ impl Store {
             )
             .optional()?
             .with_context(|| format!("role version {digest} is not in the store"))?;
-        Ok(decode_role((digest.as_str().to_owned(), definition))?.1)
+        serde_json::from_str(&definition)
+            .with_context(|| format!("corrupt role definition {digest}"))
     }
 
     pub fn list_roles(&self) -> Result<Vec<(String, String, String)>> {
@@ -147,7 +148,7 @@ impl Store {
                 agent.spec.role.as_str(),
                 agent.spec.role_digest.as_str(),
                 agent.spec.workspace.as_ref().map(|w| w.as_str()),
-                agent.spec.desired.as_str(),
+                agent.spec.desired.label(),
                 agent.status.lifecycle.label(),
                 error_of(&agent.status.lifecycle),
                 agent.status.applied_generation,
@@ -186,24 +187,21 @@ impl Store {
     }
 
     pub fn set_desired(&self, name: &AgentName, desired: Desired, expected: u64) -> Result<()> {
-        let updated = self.db.execute(
-            "UPDATE agents
-             SET desired = ?1, generation = generation + 1, updated_at = unixepoch()
-             WHERE name = ?2 AND generation = ?3",
-            params![desired.as_str(), name.as_str(), expected],
-        )?;
-        if updated == 0 {
-            bail!("agent {name} changed underneath this command; re-run it");
-        }
-        Ok(())
+        self.cas_set(name, "desired", desired.label(), expected)
     }
 
     pub fn set_role_digest(&self, name: &AgentName, digest: &Digest, expected: u64) -> Result<()> {
+        self.cas_set(name, "role_digest", digest.as_str(), expected)
+    }
+
+    fn cas_set(&self, name: &AgentName, column: &str, value: &str, expected: u64) -> Result<()> {
         let updated = self.db.execute(
-            "UPDATE agents
-             SET role_digest = ?1, generation = generation + 1, updated_at = unixepoch()
-             WHERE name = ?2 AND generation = ?3",
-            params![digest.as_str(), name.as_str(), expected],
+            &format!(
+                "UPDATE agents
+                 SET {column} = ?1, generation = generation + 1, updated_at = unixepoch()
+                 WHERE name = ?2 AND generation = ?3"
+            ),
+            params![value, name.as_str(), expected],
         )?;
         if updated == 0 {
             bail!("agent {name} changed underneath this command; re-run it");
@@ -305,29 +303,29 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
         (other, _) => bail!("corrupt lifecycle row for {name}: {other:?}"),
     };
     Ok(Agent {
-        name: name.parse().map_err(anyhow::Error::msg)?,
+        name: parsed(name)?,
         generation,
         spec: AgentSpec {
             owner,
-            role: role.parse().map_err(anyhow::Error::msg)?,
-            role_digest: role_digest.parse().map_err(anyhow::Error::msg)?,
-            workspace: workspace
-                .map(|w| w.parse().map_err(anyhow::Error::msg))
-                .transpose()?,
-            desired: desired.parse().map_err(anyhow::Error::msg)?,
+            role: parsed(role)?,
+            role_digest: parsed(role_digest)?,
+            workspace: workspace.map(parsed).transpose()?,
+            desired: parsed(desired)?,
         },
         status: AgentStatus {
             lifecycle,
             applied_generation,
-            applied_digest: applied_digest
-                .map(|d| d.parse().map_err(anyhow::Error::msg))
-                .transpose()?,
+            applied_digest: applied_digest.map(parsed).transpose()?,
         },
     })
 }
 
+fn parsed<T: std::str::FromStr<Err = String>>(text: String) -> Result<T> {
+    text.parse().map_err(anyhow::Error::msg)
+}
+
 fn decode_role((digest, definition): (String, String)) -> Result<(Digest, Role)> {
-    let digest: Digest = digest.parse().map_err(anyhow::Error::msg)?;
+    let digest: Digest = parsed(digest)?;
     let role: Role = serde_json::from_str(&definition)
         .with_context(|| format!("corrupt role definition {digest}"))?;
     Ok((digest, role))
@@ -337,6 +335,18 @@ fn error_of(lifecycle: &Lifecycle) -> Option<&str> {
     match lifecycle {
         Lifecycle::Failed { reason } => Some(reason),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+impl Store {
+    pub(crate) fn open_temp() -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "reef-test-{}-{:?}.db",
+            std::process::id(),
+            std::time::Instant::now()
+        ));
+        Self::open(&path).unwrap()
     }
 }
 
@@ -353,22 +363,13 @@ resources = { vcpus = 1, memory-mib = 256 }
 network = { egress = ["example.com"] }
 "#;
 
-    fn open_temp() -> Store {
-        let path = std::env::temp_dir().join(format!(
-            "reef-test-{}-{:?}.db",
-            std::process::id(),
-            std::time::Instant::now()
-        ));
-        Store::open(&path).unwrap()
-    }
-
     fn digest() -> Digest {
         "a".repeat(64).parse().unwrap()
     }
 
     #[test]
     fn role_import_is_idempotent_and_reports_activation() {
-        let store = open_temp();
+        let store = Store::open_temp();
         let role = parse_role(ROLE).unwrap();
         let json = serde_json::to_string(&role).unwrap();
         assert!(store.import_role(&role, &digest(), &json).unwrap());
@@ -380,7 +381,7 @@ network = { egress = ["example.com"] }
 
     #[test]
     fn agent_roundtrip_and_cas() {
-        let store = open_temp();
+        let store = Store::open_temp();
         let role = parse_role(ROLE).unwrap();
         let json = serde_json::to_string(&role).unwrap();
         store.import_role(&role, &digest(), &json).unwrap();
@@ -389,7 +390,7 @@ network = { egress = ["example.com"] }
             name: "worker-1".parse().unwrap(),
             generation: 1,
             spec: AgentSpec {
-                owner: "dmytro".into(),
+                owner: "dmytro".to_owned(),
                 role: role.name.clone(),
                 role_digest: digest(),
                 workspace: None,
@@ -416,7 +417,7 @@ network = { egress = ["example.com"] }
 
         let status = AgentStatus {
             lifecycle: Lifecycle::Failed {
-                reason: "boom".into(),
+                reason: "boom".to_owned(),
             },
             applied_generation: 2,
             applied_digest: Some(digest()),

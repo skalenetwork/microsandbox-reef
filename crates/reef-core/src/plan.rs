@@ -6,6 +6,15 @@ pub enum VmStatus {
     Stopped,
 }
 
+impl VmStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Stopped => "stopped",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Facts {
     pub desired: Desired,
@@ -21,15 +30,26 @@ pub enum Action {
     Remove,
 }
 
-pub fn plan(facts: Facts) -> Vec<Action> {
+impl Action {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Remove => "remove",
+        }
+    }
+}
+
+pub fn plan(facts: Facts) -> &'static [Action] {
     use Action::*;
     match (facts.desired, facts.vm, facts.in_sync) {
-        (Desired::Running, None, _) => vec![Create],
-        (Desired::Running, Some(_), false) => vec![Remove, Create],
-        (Desired::Running, Some(VmStatus::Stopped), true) => vec![Start],
-        (Desired::Running, Some(VmStatus::Running), true) => vec![],
-        (Desired::Stopped, Some(VmStatus::Running), _) => vec![Stop],
-        (Desired::Stopped, _, _) => vec![],
+        (Desired::Running, None, _) => &[Create],
+        (Desired::Running, Some(_), false) => &[Remove, Create],
+        (Desired::Running, Some(VmStatus::Stopped), true) => &[Start],
+        (Desired::Running, Some(VmStatus::Running), true) => &[],
+        (Desired::Stopped, Some(VmStatus::Running), _) => &[Stop],
+        (Desired::Stopped, _, _) => &[],
     }
 }
 

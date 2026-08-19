@@ -1,18 +1,12 @@
-# reef v2
+# reef
 
 Declared agents, disposable microVMs. An org describes agent **roles** as TOML
 files; developers create **agents** from those roles; reef keeps each agent
 materialized as a [microsandbox](https://github.com/superradcompany/microsandbox)
-microVM that matches its record. The record is durable, the VM is cattle.
+microVM that matches its record. The record is durable, the VM is cattle; there
+is no daemon — every mutating command reconciles inline, and VMs outlive reef.
 
 Design and invariants: [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Layout
-
-| Crate | What | Depends on |
-|---|---|---|
-| `reef-core` | Domain types, role-file parsing, the pure `plan()` reconcile function | serde, toml — no I/O |
-| `reef` | The binary: CLI, SQLite store, secrets file, microsandbox adapter | reef-core, rusqlite, microsandbox |
 
 ## Use
 
@@ -21,7 +15,9 @@ reef doctor                                  # can this host run agents?
 reef role apply roles/*.toml                 # validate + import, from CI or by hand
 reef agent create --role code-reviewer --name reviewer-1
 reef agent list
+reef agent get reviewer-1 --wait             # one agent in detail; --wait blocks until settled
 reef agent exec reviewer-1 -- echo hi
+reef agent forward reviewer-1 9119           # tunnel 127.0.0.1:9119 into the VM until Ctrl-C
 reef agent update reviewer-1                 # re-pin to the role's active version
 reef agent stop reviewer-1
 reef agent start reviewer-1
@@ -29,8 +25,15 @@ reef agent rm reviewer-1                     # VM destroyed, workspace kept
 reef agent history reviewer-1
 ```
 
-Every mutating command reconciles inline: the CLI returns when the VM matches
-the record. There is no daemon; VMs are created detached and outlive reef.
+`role list`, `agent list`, `agent get`, and `agent history` take `--json`.
+`agent get --wait` polls until the agent settles — reconciled and in its
+desired state — or reports failed, which exits nonzero. It has no timeout and
+nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
+
+`agent forward` binds host loopback only and tunnels through the guest agent
+channel — it reaches services on the guest's own loopback and publishes
+nothing at the VM boundary. Like `exec`, it is operator access: the role's
+egress list stays the agent's entire network policy.
 
 ## A role file
 
@@ -51,12 +54,23 @@ egress = ["api.anthropic.com", "github.com"]
 ANTHROPIC_API_KEY = { ref = "reef://platform/anthropic", host = "api.anthropic.com" }
 ```
 
+`init` (optional, exec-form: `init = ["/init"]`) names the program that becomes
+the VM's PID 1 — how service images (s6-overlay, systemd, entrypoint scripts)
+boot. The guest agent survives the handoff as its child, so `exec` and
+`forward` keep working; when the init exits, the VM stops. Absent, the VM
+boots idle and is driven via `exec`.
+
+`[env]` sets plain environment variables for every process in the VM,
+overriding the image's own `ENV` key by key (keys are `UPPER_SNAKE`). Secrets
+never go here — an `[env]` value is visible verbatim in the guest.
+
 `network.egress` is required: agents get deny-by-default egress, and the list
-is domains only (the allowlist is enforced at DNS, so group rules like
-"public" do not resolve). A wildcard `*.x` covers `x` and its subdomains —
-matching what the runtime enforces. Secrets bind to the one host they may be
-sent to; the VM only ever sees a placeholder — the real value is substituted
-host-side by microsandbox's proxy and never enters the guest.
+is domains only (the allowlist is enforced at DNS). A wildcard `*.x` covers
+`x` and its subdomains, and a raw-IP connection is allowed only while a live
+DNS answer for an allowed domain pins that IP (pins last the record's TTL).
+Secrets bind to the one host they may be sent to; the VM only ever sees a
+placeholder — the real value is substituted host-side by microsandbox's proxy
+and never enters the guest.
 
 ## State
 
@@ -64,42 +78,35 @@ host-side by microsandbox's proxy and never enters the guest.
 `--state` / `REEF_STATE`:
 
 - `reef.db` — roles, agents, workspaces, events (SQLite, WAL). Desired state
-  plus the last applied status; VM liveness is re-derived from the runtime on
-  every command. Sandboxes are labeled with this state dir's id, and reef
-  refuses to destroy a sandbox another state dir (or you, by hand) created.
-- `secrets.toml` — resolves `reef://store/name` references. Must be mode 0600
-  or reef refuses to read it. A store is either an inline table (**plaintext
-  at rest**) or, under `[resolvers]`, a command run at VM create whose stdout
-  is the value — which plugs reef into whatever the org already uses (the CLI
-  authenticates however the host already does; reef holds no credential for
-  the credential store):
+  plus the last applied status; VM liveness is re-read from the runtime on
+  every command.
+- `secrets.toml` — resolves `reef://store/name` references; mode 0600 or reef
+  refuses to read it. A store is an inline table (**plaintext at rest**) or,
+  under `[resolvers]`, a command run at VM create whose stdout is the value —
+  plugging reef into whatever the org already runs:
 
   ```toml
   [resolvers]
-  op  = "op read 'op://Infra/{name}/credential' -n"
-  bao = "bao kv get -field=value -mount=secret 'reef/{name}'"
-  aws = "aws secretsmanager get-secret-value --secret-id '{name}' --query SecretString --output text"
+  op = "op read 'op://Infra/{name}/credential' -n"
 
   [local]
   demo = "sk-demo-not-real"
   ```
 
-  An inline value wins over a resolver for the same store. Substituting
-  `{name}` is injection-safe by construction: ref names are `[a-z0-9-]`, max
-  40 chars, validated at parse.
+  An inline value wins over a resolver for the same store. `{name}` is
+  injection-safe by construction: ref names are `[a-z0-9-]`, max 40 chars,
+  validated at parse.
 
-## Known limits (v1)
+## Known limits
 
-- Secrets are plaintext at rest on the reef host, in two places: `secrets.toml`
-  (0600 or reef refuses to read it) and microsandbox's own sandbox config under
-  `~/.microsandbox`, which stores each injected value verbatim until the VM is
-  recreated. Editing `secrets.toml` alone does not refresh a running agent —
-  recreate it (`agent update` after a role change, or `rm` + `create`). `reef
-  doctor` warns when `~/.microsandbox` is readable by other users.
+- Secrets are plaintext at rest in two places: `secrets.toml` (0600-guarded)
+  and microsandbox's sandbox config under `~/.microsandbox` until the VM is
+  recreated — editing `secrets.toml` alone does not refresh a running agent.
+  `reef doctor` warns when `~/.microsandbox` is readable by other users.
 - No disk I/O throttling — microsandbox caps disk size, not IOPS.
-- One host, no auth on the CLI (it is a local tool; the HTTP API comes later
-  and will not ship without auth).
-- `microsandbox` is pinned exactly (`=0.6.9`, beta upstream); upgrades are a
+- One host, no auth on the CLI (a local tool; the HTTP API comes later and
+  will not ship without auth).
+- `microsandbox` is pinned exactly (`=0.6.10`, beta upstream); upgrades are a
   deliberate task, never a routine bump.
 
 ## Test

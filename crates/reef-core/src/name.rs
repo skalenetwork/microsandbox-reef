@@ -3,7 +3,7 @@ use std::fmt;
 
 macro_rules! name_type {
     ($ty:ident, $what:literal, $valid:path) => {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
         #[serde(try_from = "String", into = "String")]
         pub struct $ty(String);
 
@@ -70,7 +70,7 @@ impl Domain {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct SecretRef {
     store: String,
@@ -176,26 +176,26 @@ mod tests {
 
     #[test]
     fn names_reject_bad_shapes() {
-        assert!(AgentName::try_from("reviewer-1".to_owned()).is_ok());
+        assert!("reviewer-1".parse::<AgentName>().is_ok());
         for bad in ["", "-x", "x-", "X", "a b", "a_b", &"a".repeat(41)] {
-            assert!(AgentName::try_from(bad.to_owned()).is_err(), "{bad:?}");
+            assert!(bad.parse::<AgentName>().is_err(), "{bad:?}");
         }
     }
 
     #[test]
     fn env_keys() {
-        assert!(EnvKey::try_from("ANTHROPIC_API_KEY".to_owned()).is_ok());
-        assert!(EnvKey::try_from("lower".to_owned()).is_err());
-        assert!(EnvKey::try_from("1X".to_owned()).is_err());
+        assert!("ANTHROPIC_API_KEY".parse::<EnvKey>().is_ok());
+        assert!("lower".parse::<EnvKey>().is_err());
+        assert!("1X".parse::<EnvKey>().is_err());
     }
 
     #[test]
     fn domains_and_wildcards() {
-        let exact = Domain::try_from("api.anthropic.com".to_owned()).unwrap();
+        let exact: Domain = "api.anthropic.com".parse().unwrap();
         assert!(exact.covers("api.anthropic.com"));
         assert!(!exact.covers("anthropic.com"));
 
-        let wild = Domain::try_from("*.github.com".to_owned()).unwrap();
+        let wild: Domain = "*.github.com".parse().unwrap();
         assert!(wild.covers("raw.github.com"));
         assert!(wild.covers("a.b.github.com"));
         assert!(
@@ -204,13 +204,13 @@ mod tests {
         );
         assert!(!wild.covers("evilgithub.com"));
 
-        assert!(Domain::try_from("bad..dot".to_owned()).is_err());
-        assert!(Domain::try_from("-bad.com".to_owned()).is_err());
+        assert!("bad..dot".parse::<Domain>().is_err());
+        assert!("-bad.com".parse::<Domain>().is_err());
     }
 
     #[test]
     fn secret_refs() {
-        let r = SecretRef::try_from("reef://platform/anthropic".to_owned()).unwrap();
+        let r: SecretRef = "reef://platform/anthropic".parse().unwrap();
         assert_eq!(r.store(), "platform");
         assert_eq!(r.name(), "anthropic");
         assert_eq!(r.to_string(), "reef://platform/anthropic");
@@ -220,7 +220,7 @@ mod tests {
             "reef://a/b/c",
             "reef://A/b",
         ] {
-            assert!(SecretRef::try_from(bad.to_owned()).is_err(), "{bad:?}");
+            assert!(bad.parse::<SecretRef>().is_err(), "{bad:?}");
         }
     }
 }

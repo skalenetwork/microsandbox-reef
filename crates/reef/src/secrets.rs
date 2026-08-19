@@ -47,8 +47,8 @@ pub struct Secrets {
 impl Secrets {
     pub fn load(path: &Path) -> Result<Self> {
         let (resolvers, stores) = match std::fs::metadata(path) {
-            Ok(_) => {
-                require_private(path)?;
+            Ok(meta) => {
+                require_private(path, &meta)?;
                 let text = std::fs::read_to_string(path)
                     .with_context(|| format!("cannot read {}", path.display()))?;
                 parse(&text).map_err(|message| {
@@ -98,7 +98,7 @@ fn parse(text: &str) -> Result<Parsed, String> {
     };
     let stores = toml::Value::Table(table)
         .try_into()
-        .map_err(|e: toml::de::Error| e.message().to_owned())?;
+        .map_err(|_: toml::de::Error| "store values must be strings".to_owned())?;
     Ok((resolvers, stores))
 }
 
@@ -116,19 +116,19 @@ fn run(template: &CommandTemplate, secret: &SecretRef) -> Result<Secret> {
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    let value = String::from_utf8(output.stdout)
+    let mut value = String::from_utf8(output.stdout)
         .map_err(|_| anyhow::anyhow!("resolver for {secret} produced non-UTF-8 output"))?;
-    let value = value.trim_end_matches(['\r', '\n']);
+    value.truncate(value.trim_end_matches(['\r', '\n']).len());
     if value.is_empty() {
         bail!("resolver for {secret} produced no value");
     }
-    Ok(Secret(value.to_owned()))
+    Ok(Secret(value))
 }
 
 #[cfg(unix)]
-fn require_private(path: &Path) -> Result<()> {
+fn require_private(path: &Path, meta: &std::fs::Metadata) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
-    let mode = std::fs::metadata(path)?.mode();
+    let mode = meta.mode();
     if mode & 0o077 != 0 {
         bail!(
             "{} is readable by other users (mode {:o}); chmod 600 it",
@@ -140,7 +140,7 @@ fn require_private(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn require_private(_path: &Path) -> Result<()> {
+fn require_private(_path: &Path, _meta: &std::fs::Metadata) -> Result<()> {
     Ok(())
 }
 
@@ -237,7 +237,9 @@ mod tests {
             "[resolvers]\nbad = \"echo static\"\n",
             0o600,
         );
-        let err = Secrets::load(&path).map(|_| ()).unwrap_err();
+        let err = Secrets::load(&path)
+            .err()
+            .expect("static command must not load");
         assert!(err.to_string().contains("{name}"), "{err}");
     }
 
@@ -254,9 +256,15 @@ mod tests {
             "[platform]\nkey = sk-live-SECRETVALUE\n",
             0o600,
         );
-        let Err(err) = Secrets::load(&path) else {
-            panic!("bare value must not parse");
-        };
+        let err = Secrets::load(&path)
+            .err()
+            .expect("bare value must not parse");
+        assert!(!err.to_string().contains("SECRETVALUE"), "leaked: {err}");
+
+        let path = temp_file("type-err", "top-level = \"sk-live-SECRETVALUE\"\n", 0o600);
+        let err = Secrets::load(&path)
+            .err()
+            .expect("a bare top-level value must not parse");
         assert!(!err.to_string().contains("SECRETVALUE"), "leaked: {err}");
     }
 
