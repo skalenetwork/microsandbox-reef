@@ -10,6 +10,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
@@ -21,6 +22,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcap-ng-dev
       - run: cargo build --release --locked
       - run: tar czf reef-${{ matrix.target }}.tar.gz -C target/release reef
       - uses: actions/upload-artifact@v7
