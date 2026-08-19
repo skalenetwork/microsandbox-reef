@@ -1,0 +1,15 @@
+version = 1
+
+name  = "echo"
+image = "alpine"
+
+[resources]
+vcpus = 1
+memory-mib = 256
+max-pids = 128
+
+[network]
+egress = ["example.com"]
+
+[secrets]
+FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" }
