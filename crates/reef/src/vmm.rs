@@ -1,10 +1,12 @@
 use crate::secrets::Secret;
 use anyhow::Result;
 use reef_core::{EnvKey, Host, Role, VmStatus};
+use std::collections::BTreeMap;
 
 pub struct VmConfig<'a> {
     pub name: String,
     pub role: &'a Role,
+    pub env: BTreeMap<&'a EnvKey, &'a String>,
     pub ports: Vec<(u16, u16)>,
     pub secrets: Vec<SecretEnv<'a>>,
     pub volume: Option<VolumeMount>,

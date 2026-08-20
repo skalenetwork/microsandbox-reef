@@ -1,0 +1,20 @@
+version = 1
+
+name  = "hermes"
+image = "nousresearch/hermes-agent:latest"
+init  = ["/opt/hermes/docker/entrypoint-dispatch.sh"]
+
+[resources]
+vcpus = 2
+memory-mib = 4096
+disk-gib = 20
+
+[env]
+HERMES_DASHBOARD = "1"
+HERMES_DASHBOARD_HOST = "127.0.0.1"
+
+[network]
+egress = ["openrouter.ai"]
+
+[secrets]
+OPENROUTER_API_KEY = { ref = "reef://hermes/openrouter", host = "openrouter.ai" }

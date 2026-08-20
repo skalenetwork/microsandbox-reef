@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS agents (
   role_digest        TEXT NOT NULL REFERENCES role_versions(digest),
   workspace          TEXT REFERENCES workspaces(name),
   desired            TEXT NOT NULL,
+  env                TEXT NOT NULL DEFAULT '{}',
   lifecycle          TEXT NOT NULL,
   last_error         TEXT,
   applied_generation INTEGER NOT NULL,
@@ -68,9 +69,15 @@ impl Store {
         db.pragma_update(None, "foreign_keys", "ON")?;
         db.pragma_update(None, "busy_timeout", 5000)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if version < 2 {
+        if version < 3 {
             db.execute_batch(SCHEMA)?;
-            db.pragma_update(None, "user_version", 2)?;
+            if (1..=2).contains(&version) {
+                db.execute(
+                    "ALTER TABLE agents ADD COLUMN env TEXT NOT NULL DEFAULT '{}'",
+                    [],
+                )?;
+            }
+            db.pragma_update(None, "user_version", 3)?;
         }
         Ok(Self { db })
     }
@@ -142,12 +149,13 @@ impl Store {
     }
 
     pub fn insert_agent(&self, agent: &Agent) -> Result<()> {
+        let env = serde_json::to_string(&agent.spec.env)?;
         let inserted = self.db.execute(
             "INSERT OR IGNORE INTO agents
-               (name, generation, owner, role, role_digest, workspace, desired,
+               (name, generation, owner, role, role_digest, workspace, desired, env,
                 lifecycle, last_error, applied_generation, applied_digest,
                 created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, unixepoch(), unixepoch())",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, unixepoch(), unixepoch())",
             params![
                 agent.name.as_str(),
                 agent.generation,
@@ -156,6 +164,7 @@ impl Store {
                 agent.spec.role_digest.as_str(),
                 agent.spec.workspace.as_ref().map(|w| w.as_str()),
                 agent.spec.desired.label(),
+                env,
                 agent.status.lifecycle.label(),
                 error_of(&agent.status.lifecycle),
                 agent.status.applied_generation,
@@ -171,7 +180,7 @@ impl Store {
     pub fn get_agent(&self, name: &AgentName) -> Result<Option<Agent>> {
         self.db
             .query_row(
-                "SELECT name, generation, owner, role, role_digest, workspace, desired,
+                "SELECT name, generation, owner, role, role_digest, workspace, desired, env,
                         lifecycle, last_error, applied_generation, applied_digest
                  FROM agents WHERE name = ?1",
                 [name.as_str()],
@@ -184,7 +193,7 @@ impl Store {
 
     pub fn list_agents(&self) -> Result<Vec<Agent>> {
         let mut stmt = self.db.prepare(
-            "SELECT name, generation, owner, role, role_digest, workspace, desired,
+            "SELECT name, generation, owner, role, role_digest, workspace, desired, env,
                     lifecycle, last_error, applied_generation, applied_digest
              FROM agents ORDER BY name",
         )?;
@@ -303,6 +312,7 @@ type RawAgent = (
     Option<String>,
     String,
     String,
+    String,
     Option<String>,
     u64,
     Option<String>,
@@ -321,6 +331,7 @@ fn agent_row(row: &Row<'_>) -> rusqlite::Result<RawAgent> {
         row.get(8)?,
         row.get(9)?,
         row.get(10)?,
+        row.get(11)?,
     ))
 }
 
@@ -333,6 +344,7 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
         role_digest,
         workspace,
         desired,
+        env,
         lifecycle,
         last_error,
         applied_generation,
@@ -354,6 +366,7 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
             role_digest: parsed(role_digest)?,
             workspace: workspace.map(parsed).transpose()?,
             desired: parsed(desired)?,
+            env: serde_json::from_str(&env)?,
         },
         status: AgentStatus {
             lifecycle,
@@ -423,6 +436,31 @@ network = { egress = ["example.com"] }
         {
             let store = Store::open(&path).unwrap();
             store.db.execute("DROP TABLE agent_ports", []).unwrap();
+            store
+                .db
+                .execute("ALTER TABLE agents DROP COLUMN env", [])
+                .unwrap();
+            let old = "0".repeat(64);
+            store
+                .db
+                .execute(
+                    "INSERT INTO role_versions (digest, role, definition, imported_at)
+                     VALUES (?1, 'echo', '{}', 0)",
+                    [&old],
+                )
+                .unwrap();
+            store
+                .db
+                .execute(
+                    "INSERT INTO agents
+                       (name, generation, owner, role, role_digest, workspace, desired,
+                        lifecycle, last_error, applied_generation, applied_digest,
+                        created_at, updated_at)
+                     VALUES ('legacy', 1, 'o', 'echo', ?1, NULL, 'running',
+                             'pending', NULL, 0, NULL, 0, 0)",
+                    [&old],
+                )
+                .unwrap();
             store.db.pragma_update(None, "user_version", 1).unwrap();
         }
         let store = Store::open(&path).unwrap();
@@ -430,6 +468,11 @@ network = { egress = ["example.com"] }
         let ports = BTreeMap::from([("ui".parse().unwrap(), 19000_u16)]);
         store.set_ports(&name, &ports).unwrap();
         assert_eq!(store.ports(&name).unwrap(), ports);
+        let legacy = store
+            .get_agent(&"legacy".parse().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(legacy.spec.env.is_empty());
     }
 
     #[test]
@@ -474,6 +517,7 @@ network = { egress = ["example.com"] }
                 role_digest: digest(),
                 workspace: None,
                 desired: Desired::Running,
+                env: BTreeMap::from([("FOO".parse().unwrap(), "bar".to_owned())]),
             },
             status: AgentStatus {
                 lifecycle: Lifecycle::Pending,

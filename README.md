@@ -73,9 +73,11 @@ boot. The guest agent survives the handoff as its child, so `exec` and
 `forward` keep working; when the init exits, the VM stops. Absent, the VM
 boots idle and is driven via `exec`.
 
-`[env]` sets plain environment variables for every process in the VM,
-overriding the image's own `ENV` key by key (keys are `UPPER_SNAKE`). Secrets
-never go here — an `[env]` value is visible verbatim in the guest.
+Env is layered: the image's own `ENV` is the base, the role's `[env]` overrides
+it key by key, and `agent create --env KEY=VALUE` overrides both for that one
+agent (kept in the record, surviving recreates; shown by `agent get`). Keys are
+`UPPER_SNAKE`. Secrets never go in any env layer — values are visible verbatim
+in the guest; derived material like a password hash is fine.
 
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
 on `0.0.0.0` in the guest). For each entry reef allocates the agent a stable

@@ -67,8 +67,8 @@ impl Vmm for Msb {
         if let Some((cmd, args)) = role.init.as_deref().and_then(<[String]>::split_first) {
             builder = builder.init_with(cmd, |init| init.args(args));
         }
-        for (key, value) in &role.env {
-            builder = builder.env(key.as_str(), value);
+        for (key, value) in &config.env {
+            builder = builder.env(key.as_str(), value.as_str());
         }
         for &(host, guest) in &config.ports {
             builder = builder.port(host, guest);

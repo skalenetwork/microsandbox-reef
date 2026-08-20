@@ -7,8 +7,8 @@ mod vmm;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, Lifecycle, PortName, Role, RoleName,
-    VmStatus, WorkspaceName, parse_role,
+    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Lifecycle, PortName, Role,
+    RoleName, VmStatus, WorkspaceName, parse_role,
 };
 use secrets::Secrets;
 use serde::Serialize;
@@ -66,6 +66,9 @@ enum AgentCommand {
         name: AgentName,
         #[arg(long)]
         workspace: Option<WorkspaceName>,
+        /// KEY=VALUE for this agent, overriding the role's [env] (repeatable)
+        #[arg(long, value_name = "KEY=VALUE")]
+        env: Vec<EnvPair>,
     },
     /// List agents with their observed VM state
     List {
@@ -110,6 +113,20 @@ enum AgentCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Clone)]
+struct EnvPair(EnvKey, String);
+
+impl std::str::FromStr for EnvPair {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (key, value) = value
+            .split_once('=')
+            .ok_or_else(|| format!("expected KEY=VALUE, got {value:?}"))?;
+        Ok(Self(key.parse()?, value.to_owned()))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -175,6 +192,7 @@ struct AgentDetail {
     applied_digest: Option<Digest>,
     vm: Option<&'static str>,
     ports: BTreeMap<PortName, u16>,
+    env: BTreeMap<EnvKey, String>,
 }
 
 #[derive(Serialize)]
@@ -281,6 +299,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             role,
             name,
             workspace,
+            env,
         } => {
             let (digest, _) = ctx
                 .store
@@ -298,6 +317,10 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     role_digest: digest,
                     workspace,
                     desired: Desired::Running,
+                    env: env
+                        .into_iter()
+                        .map(|EnvPair(key, value)| (key, value))
+                        .collect(),
                 },
                 status: AgentStatus {
                     lifecycle: Lifecycle::Pending,
@@ -394,6 +417,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 applied_digest: agent.status.applied_digest,
                 vm: vm.map(VmStatus::label),
                 ports,
+                env: agent.spec.env,
             };
             if json {
                 println!("{}", serde_json::to_string_pretty(&detail)?);
@@ -421,6 +445,9 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                         .map(|(name, port)| format!("{name}=127.0.0.1:{port}"))
                         .collect();
                     row("ports", ports.join(" "));
+                }
+                for (key, value) in &detail.env {
+                    row("env", format_args!("{key}={value}"));
                 }
                 row(
                     "synced",
@@ -593,6 +620,18 @@ network = { egress = ["example.com"] }
     }
 
     #[test]
+    fn env_pairs_parse() {
+        let EnvPair(key, value) = "FOO=bar".parse().unwrap();
+        assert_eq!((key.as_str(), value.as_str()), ("FOO", "bar"));
+        let EnvPair(_, value) = "FOO=a=b".parse().unwrap();
+        assert_eq!(value, "a=b");
+        let EnvPair(_, value) = "FOO=".parse().unwrap();
+        assert_eq!(value, "");
+        assert!("FOO".parse::<EnvPair>().is_err());
+        assert!("lower=x".parse::<EnvPair>().is_err());
+    }
+
+    #[test]
     fn json_rows_are_a_stable_contract() {
         let role = RoleRow {
             name: "echo".to_owned(),
@@ -644,11 +683,12 @@ network = { egress = ["example.com"] }
             applied_digest: None,
             vm: Some("stopped"),
             ports: BTreeMap::new(),
+            env: BTreeMap::from([("FOO".parse().unwrap(), "bar".to_owned())]),
         };
         assert_eq!(
             serde_json::to_string(&detail).unwrap(),
             format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","ports":{{}}}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","ports":{{}},"env":{{"FOO":"bar"}}}}"#
             )
         );
     }

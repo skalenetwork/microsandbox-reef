@@ -1,7 +1,7 @@
 use crate::secrets::Secrets;
 use crate::store::Store;
 use crate::vmm::{SecretEnv, VmConfig, Vmm, VolumeMount};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use reef_core::{
     Action, Agent, AgentName, Desired, Facts, Lifecycle, PortName, Role, allocate_ports, plan,
 };
@@ -55,10 +55,22 @@ async fn run<V: Vmm>(
     sandbox: &str,
     steps: &[Action],
 ) -> Result<()> {
+    let role = match steps.contains(&Action::Create) {
+        true => {
+            let role = store.role_version(&agent.spec.role_digest)?;
+            for key in agent.spec.env.keys() {
+                if role.secrets.contains_key(key) {
+                    bail!("agent env {key} collides with a role secret");
+                }
+            }
+            Some(role)
+        }
+        false => None,
+    };
     for step in steps {
         match step {
             Action::Create => {
-                let role = store.role_version(&agent.spec.role_digest)?;
+                let role = role.as_ref().expect("plan pairs Create with a role");
                 let ports = allocate_ports(
                     role.expose.keys(),
                     &store.ports(&agent.name)?,
@@ -66,7 +78,7 @@ async fn run<V: Vmm>(
                 )
                 .map_err(anyhow::Error::msg)?;
                 store.set_ports(&agent.name, &ports)?;
-                let config = vm_config(store, secrets, agent, &role, sandbox, &ports)?;
+                let config = vm_config(store, secrets, agent, role, sandbox, &ports)?;
                 vmm.create(config).await?;
                 agent.status.applied_digest = Some(agent.spec.role_digest.clone());
             }
@@ -82,7 +94,7 @@ async fn run<V: Vmm>(
 fn vm_config<'a>(
     store: &Store,
     secrets: &Secrets,
-    agent: &Agent,
+    agent: &'a Agent,
     role: &'a Role,
     sandbox: &str,
     ports: &BTreeMap<PortName, u16>,
@@ -112,6 +124,7 @@ fn vm_config<'a>(
     Ok(VmConfig {
         name: sandbox.to_owned(),
         role,
+        env: role.env.iter().chain(&agent.spec.env).collect(),
         ports: role
             .expose
             .iter()
@@ -126,13 +139,14 @@ fn vm_config<'a>(
 mod tests {
     use super::*;
     use anyhow::bail;
-    use reef_core::{AgentSpec, AgentStatus, Desired, Digest, VmStatus, parse_role};
+    use reef_core::{AgentSpec, AgentStatus, Desired, Digest, EnvKey, VmStatus, parse_role};
     use std::collections::HashMap;
     use std::sync::Mutex;
 
     #[derive(Default)]
     struct FakeVmm {
         vms: Mutex<HashMap<String, VmStatus>>,
+        seen_env: Mutex<Vec<(String, String)>>,
         fail_create: bool,
     }
 
@@ -145,6 +159,11 @@ mod tests {
             if self.fail_create {
                 bail!("image pull failed");
             }
+            *self.seen_env.lock().unwrap() = config
+                .env
+                .iter()
+                .map(|(key, value)| (key.to_string(), (*value).clone()))
+                .collect();
             self.vms
                 .lock()
                 .unwrap()
@@ -186,30 +205,9 @@ network = { egress = ["example.com"] }
         let store = Store::open_temp();
         let secrets =
             Secrets::load(std::path::Path::new("/nonexistent/reef-secrets.toml")).unwrap();
-        let role = parse_role(ROLE).unwrap();
-        let digest: Digest = "b".repeat(64).parse().unwrap();
-        let json = serde_json::to_string(&role).unwrap();
-        store.import_role(&role, &digest, &json).unwrap();
-
+        let digest = import(&store, ROLE, "b");
         let name: AgentName = "worker-1".parse().unwrap();
-        store
-            .insert_agent(&Agent {
-                name: name.clone(),
-                generation: 1,
-                spec: AgentSpec {
-                    owner: "test".to_owned(),
-                    role: role.name,
-                    role_digest: digest.clone(),
-                    workspace: None,
-                    desired: Desired::Running,
-                },
-                status: AgentStatus {
-                    lifecycle: Lifecycle::Pending,
-                    applied_generation: 0,
-                    applied_digest: None,
-                },
-            })
-            .unwrap();
+        insert(&store, &name, &digest, BTreeMap::new());
         (store, secrets, digest, name)
     }
 
@@ -304,6 +302,85 @@ network = { egress = ["example.com"] }
             .import_role(&role, &digest, &serde_json::to_string(&role).unwrap())
             .unwrap();
         digest
+    }
+
+    fn insert(store: &Store, name: &AgentName, digest: &Digest, env: BTreeMap<EnvKey, String>) {
+        store
+            .insert_agent(&Agent {
+                name: name.clone(),
+                generation: 1,
+                spec: AgentSpec {
+                    owner: "test".to_owned(),
+                    role: "echo".parse().unwrap(),
+                    role_digest: digest.clone(),
+                    workspace: None,
+                    desired: Desired::Running,
+                    env,
+                },
+                status: AgentStatus {
+                    lifecycle: Lifecycle::Pending,
+                    applied_generation: 0,
+                    applied_digest: None,
+                },
+            })
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn agent_env_overrides_role_env() {
+        let (store, secrets, _digest, _name) = setup();
+        let vmm = FakeVmm::default();
+        let layered = import(
+            &store,
+            &ROLE.replace(
+                "network =",
+                "env = { FOO = \"role\", KEEP = \"role\" }\nnetwork =",
+            ),
+            "e",
+        );
+        let name: AgentName = "worker-2".parse().unwrap();
+        insert(
+            &store,
+            &name,
+            &layered,
+            BTreeMap::from([
+                ("FOO".parse().unwrap(), "agent".to_owned()),
+                ("EXTRA".parse().unwrap(), "new".to_owned()),
+            ]),
+        );
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        let env = vmm.seen_env.lock().unwrap().clone();
+        assert_eq!(
+            env,
+            [
+                ("EXTRA".to_owned(), "new".to_owned()),
+                ("FOO".to_owned(), "agent".to_owned()),
+                ("KEEP".to_owned(), "role".to_owned()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_env_may_not_shadow_role_secrets() {
+        let (store, secrets, _digest, _name) = setup();
+        let vmm = FakeVmm::default();
+        let secretful = import(
+            &store,
+            &ROLE.replace(
+                "network =",
+                "secrets = { FOO = { ref = \"reef://demo/fake\", host = \"example.com\" } }\nnetwork =",
+            ),
+            "f",
+        );
+        let name: AgentName = "worker-3".parse().unwrap();
+        insert(
+            &store,
+            &name,
+            &secretful,
+            BTreeMap::from([("FOO".parse().unwrap(), "shadow".to_owned())]),
+        );
+        let err = reconcile(&store, &secrets, &vmm, &name).await.unwrap_err();
+        assert!(err.to_string().contains("collides"), "{err}");
     }
 
     #[tokio::test]

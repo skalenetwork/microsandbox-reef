@@ -1,4 +1,5 @@
-use crate::name::{AgentName, Digest, RoleName, WorkspaceName};
+use crate::name::{AgentName, Digest, EnvKey, RoleName, WorkspaceName};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Desired {
@@ -53,6 +54,7 @@ pub struct AgentSpec {
     pub role_digest: Digest,
     pub workspace: Option<WorkspaceName>,
     pub desired: Desired,
+    pub env: BTreeMap<EnvKey, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,6 +104,7 @@ mod tests {
                 role_digest: "0".repeat(64).parse().unwrap(),
                 workspace: None,
                 desired,
+                env: BTreeMap::new(),
             },
             status: AgentStatus {
                 lifecycle,

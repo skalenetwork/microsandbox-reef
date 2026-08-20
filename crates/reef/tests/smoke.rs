@@ -107,7 +107,16 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
     let applied = reef.ok(&["role", "apply", role.to_str().unwrap()]);
     assert!(applied.contains("(active)"), "{applied}");
 
-    let created = reef.ok(&["agent", "create", "--role", "echo", "--name", &reef.agent]);
+    let created = reef.ok(&[
+        "agent",
+        "create",
+        "--role",
+        "echo",
+        "--name",
+        &reef.agent,
+        "--env",
+        "SMOKE_MARK=agent-wins",
+    ]);
     assert!(created.contains("running"), "{created}");
 
     let got = reef.ok(&["agent", "get", &reef.agent, "--wait", "--json"]);
@@ -132,7 +141,10 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
         "echo [$FAKE_KEY] $SMOKE_MARK",
     ]);
     assert!(secret.contains("[$MSB_FAKE_KEY]"), "value leaked: {secret}");
-    assert!(secret.contains("reef-env"), "role env missing: {secret}");
+    assert!(
+        secret.contains("agent-wins"),
+        "agent env must override role env: {secret}"
+    );
 
     let denied = reef.ok(&[
         "agent",
