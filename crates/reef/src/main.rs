@@ -51,6 +51,18 @@ enum Command {
         #[command(subcommand)]
         command: FleetCommand,
     },
+    /// Show the event log
+    Events {
+        /// Only this agent's events
+        #[arg(long)]
+        agent: Option<AgentName>,
+        /// Only events after this id
+        #[arg(long, value_name = "ID")]
+        after: Option<i64>,
+        /// Print JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Check this host can run agents
     Doctor,
     /// Replace this binary with the latest release
@@ -59,8 +71,13 @@ enum Command {
 
 #[derive(Subcommand)]
 enum FleetCommand {
-    /// Converge agents toward fleet files: create, update, and prune
-    Apply { files: Vec<PathBuf> },
+    /// Converge agents toward fleet files: create and update
+    Apply {
+        files: Vec<PathBuf>,
+        /// Also remove fleet agents these files no longer declare
+        #[arg(long)]
+        prune: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -125,13 +142,6 @@ enum AgentCommand {
     Stop { name: AgentName },
     /// Destroy the VM and the record; workspaces survive
     Rm { name: AgentName },
-    /// Show an agent's event history
-    History {
-        name: AgentName,
-        /// Print JSON
-        #[arg(long)]
-        json: bool,
-    },
 }
 
 #[derive(Clone)]
@@ -211,15 +221,9 @@ struct AgentDetail {
     applied_generation: u64,
     applied_digest: Option<Digest>,
     vm: Option<&'static str>,
+    sandbox: String,
     ports: BTreeMap<PortName, u16>,
     env: BTreeMap<EnvKey, String>,
-}
-
-#[derive(Serialize)]
-struct EventRow {
-    at: i64,
-    kind: String,
-    detail: String,
 }
 
 struct Ctx {
@@ -261,6 +265,9 @@ async fn main() -> Result<()> {
         Command::Role { command } => role_command(Ctx::open(&dir)?, command),
         Command::Agent { command } => agent_command(Ctx::open(&dir)?, command).await,
         Command::Fleet { command } => fleet_command(Ctx::open(&dir)?, command).await,
+        Command::Events { agent, after, json } => {
+            events_command(Ctx::open(&dir)?, agent, after, json)
+        }
         Command::Doctor => msb::doctor(),
         Command::Update => update::run().await,
     };
@@ -421,10 +428,8 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     agent = require_agent(&ctx, &name)?;
                 }
             }
-            let vm = ctx
-                .vmm
-                .status(&reconcile::sandbox_name(&agent.name))
-                .await?;
+            let sandbox = reconcile::sandbox_name(&agent.name);
+            let vm = ctx.vmm.status(&sandbox).await?;
             let state = agent.status.lifecycle.label();
             let reason = match agent.status.lifecycle {
                 Lifecycle::Failed { reason } => Some(reason),
@@ -445,6 +450,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 applied_generation: agent.status.applied_generation,
                 applied_digest: agent.status.applied_digest,
                 vm: vm.map(VmStatus::label),
+                sandbox,
                 ports,
                 env: agent.spec.env,
             };
@@ -467,6 +473,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     None => row("state", detail.state),
                 }
                 row("vm", detail.vm.unwrap_or("-"));
+                row("sandbox", &detail.sandbox);
                 if !detail.ports.is_empty() {
                     let ports: Vec<String> = detail
                         .ports
@@ -560,23 +567,22 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             }
             Ok(())
         }
-        AgentCommand::History { name, json } => {
-            let events: Vec<EventRow> = ctx
-                .store
-                .history(&name)?
-                .into_iter()
-                .map(|(at, kind, detail)| EventRow { at, kind, detail })
-                .collect();
-            if json {
-                println!("{}", serde_json::to_string_pretty(&events)?);
-            } else {
-                for event in &events {
-                    println!("{} {:8} {}", event.at, event.kind, event.detail);
-                }
-            }
-            Ok(())
+    }
+}
+
+fn events_command(ctx: Ctx, agent: Option<AgentName>, after: Option<i64>, json: bool) -> Result<()> {
+    let events = ctx.store.events(agent.as_ref(), after)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&events)?);
+    } else {
+        for event in &events {
+            println!(
+                "{:6} {} {:24} {:8} {}",
+                event.id, event.at, event.agent, event.kind, event.detail
+            );
         }
     }
+    Ok(())
 }
 
 async fn set_desired(ctx: &Ctx, name: &AgentName, desired: Desired) -> Result<()> {
@@ -615,7 +621,7 @@ fn owner() -> String {
 }
 
 async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
-    let FleetCommand::Apply { files } = command;
+    let FleetCommand::Apply { files, prune } = command;
     if files.is_empty() {
         bail!("no fleet files given");
     }
@@ -640,18 +646,23 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
     }
     let mut failed = false;
     for name in ctx.store.fleet_agents()? {
-        if !desired.contains_key(&name) {
-            match ctx.vmm.remove(&reconcile::sandbox_name(&name)).await {
-                Ok(()) => {
-                    if ctx.store.delete_fleet_agent(&name)? {
-                        ctx.store.record(&name, "deleted", "fleet")?;
-                        println!("{name} removed");
-                    }
+        if desired.contains_key(&name) {
+            continue;
+        }
+        if !prune {
+            eprintln!("{name}: fleet-managed but not declared here; --prune removes it");
+            continue;
+        }
+        match ctx.vmm.remove(&reconcile::sandbox_name(&name)).await {
+            Ok(()) => {
+                if ctx.store.delete_fleet_agent(&name)? {
+                    ctx.store.record(&name, "deleted", "fleet")?;
+                    println!("{name} removed");
                 }
-                Err(e) => {
-                    eprintln!("{name}: {e:#}");
-                    failed = true;
-                }
+            }
+            Err(e) => {
+                eprintln!("{name}: {e:#}");
+                failed = true;
             }
         }
     }
@@ -798,14 +809,16 @@ network = { egress = ["example.com"] }
             r#"{"name":"echo-1","role":"echo","owner":"dmytro","desired":"running","state":"running","vm":null,"synced":true,"ports":{"ui":19007}}"#
         );
 
-        let event = EventRow {
+        let event = store::Event {
+            id: 7,
+            agent: "echo-1".parse().unwrap(),
             at: 1,
             kind: "created".to_owned(),
             detail: "dmytro".to_owned(),
         };
         assert_eq!(
             serde_json::to_string(&event).unwrap(),
-            r#"{"at":1,"kind":"created","detail":"dmytro"}"#
+            r#"{"id":7,"agent":"echo-1","at":1,"kind":"created","detail":"dmytro"}"#
         );
 
         let digest = "0".repeat(64);
@@ -823,13 +836,14 @@ network = { egress = ["example.com"] }
             applied_generation: 1,
             applied_digest: None,
             vm: Some("stopped"),
+            sandbox: "reef-echo-1".to_owned(),
             ports: BTreeMap::new(),
             env: BTreeMap::from([("FOO".parse().unwrap(), "bar".to_owned())]),
         };
         assert_eq!(
             serde_json::to_string(&detail).unwrap(),
             format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","fleet":false,"workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","ports":{{}},"env":{{"FOO":"bar"}}}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","fleet":false,"workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
             )
         );
     }

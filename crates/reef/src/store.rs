@@ -4,6 +4,7 @@ use reef_core::{
     RoleName, WorkspaceName,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -350,15 +351,36 @@ impl Store {
         Ok(())
     }
 
-    pub fn history(&self, agent: &AgentName) -> Result<Vec<(i64, String, String)>> {
-        let mut stmt = self
-            .db
-            .prepare("SELECT at, kind, detail FROM events WHERE agent = ?1 ORDER BY id")?;
-        let rows = stmt.query_map([agent.as_str()], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    pub fn events(&self, agent: Option<&AgentName>, after: Option<i64>) -> Result<Vec<Event>> {
+        let mut stmt = self.db.prepare(
+            "SELECT id, agent, at, kind, detail FROM events
+             WHERE (?1 IS NULL OR agent = ?1) AND (?2 IS NULL OR id > ?2)
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map(params![agent.map(AgentName::as_str), after], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
         })?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        rows.map(|row| {
+            let (id, agent, at, kind, detail): (i64, String, i64, String, String) = row?;
+            Ok(Event {
+                id,
+                agent: parsed(agent)?,
+                at,
+                kind,
+                detail,
+            })
+        })
+        .collect()
     }
+}
+
+#[derive(Serialize)]
+pub struct Event {
+    pub id: i64,
+    pub agent: AgentName,
+    pub at: i64,
+    pub kind: String,
+    pub detail: String,
 }
 
 type RawAgent = (
@@ -584,10 +606,16 @@ network = { egress = ["example.com"] }
         store
             .record(&agent.name, "create", "sandbox reef-worker-1")
             .unwrap();
-        assert_eq!(store.history(&agent.name).unwrap().len(), 1);
+        let events = store.events(Some(&agent.name), None).unwrap();
+        assert_eq!(events.len(), 1);
+
+        store.record(&agent.name, "remove", "").unwrap();
+        let after = store.events(None, Some(events[0].id)).unwrap();
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].kind, "remove");
 
         store.delete_agent(&agent.name).unwrap();
         assert!(store.get_agent(&agent.name).unwrap().is_none());
-        assert_eq!(store.history(&agent.name).unwrap().len(), 1);
+        assert_eq!(store.events(None, None).unwrap().len(), 2);
     }
 }

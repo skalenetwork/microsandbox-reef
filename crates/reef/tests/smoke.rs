@@ -233,11 +233,11 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
         "published port {web} did not reach the guest: {published}"
     );
 
-    let history = reef.ok(&["agent", "history", &reef.agent]);
+    let events = reef.ok(&["events", "--agent", &reef.agent]);
     assert_eq!(
-        history.matches(" create ").count(),
+        events.matches(" create ").count(),
         1,
-        "stop/start must not recreate:\n{history}"
+        "stop/start must not recreate:\n{events}"
     );
 
     let removed = reef.ok(&["agent", "rm", &reef.agent]);
@@ -309,9 +309,14 @@ network = { egress = ["example.com"] }
     let seen = member.ok(&["agent", "exec", &member.agent, "--", "sh", "-c", "echo $FM"]);
     assert!(seen.contains("two"), "fleet env not applied: {seen}");
     std::fs::write(&fleet, "version = 1\n").unwrap();
+    member.ok(&["fleet", "apply", fleet_path]);
+    assert!(
+        member.ok(&["agent", "get", &member.agent]).contains("echo"),
+        "apply without --prune must keep an undeclared agent"
+    );
     assert!(
         member
-            .ok(&["fleet", "apply", fleet_path])
+            .ok(&["fleet", "apply", fleet_path, "--prune"])
             .contains("removed"),
         "empty fleet must prune"
     );

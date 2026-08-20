@@ -37,13 +37,18 @@ reef agent update reviewer-1                 # re-pin to the role's active versi
 reef agent stop reviewer-1
 reef agent start reviewer-1
 reef agent rm reviewer-1                     # VM destroyed, workspace kept
-reef agent history reviewer-1
+reef events --agent reviewer-1               # the event log, oldest first
 ```
 
-`role list`, `agent list`, `agent get`, and `agent history` take `--json`.
+`role list`, `agent list`, `agent get`, and `events` take `--json`.
 `agent get --wait` polls until the agent settles — reconciled and in its
 desired state — or reports failed, which exits nonzero. It has no timeout and
 nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
+
+`events` prints the log oldest-first; `--after ID` returns only what is newer,
+so a collector can poll it without re-reading. `agent get` prints the VM's
+`sandbox` name — the handle for the runtime's own tools, such as
+`msb logs <sandbox>` for captured guest output.
 
 `agent forward` with no ports reads the guest's `/proc/net/tcp` and lists the
 ports it is listening on that are reachable from the guest's loopback, so every
@@ -101,10 +106,13 @@ and never enters the guest.
 ## A fleet file
 
 Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
-listed agents are created (or recreated when their role or env drifts), and
-fleet-created agents no longer listed are removed — hand-made agents are never
-touched, and workspaces survive removal. An entry may also pin a `workspace`;
-changing it later needs `agent rm` first, and apply refuses it otherwise.
+listed agents are created, and recreated when their role or env drifts.
+Removal is opt-in: `--prune` also deletes fleet agents the given files no
+longer declare, so pass it the whole fleet directory — a partial file list
+with `--prune` deletes everything it cannot see. Without the flag, undeclared
+agents are only reported. Hand-made agents are never touched, and workspaces
+survive removal. An entry may also pin a `workspace`; changing it later needs
+`agent rm` first, and apply refuses it otherwise.
 
 ```toml
 version = 1

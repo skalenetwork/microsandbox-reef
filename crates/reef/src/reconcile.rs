@@ -224,8 +224,13 @@ network = { egress = ["example.com"] }
 
         let again = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(again, agent);
-        let history = store.history(&name).unwrap();
-        assert_eq!(history.len(), 1, "second pass must be a no-op: {history:?}");
+        let kinds: Vec<String> = store
+            .events(Some(&name), None)
+            .unwrap()
+            .into_iter()
+            .map(|event| event.kind)
+            .collect();
+        assert_eq!(kinds.len(), 1, "second pass must be a no-op: {kinds:?}");
     }
 
     #[tokio::test]
@@ -244,10 +249,10 @@ network = { egress = ["example.com"] }
         assert!(agent.vm_current() && agent.reconciled());
         assert_eq!(agent.status.applied_generation, 3);
         let kinds: Vec<String> = store
-            .history(&name)
+            .events(Some(&name), None)
             .unwrap()
             .into_iter()
-            .map(|(_, kind, _)| kind)
+            .map(|event| event.kind)
             .collect();
         assert_eq!(kinds, ["create", "stop", "start"]);
     }
@@ -269,10 +274,10 @@ network = { egress = ["example.com"] }
         assert_eq!(agent.status.applied_digest, Some(next));
         assert!(agent.vm_current() && agent.reconciled());
         let kinds: Vec<String> = store
-            .history(&name)
+            .events(Some(&name), None)
             .unwrap()
             .into_iter()
-            .map(|(_, kind, _)| kind)
+            .map(|event| event.kind)
             .collect();
         assert_eq!(kinds, ["create", "remove", "create"]);
     }
@@ -401,10 +406,10 @@ network = { egress = ["example.com"] }
             [("FOO".to_owned(), "v2".to_owned())]
         );
         let kinds: Vec<String> = store
-            .history(&name)
+            .events(Some(&name), None)
             .unwrap()
             .into_iter()
-            .map(|(_, kind, _)| kind)
+            .map(|event| event.kind)
             .collect();
         assert_eq!(kinds, ["create", "remove", "create"]);
     }

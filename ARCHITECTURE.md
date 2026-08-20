@@ -40,8 +40,8 @@ Invariants:
   a lost race is a 409-style error, never a merge.
 - reef refuses to destroy a sandbox it did not create (a `reef.state` label
   carries the state dir's identity).
-- `fleet apply` prunes only agents it created; a hand-made agent is never
-  adopted or removed by a fleet file.
+- `fleet apply` removes nothing without `--prune`, and prunes only agents it
+  created; a hand-made agent is never adopted or removed by a fleet file.
 
 ## Layout
 
