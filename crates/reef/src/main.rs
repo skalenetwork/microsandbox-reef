@@ -2,6 +2,7 @@ mod msb;
 mod reconcile;
 mod secrets;
 mod store;
+mod update;
 mod vmm;
 
 use anyhow::{Context, Result, bail};
@@ -14,7 +15,7 @@ use secrets::Secrets;
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use store::Store;
 use vmm::Vmm;
 
@@ -52,6 +53,8 @@ enum Command {
     },
     /// Check this host can run agents
     Doctor,
+    /// Replace this binary with the latest release
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -226,12 +229,11 @@ struct Ctx {
 }
 
 impl Ctx {
-    fn open(state: Option<PathBuf>) -> Result<Self> {
-        let dir = state.map_or_else(default_state_dir, Ok)?;
+    fn open(dir: &Path) -> Result<Self> {
         Ok(Self {
             store: Store::open(&dir.join("reef.db"))?,
             secrets: Secrets::load(&dir.join("secrets.toml"))?,
-            vmm: msb::Msb::new(&dir),
+            vmm: msb::Msb::new(dir),
         })
     }
 }
@@ -251,12 +253,21 @@ async fn main() -> Result<()> {
         Cli::command().print_help()?;
         return Ok(());
     };
-    match command {
-        Command::Role { command } => role_command(Ctx::open(cli.state)?, command),
-        Command::Agent { command } => agent_command(Ctx::open(cli.state)?, command).await,
-        Command::Fleet { command } => fleet_command(Ctx::open(cli.state)?, command).await,
+    let dir = cli.state.map_or_else(default_state_dir, Ok)?;
+    let notice = (!matches!(command, Command::Update))
+        .then(|| update::Notice::start(&dir))
+        .flatten();
+    let result = match command {
+        Command::Role { command } => role_command(Ctx::open(&dir)?, command),
+        Command::Agent { command } => agent_command(Ctx::open(&dir)?, command).await,
+        Command::Fleet { command } => fleet_command(Ctx::open(&dir)?, command).await,
         Command::Doctor => msb::doctor(),
+        Command::Update => update::run().await,
+    };
+    if let Some(notice) = notice {
+        notice.finish().await;
     }
+    result
 }
 
 fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {

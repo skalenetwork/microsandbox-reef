@@ -18,6 +18,10 @@ Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the
 directory, `REEF_VERSION=0.1.0` pins a version. Linux x86_64/aarch64 and
 Apple Silicon macOS. Then: `reef doctor`.
 
+`reef update` replaces the binary in place with the latest release. Commands
+note a newer version on stderr, checked at most once a day; `REEF_NO_UPDATE_CHECK=1`
+turns the notice off.
+
 ## Use
 
 ```sh
@@ -112,6 +116,13 @@ env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "ana" }
 
 ## Try it: a hermes fleet
 
+Put an OpenRouter key in `~/.local/state/reef/secrets.toml` (mode 0600):
+
+```toml
+[hermes]
+openrouter = "sk-or-..."
+```
+
 ```sh
 reef role apply roles/hermes.toml
 reef fleet apply fleet/hermes.toml
@@ -120,7 +131,7 @@ reef agent get bob-hermes
 
 Two [Hermes](https://github.com/NousResearch/hermes-agent) agents, each with
 its dashboard on the `ports` line of `agent get` — log in as `ana` or `bob`,
-password `password`. Needs an OpenRouter key: see [roles/README.md](roles/README.md).
+password `password`.
 
 ## State
 

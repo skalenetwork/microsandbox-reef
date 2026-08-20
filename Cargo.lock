@@ -3748,12 +3748,16 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
+ "flate2",
  "microsandbox",
  "reef-core",
+ "reqwest",
  "rusqlite",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tar",
  "tokio",
  "toml",
 ]
