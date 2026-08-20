@@ -110,6 +110,18 @@ role = "hermes"
 env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "ana" }
 ```
 
+## Try it: a hermes fleet
+
+```sh
+reef role apply roles/hermes.toml
+reef fleet apply fleet/hermes.toml
+reef agent get bob-hermes
+```
+
+Two [Hermes](https://github.com/NousResearch/hermes-agent) agents, each with
+its dashboard on the `ports` line of `agent get` — log in as `ana` or `bob`,
+password `password`. Needs an OpenRouter key: see [roles/README.md](roles/README.md).
+
 ## State
 
 `$XDG_STATE_HOME/reef` (default `~/.local/state/reef`), overridable with

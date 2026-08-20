@@ -5,7 +5,7 @@ mod store;
 mod vmm;
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use reef_core::{
     Agent, AgentName, AgentSpec, Desired, Digest, EnvKey, Lifecycle, PortName, Role, RoleName,
     VmStatus, WorkspaceName, parse_fleet, parse_role,
@@ -19,13 +19,18 @@ use store::Store;
 use vmm::Vmm;
 
 #[derive(Parser)]
-#[command(name = "reef", version, about = "Declared agents, disposable microVMs")]
+#[command(
+    name = "reef",
+    version,
+    about = "Declared agents, disposable microVMs",
+    help_template = "{name} {version}\n{about}\n\n{usage-heading} {usage}\n\n{all-args}"
+)]
 struct Cli {
     /// State directory (db + secrets.toml)
     #[arg(long, global = true, env = "REEF_STATE", value_name = "DIR")]
     state: Option<PathBuf>,
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -242,7 +247,11 @@ fn default_state_dir() -> Result<PathBuf> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    match cli.command {
+    let Some(command) = cli.command else {
+        Cli::command().print_help()?;
+        return Ok(());
+    };
+    match command {
         Command::Role { command } => role_command(Ctx::open(cli.state)?, command),
         Command::Agent { command } => agent_command(Ctx::open(cli.state)?, command).await,
         Command::Fleet { command } => fleet_command(Ctx::open(cli.state)?, command).await,
