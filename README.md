@@ -27,6 +27,7 @@ reef agent create --role code-reviewer --name reviewer-1
 reef agent list
 reef agent get reviewer-1 --wait             # one agent in detail; --wait blocks until settled
 reef agent exec reviewer-1 -- echo hi
+reef agent forward reviewer-1                # no ports: list what the VM is listening on
 reef agent forward reviewer-1 9119           # tunnel 127.0.0.1:9119 into the VM until Ctrl-C
 reef agent update reviewer-1                 # re-pin to the role's active version
 reef agent stop reviewer-1
@@ -40,8 +41,10 @@ reef agent history reviewer-1
 desired state — or reports failed, which exits nonzero. It has no timeout and
 nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
 
-`agent forward` binds host loopback only and tunnels through the guest agent
-channel — it reaches services on the guest's own loopback and publishes
+`agent forward` with no ports reads the guest's `/proc/net/tcp` and lists the
+ports it is listening on that are reachable from the guest's loopback, so every
+port it names is one you can actually forward. It binds host loopback only and
+tunnels through the guest agent channel — it reaches services on the guest's own loopback and publishes
 nothing at the VM boundary. Like `exec`, it is operator access: the role's
 egress list stays the agent's entire network policy.
 

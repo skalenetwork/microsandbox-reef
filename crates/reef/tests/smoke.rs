@@ -148,6 +148,9 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
         "-c",
         "(while true; do echo reef-forward | nc -l -p 8080; done >/dev/null 2>&1 &)",
     ]);
+    let listening = reef.ok(&["agent", "forward", &reef.agent]);
+    assert!(listening.contains("8080"), "{listening}");
+
     struct Kill(std::process::Child);
     impl Drop for Kill {
         fn drop(&mut self) {

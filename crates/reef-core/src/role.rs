@@ -1,4 +1,4 @@
-use crate::name::{Domain, EnvKey, ImageRef, RoleName, SecretRef};
+use crate::name::{Domain, EnvKey, Host, ImageRef, RoleName, SecretRef};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -41,7 +41,7 @@ pub struct Network {
 pub struct SecretBinding {
     #[serde(rename = "ref")]
     pub secret: SecretRef,
-    pub host: Domain,
+    pub host: Host,
 }
 
 #[derive(Debug)]
@@ -220,6 +220,16 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
         assert_eq!(problems.len(), 1);
         assert!(problems[0].contains("ANTHROPIC_API_KEY"), "{problems:?}");
         assert!(problems[0].contains("api.openai.com"), "{problems:?}");
+    }
+
+    #[test]
+    fn secret_hosts_cannot_be_wildcards() {
+        let text = GOOD.replace(
+            r#"host = "raw.githubusercontent.com""#,
+            r#"host = "*.githubusercontent.com""#,
+        );
+        let err = parse_role(&text).unwrap_err();
+        assert!(err.to_string().contains("*.githubusercontent.com"), "{err}");
     }
 
     #[test]

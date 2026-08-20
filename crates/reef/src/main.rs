@@ -91,8 +91,7 @@ enum AgentCommand {
     /// Forward local TCP ports into an agent's VM until interrupted
     Forward {
         name: AgentName,
-        /// GUEST or LOCAL:GUEST (LOCAL 0 picks a free port)
-        #[arg(required = true)]
+        /// GUEST or LOCAL:GUEST (LOCAL 0 picks a free port); omit to list what the VM is listening on
         ports: Vec<PortSpec>,
     },
     /// Re-pin to the role's active version and recreate the VM
@@ -429,6 +428,19 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .exec(&reconcile::sandbox_name(&name), &command)
                 .await?;
             std::process::exit(code);
+        }
+        AgentCommand::Forward { name, ports } if ports.is_empty() => {
+            require_agent(&ctx, &name)?;
+            let listening = ctx.vmm.listening(&reconcile::sandbox_name(&name)).await?;
+            if listening.is_empty() {
+                println!("{name} is not listening on any port");
+                return Ok(());
+            }
+            let ports: Vec<String> = listening.iter().map(u16::to_string).collect();
+            let ports = ports.join(" ");
+            println!("{name} is listening on {ports}");
+            println!("reef agent forward {name} {ports}");
+            Ok(())
         }
         AgentCommand::Forward { name, ports } => {
             require_agent(&ctx, &name)?;

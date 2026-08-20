@@ -52,6 +52,7 @@ name_type!(AgentName, "agent name", is_name);
 name_type!(WorkspaceName, "workspace name", is_name);
 name_type!(EnvKey, "env key", is_env_key);
 name_type!(Domain, "domain", is_domain);
+name_type!(Host, "host", is_host);
 name_type!(ImageRef, "image reference", is_image);
 name_type!(Digest, "digest", is_digest);
 
@@ -157,6 +158,10 @@ fn is_domain(s: &str) -> bool {
         })
 }
 
+fn is_host(s: &str) -> bool {
+    !s.starts_with("*.") && is_domain(s)
+}
+
 fn is_image(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 400
@@ -206,6 +211,13 @@ mod tests {
 
         assert!("bad..dot".parse::<Domain>().is_err());
         assert!("-bad.com".parse::<Domain>().is_err());
+    }
+
+    #[test]
+    fn hosts_reject_wildcards() {
+        assert!("api.anthropic.com".parse::<Host>().is_ok());
+        assert!("*.anthropic.com".parse::<Host>().is_err());
+        assert!("bad..dot".parse::<Host>().is_err());
     }
 
     #[test]

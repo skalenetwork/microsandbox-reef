@@ -3,17 +3,23 @@ use anyhow::{Context, Result, bail};
 use microsandbox::backend::LocalBackend;
 use microsandbox::protocol::message::MessageType;
 use microsandbox::protocol::tcp::{TcpClose, TcpConnect, TcpConnected, TcpData, TcpEof, TcpFailed};
-use microsandbox::sandbox::{RlimitResource, SandboxHandle, SandboxStatus};
+use microsandbox::sandbox::{
+    FsOpenOptions, RlimitResource, SandboxFsOps, SandboxHandle, SandboxStatus,
+};
 use microsandbox::size::SizeExt;
 use microsandbox::{AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, Sandbox};
 use reef_core::{Domain, VmStatus};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::io::Write;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const STATE_LABEL: &str = "reef.state";
+const PROC_NET_LIMIT: u64 = 256 * 1024;
+const LISTEN: &str = "0A";
 
 pub struct Msb {
     state_id: String,
@@ -55,8 +61,7 @@ impl Vmm for Msb {
             .image(role.image.as_str())
             .cpus(role.resources.vcpus)
             .memory(role.resources.memory_mib)
-            .label(STATE_LABEL, &self.state_id)
-            .replace();
+            .label(STATE_LABEL, &self.state_id);
         if let Some((cmd, args)) = role.init.as_deref().and_then(<[String]>::split_first) {
             builder = builder.init_with(cmd, |init| init.args(args));
         }
@@ -77,15 +82,20 @@ impl Vmm for Msb {
         builder = builder.network(|n| n.policy(policy));
         for secret in &config.secrets {
             builder = builder.secret(|s| {
-                let s = s.env(secret.key.as_str()).value(secret.value.expose());
-                match secret.host.wildcard_suffix() {
-                    Some(_) => s.allow_host_pattern(secret.host.as_str()),
-                    None => s.allow_host(secret.host.as_str()),
-                }
+                s.env(secret.key.as_str())
+                    .value(secret.value.expose())
+                    .allow_host(secret.host.as_str())
             });
         }
-        builder.create_detached().await?;
-        Ok(())
+        match builder.create_detached().await {
+            Ok(_) => Ok(()),
+            Err(e) if is_already_exists(&e) => bail!(
+                "sandbox {} already exists and this reef state dir does not track it; \
+                 refusing to replace it (remove it with `msb rm` if it is really yours)",
+                config.name
+            ),
+            Err(e) => Err(e.into()),
+        }
     }
 
     async fn start(&self, name: &str) -> Result<()> {
@@ -147,6 +157,20 @@ impl Msb {
         }
     }
 
+    pub async fn listening(&self, name: &str) -> Result<BTreeSet<u16>> {
+        let sandbox = Sandbox::get(name)
+            .await?
+            .connect()
+            .await
+            .context("agent VM is not running")?;
+        let fs = sandbox.fs();
+        let mut ports = read_ports(&fs, "/proc/net/tcp")
+            .await
+            .context("cannot read the guest's open sockets")?;
+        ports.extend(read_ports(&fs, "/proc/net/tcp6").await.unwrap_or_default());
+        Ok(ports)
+    }
+
     pub async fn forward(&self, name: &str, ports: &[(u16, u16)]) -> Result<()> {
         let sandbox = Sandbox::get(name)
             .await?
@@ -204,6 +228,50 @@ impl Msb {
             _ = serve.join_all() => Ok(()),
         }
     }
+}
+
+async fn read_ports(fs: &SandboxFsOps<'_>, path: &str) -> Result<BTreeSet<u16>> {
+    let options = FsOpenOptions {
+        read: true,
+        ..FsOpenOptions::default()
+    };
+    let handle = fs.open_file(path, options).await?;
+    let data = fs.read_handle(handle, 0, Some(PROC_NET_LIMIT)).await;
+    fs.close_handle(handle).await?;
+    Ok(listening_ports(&String::from_utf8_lossy(&data?)))
+}
+
+fn listening_ports(proc_net: &str) -> BTreeSet<u16> {
+    proc_net
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace().skip(1);
+            let (address, port) = fields.next()?.split_once(':')?;
+            if fields.nth(1)? != LISTEN {
+                return None;
+            }
+            let address = bind_address(address)?.to_canonical();
+            if !address.is_loopback() && !address.is_unspecified() {
+                return None;
+            }
+            u16::from_str_radix(port, 16).ok()
+        })
+        .collect()
+}
+
+fn bind_address(hex: &str) -> Option<IpAddr> {
+    if !matches!(hex.len(), 8 | 32) {
+        return None;
+    }
+    let mut octets = [0u8; 16];
+    for (slot, word) in octets.chunks_mut(4).zip(hex.as_bytes().chunks(8)) {
+        let value = u32::from_str_radix(std::str::from_utf8(word).ok()?, 16).ok()?;
+        slot.copy_from_slice(&value.swap_bytes().to_be_bytes());
+    }
+    Some(match hex.len() {
+        8 => Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3]).into(),
+        _ => Ipv6Addr::from(octets).into(),
+    })
 }
 
 async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: u16) -> Result<()> {
@@ -306,6 +374,10 @@ fn is_not_found(error: &MicrosandboxError) -> bool {
     matches!(error, MicrosandboxError::SandboxNotFound(_))
 }
 
+fn is_already_exists(error: &MicrosandboxError) -> bool {
+    matches!(error, MicrosandboxError::SandboxAlreadyExists(_))
+}
+
 pub fn doctor() -> Result<()> {
     let msb = microsandbox::config::resolve_msb_path().context(
         "msb not found: set MSB_PATH or install microsandbox (https://microsandbox.dev)",
@@ -340,4 +412,50 @@ pub fn doctor() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TCP: &str = "\
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 41 1
+   1: 0100007F:2383 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 42 1
+   2: 0201A8C0:01BB 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 43 1
+   3: 0100007F:C1B2 0100007F:1F90 01 00000000:00000000 00:00000000 00000000     0        0 44 1
+";
+
+    const TCP6: &str = "\
+  sl  local_address                         remote_address                        st tx_queue
+   0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 00000000
+   1: 00000000000000000000000001000000:2382 00000000000000000000000000000000:0000 0A 00000000
+   2: 0000000000000000FFFF00000100007F:270F 00000000000000000000000000000000:0000 0A 00000000
+   3: 000080FE000000000000000001000000:1F91 00000000000000000000000000000000:0000 0A 00000000
+";
+
+    #[test]
+    fn only_loopback_reachable_listeners_are_recommended() {
+        assert_eq!(listening_ports(TCP), BTreeSet::from([8080, 9091]));
+        assert_eq!(listening_ports(TCP6), BTreeSet::from([3000, 9090, 9999]));
+    }
+
+    #[test]
+    fn junk_yields_no_recommendation() {
+        assert!(listening_ports("").is_empty());
+        assert!(listening_ports("\u{1b}[2J owned").is_empty());
+        assert!(listening_ports("0: 0100007F:1F90 00000000:0000").is_empty());
+        assert!(listening_ports("0: 0100:1F90 00000000:0000 0A x").is_empty());
+    }
+
+    #[test]
+    fn proc_net_hex_decodes_little_endian() {
+        assert_eq!(bind_address("0100007F"), Some(IpAddr::from([127, 0, 0, 1])));
+        assert_eq!(bind_address("00000000"), Some(IpAddr::from([0, 0, 0, 0])));
+        assert_eq!(
+            bind_address("000080FE000000000000000001000000"),
+            Some("fe80::1".parse().unwrap())
+        );
+        assert_eq!(bind_address("7F"), None);
+    }
 }

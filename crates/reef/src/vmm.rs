@@ -1,6 +1,6 @@
 use crate::secrets::Secret;
 use anyhow::Result;
-use reef_core::{Domain, EnvKey, Role, VmStatus};
+use reef_core::{EnvKey, Host, Role, VmStatus};
 
 pub struct VmConfig<'a> {
     pub name: String,
@@ -12,7 +12,7 @@ pub struct VmConfig<'a> {
 pub struct SecretEnv<'a> {
     pub key: &'a EnvKey,
     pub value: Secret,
-    pub host: &'a Domain,
+    pub host: &'a Host,
 }
 
 pub struct VolumeMount {
