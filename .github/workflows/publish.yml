@@ -38,7 +38,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
-      - run: gh release create "$GITHUB_REF_NAME" --generate-notes reef-*.tar.gz
+      - run: sha256sum reef-*.tar.gz > checksums.sha256
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes reef-*.tar.gz checksums.sha256
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

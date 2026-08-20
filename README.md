@@ -8,6 +8,16 @@ is no daemon — every mutating command reconciles inline, and VMs outlive reef.
 
 Design and invariants: [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/skalenetwork/reef/main/install.sh | sh
+```
+
+Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the
+directory, `REEF_VERSION=0.1.0` pins a version. Linux x86_64/aarch64 and
+Apple Silicon macOS. Then: `reef doctor`.
+
 ## Use
 
 ```sh
