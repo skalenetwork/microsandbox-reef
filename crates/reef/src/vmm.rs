@@ -5,6 +5,7 @@ use reef_core::{EnvKey, Host, Role, VmStatus};
 pub struct VmConfig<'a> {
     pub name: String,
     pub role: &'a Role,
+    pub ports: Vec<(u16, u16)>,
     pub secrets: Vec<SecretEnv<'a>>,
     pub volume: Option<VolumeMount>,
 }

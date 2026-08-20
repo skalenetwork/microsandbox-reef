@@ -2,7 +2,10 @@ use crate::secrets::Secrets;
 use crate::store::Store;
 use crate::vmm::{SecretEnv, VmConfig, Vmm, VolumeMount};
 use anyhow::{Context, Result};
-use reef_core::{Action, Agent, AgentName, Desired, Facts, Lifecycle, Role, plan};
+use reef_core::{
+    Action, Agent, AgentName, Desired, Facts, Lifecycle, PortName, Role, allocate_ports, plan,
+};
+use std::collections::BTreeMap;
 
 pub fn sandbox_name(agent: &AgentName) -> String {
     format!("reef-{agent}")
@@ -56,7 +59,14 @@ async fn run<V: Vmm>(
         match step {
             Action::Create => {
                 let role = store.role_version(&agent.spec.role_digest)?;
-                let config = vm_config(store, secrets, agent, &role, sandbox)?;
+                let ports = allocate_ports(
+                    role.expose.keys(),
+                    &store.ports(&agent.name)?,
+                    &store.used_ports()?,
+                )
+                .map_err(anyhow::Error::msg)?;
+                store.set_ports(&agent.name, &ports)?;
+                let config = vm_config(store, secrets, agent, &role, sandbox, &ports)?;
                 vmm.create(config).await?;
                 agent.status.applied_digest = Some(agent.spec.role_digest.clone());
             }
@@ -75,6 +85,7 @@ fn vm_config<'a>(
     agent: &Agent,
     role: &'a Role,
     sandbox: &str,
+    ports: &BTreeMap<PortName, u16>,
 ) -> Result<VmConfig<'a>> {
     let volume = agent
         .spec
@@ -101,6 +112,11 @@ fn vm_config<'a>(
     Ok(VmConfig {
         name: sandbox.to_owned(),
         role,
+        ports: role
+            .expose
+            .iter()
+            .map(|(name, guest)| (ports[name], *guest))
+            .collect(),
         secrets: secret_envs,
         volume,
     })
@@ -243,10 +259,11 @@ network = { egress = ["example.com"] }
         let vmm = FakeVmm::default();
         reconcile(&store, &secrets, &vmm, &name).await.unwrap();
 
-        let role = parse_role(&ROLE.replace("memory-mib = 256", "memory-mib = 320")).unwrap();
-        let next: Digest = "c".repeat(64).parse().unwrap();
-        let json = serde_json::to_string(&role).unwrap();
-        store.import_role(&role, &next, &json).unwrap();
+        let next = import(
+            &store,
+            &ROLE.replace("memory-mib = 256", "memory-mib = 320"),
+            "c",
+        );
         store.set_role_digest(&name, &next, 1).unwrap();
 
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
@@ -278,5 +295,48 @@ network = { egress = ["example.com"] }
         let vmm = FakeVmm::default();
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert!(matches!(agent.status.lifecycle, Lifecycle::Running));
+    }
+
+    fn import(store: &Store, text: &str, digest: &str) -> Digest {
+        let role = parse_role(text).unwrap();
+        let digest: Digest = digest.repeat(64).parse().unwrap();
+        store
+            .import_role(&role, &digest, &serde_json::to_string(&role).unwrap())
+            .unwrap();
+        digest
+    }
+
+    #[tokio::test]
+    async fn port_allocations_survive_updates() {
+        let (store, secrets, plain, name) = setup();
+        let vmm = FakeVmm::default();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert!(store.ports(&name).unwrap().is_empty());
+
+        let ui = ROLE.replace("network =", "expose = { ui = 9119 }\nnetwork =");
+        let v2 = import(&store, &ui, "c");
+        store.set_role_digest(&name, &v2, agent.generation).unwrap();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert_eq!(store.ports(&name).unwrap()[&"ui".parse().unwrap()], 19000);
+
+        let both = ROLE.replace(
+            "network =",
+            "expose = { metrics = 9100, ui = 9119 }\nnetwork =",
+        );
+        let v3 = import(&store, &both, "d");
+        store.set_role_digest(&name, &v3, agent.generation).unwrap();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        let ports = store.ports(&name).unwrap();
+        assert_eq!(ports[&"ui".parse().unwrap()], 19000, "allocation is stable");
+        assert_eq!(ports[&"metrics".parse().unwrap()], 19001);
+
+        store
+            .set_role_digest(&name, &plain, agent.generation)
+            .unwrap();
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert!(
+            store.ports(&name).unwrap().is_empty(),
+            "removed entries are released"
+        );
     }
 }

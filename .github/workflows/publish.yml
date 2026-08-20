@@ -39,7 +39,7 @@ jobs:
         with:
           merge-multiple: true
       - run: sha256sum reef-*.tar.gz > checksums.sha256
-      - run: gh release create "$GITHUB_REF_NAME" --generate-notes reef-*.tar.gz checksums.sha256
+      - run: gh release upload "$GITHUB_REF_NAME" reef-*.tar.gz checksums.sha256 --clobber
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

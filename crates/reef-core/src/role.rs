@@ -1,4 +1,4 @@
-use crate::name::{Domain, EnvKey, Host, ImageRef, RoleName, SecretRef};
+use crate::name::{Domain, EnvKey, Host, ImageRef, PortName, RoleName, SecretRef};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -13,6 +13,8 @@ pub struct Role {
     pub init: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<EnvKey, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub expose: BTreeMap<PortName, u16>,
     pub resources: Resources,
     pub network: Network,
     #[serde(default)]
@@ -100,6 +102,11 @@ impl Role {
             }
             if init.iter().any(|part| part.contains('\0')) {
                 out.push("init: NUL bytes are not allowed".to_owned());
+            }
+        }
+        for (name, guest) in &self.expose {
+            if *guest == 0 {
+                out.push(format!("expose.{name}: guest port cannot be 0"));
             }
         }
         for (key, value) in &self.env {
@@ -287,6 +294,23 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
 
         let text = GOOD.replace("[network]", "[env]\nANTHROPIC_API_KEY = \"x\"\n\n[network]");
         assert!(invalid(&text)[0].contains("secrets"));
+    }
+
+    #[test]
+    fn expose_is_named_guest_ports() {
+        let role = parse_role(GOOD).unwrap();
+        assert!(role.expose.is_empty());
+
+        let text = GOOD.replace(
+            "[network]",
+            "[expose]\nui = 9119\nterminal = 7681\n\n[network]",
+        );
+        let role = parse_role(&text).unwrap();
+        assert_eq!(role.expose.len(), 2);
+        assert_eq!(role.expose[&"ui".parse().unwrap()], 9119);
+
+        let text = GOOD.replace("[network]", "[expose]\nui = 0\n\n[network]");
+        assert!(invalid(&text)[0].contains("expose.ui"));
     }
 
     #[test]

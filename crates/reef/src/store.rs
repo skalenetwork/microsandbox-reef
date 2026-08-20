@@ -1,28 +1,29 @@
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, Lifecycle, Role, RoleName,
+    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, Lifecycle, PortName, Role, RoleName,
     WorkspaceName,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 const SCHEMA: &str = "
-CREATE TABLE role_versions (
+CREATE TABLE IF NOT EXISTS role_versions (
   digest      TEXT PRIMARY KEY,
   role        TEXT NOT NULL,
   definition  TEXT NOT NULL,
   imported_at INTEGER NOT NULL
 );
-CREATE TABLE roles (
+CREATE TABLE IF NOT EXISTS roles (
   name          TEXT PRIMARY KEY,
   active_digest TEXT NOT NULL REFERENCES role_versions(digest)
 );
-CREATE TABLE workspaces (
+CREATE TABLE IF NOT EXISTS workspaces (
   name       TEXT PRIMARY KEY,
   volume     TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE TABLE agents (
+CREATE TABLE IF NOT EXISTS agents (
   name               TEXT PRIMARY KEY,
   generation         INTEGER NOT NULL,
   owner              TEXT NOT NULL,
@@ -37,12 +38,18 @@ CREATE TABLE agents (
   created_at         INTEGER NOT NULL,
   updated_at         INTEGER NOT NULL
 );
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
   agent  TEXT NOT NULL,
   at     INTEGER NOT NULL,
   kind   TEXT NOT NULL,
   detail TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_ports (
+  agent TEXT NOT NULL,
+  name  TEXT NOT NULL,
+  port  INTEGER NOT NULL UNIQUE,
+  PRIMARY KEY (agent, name)
 );
 ";
 
@@ -61,9 +68,9 @@ impl Store {
         db.pragma_update(None, "foreign_keys", "ON")?;
         db.pragma_update(None, "busy_timeout", 5000)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if version < 1 {
+        if version < 2 {
             db.execute_batch(SCHEMA)?;
-            db.pragma_update(None, "user_version", 1)?;
+            db.pragma_update(None, "user_version", 2)?;
         }
         Ok(Self { db })
     }
@@ -227,8 +234,44 @@ impl Store {
     }
 
     pub fn delete_agent(&self, name: &AgentName) -> Result<()> {
-        self.db
-            .execute("DELETE FROM agents WHERE name = ?1", [name.as_str()])?;
+        let tx = self.db.unchecked_transaction()?;
+        tx.execute("DELETE FROM agents WHERE name = ?1", [name.as_str()])?;
+        tx.execute("DELETE FROM agent_ports WHERE agent = ?1", [name.as_str()])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn ports(&self, agent: &AgentName) -> Result<BTreeMap<PortName, u16>> {
+        let mut stmt = self
+            .db
+            .prepare("SELECT name, port FROM agent_ports WHERE agent = ?1")?;
+        let rows = stmt.query_map([agent.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get(1)?))
+        })?;
+        rows.map(|row| {
+            let (name, port) = row?;
+            Ok((parsed(name)?, port))
+        })
+        .collect()
+    }
+
+    pub fn used_ports(&self) -> Result<BTreeSet<u16>> {
+        let mut stmt = self.db.prepare("SELECT port FROM agent_ports")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn set_ports(&self, agent: &AgentName, ports: &BTreeMap<PortName, u16>) -> Result<()> {
+        let tx = self.db.unchecked_transaction()?;
+        tx.execute("DELETE FROM agent_ports WHERE agent = ?1", [agent.as_str()])?;
+        for (name, port) in ports {
+            tx.execute(
+                "INSERT INTO agent_ports (agent, name, port) VALUES (?1, ?2, ?3)",
+                params![agent.as_str(), name.as_str(), port],
+            )
+            .with_context(|| format!("host port {port} is already allocated; re-run"))?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -341,12 +384,19 @@ fn error_of(lifecycle: &Lifecycle) -> Option<&str> {
 #[cfg(test)]
 impl Store {
     pub(crate) fn open_temp() -> Self {
+        Self::open(&Self::temp_path()).unwrap()
+    }
+
+    pub(crate) fn temp_path() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
         let path = std::env::temp_dir().join(format!(
-            "reef-test-{}-{:?}.db",
+            "reef-test-{}-{}.db",
             std::process::id(),
-            std::time::Instant::now()
+            NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        Self::open(&path).unwrap()
+        let _ = std::fs::remove_file(&path);
+        path
     }
 }
 
@@ -365,6 +415,35 @@ network = { egress = ["example.com"] }
 
     fn digest() -> Digest {
         "a".repeat(64).parse().unwrap()
+    }
+
+    #[test]
+    fn old_databases_gain_new_tables_on_open() {
+        let path = Store::temp_path();
+        {
+            let store = Store::open(&path).unwrap();
+            store.db.execute("DROP TABLE agent_ports", []).unwrap();
+            store.db.pragma_update(None, "user_version", 1).unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        let name: AgentName = "worker-1".parse().unwrap();
+        let ports = BTreeMap::from([("ui".parse().unwrap(), 19000_u16)]);
+        store.set_ports(&name, &ports).unwrap();
+        assert_eq!(store.ports(&name).unwrap(), ports);
+    }
+
+    #[test]
+    fn ports_roundtrip_and_release() {
+        let store = Store::open_temp();
+        let name: AgentName = "worker-1".parse().unwrap();
+        let ports = BTreeMap::from([("ui".parse().unwrap(), 19000_u16)]);
+        store.set_ports(&name, &ports).unwrap();
+        assert_eq!(store.ports(&name).unwrap(), ports);
+        assert_eq!(store.used_ports().unwrap(), BTreeSet::from([19000]));
+
+        store.delete_agent(&name).unwrap();
+        assert!(store.ports(&name).unwrap().is_empty());
+        assert!(store.used_ports().unwrap().is_empty());
     }
 
     #[test]

@@ -77,6 +77,13 @@ boots idle and is driven via `exec`.
 overriding the image's own `ENV` key by key (keys are `UPPER_SNAKE`). Secrets
 never go here — an `[env]` value is visible verbatim in the guest.
 
+`[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
+on `0.0.0.0` in the guest). For each entry reef allocates the agent a stable
+host port from `19000-19999` at create, binds it to loopback, and keeps it for
+the agent's life; `agent rm` releases it. The `ports` maps in `agent list
+--json` / `get --json` are the handoff to whatever ingress the org already
+runs — reef does no TLS, auth, or routing itself.
+
 `network.egress` is required: agents get deny-by-default egress, and the list
 is domains only (the allowlist is enforced at DNS). A wildcard `*.x` covers
 `x` and its subdomains, and a raw-IP connection is allowed only while a live
@@ -116,6 +123,9 @@ and never enters the guest.
   and microsandbox's sandbox config under `~/.microsandbox` until the VM is
   recreated — editing `secrets.toml` alone does not refresh a running agent.
   `reef doctor` warns when `~/.microsandbox` is readable by other users.
+- Published host ports are unique per state dir only: a second `--state` on
+  this host, or an unrelated process squatting `19000-19999`, can collide —
+  and microsandbox reports a failed port bind only in its own logs.
 - No disk I/O throttling — microsandbox caps disk size, not IOPS.
 - One host, no auth on the CLI (a local tool; the HTTP API comes later and
   will not ship without auth).

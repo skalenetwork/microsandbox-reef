@@ -7,7 +7,9 @@ use microsandbox::sandbox::{
     FsOpenOptions, RlimitResource, SandboxFsOps, SandboxHandle, SandboxStatus,
 };
 use microsandbox::size::SizeExt;
-use microsandbox::{AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, Sandbox};
+use microsandbox::{
+    AgentClient, ExecEvent, MicrosandboxError, NetworkAction, NetworkPolicy, Sandbox,
+};
 use reef_core::{Domain, VmStatus};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -68,6 +70,9 @@ impl Vmm for Msb {
         for (key, value) in &role.env {
             builder = builder.env(key.as_str(), value);
         }
+        for &(host, guest) in &config.ports {
+            builder = builder.port(host, guest);
+        }
         if let Some(gib) = role.resources.disk_gib {
             builder = builder.root_disk(gib.gib());
         }
@@ -78,7 +83,7 @@ impl Vmm for Msb {
             let volume = mount.volume.clone();
             builder = builder.volume(&mount.dest, |m| m.named_with(volume, |n| n.ensure_exists()));
         }
-        let policy = egress_policy(&role.network.egress)?;
+        let policy = network_policy(&role.network.egress)?;
         builder = builder.network(|n| n.policy(policy));
         for secret in &config.secrets {
             builder = builder.secret(|s| {
@@ -342,7 +347,7 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
     result
 }
 
-fn egress_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
+fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
     let mut exact = Vec::new();
     let mut suffixes = Vec::new();
     for domain in domains {
@@ -352,10 +357,11 @@ fn egress_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
         }
     }
     NetworkPolicy::builder()
-        .default_deny()
+        .default_egress(NetworkAction::Deny)
+        .default_ingress(NetworkAction::Allow)
         .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
         .build()
-        .context("egress policy")
+        .context("network policy")
 }
 
 fn map_status(status: SandboxStatus) -> VmStatus {

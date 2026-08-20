@@ -35,6 +35,34 @@ impl Drop for Reef {
     }
 }
 
+fn web_port(json: &str) -> u16 {
+    json.split("\"web\": ")
+        .nth(1)
+        .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|port| port.parse().ok())
+        .unwrap_or_else(|| panic!("no web port in {json:?}"))
+}
+
+fn read_banner(port: u16) -> String {
+    use std::io::Read;
+    let mut response = String::new();
+    for _ in 0..20 {
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_millis(500)))
+            .unwrap();
+        let mut buf = [0u8; 64];
+        if let Ok(n) = stream.read(&mut buf) {
+            response = String::from_utf8_lossy(&buf[..n]).into_owned();
+        }
+        if response.contains("reef-forward") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    response
+}
+
 #[test]
 #[ignore = "boots a real microVM; needs msb and KVM/HVF"]
 fn full_agent_journey() {
@@ -63,6 +91,7 @@ name  = "echo"
 image = "alpine"
 init  = ["/bin/sleep", "999999999"]
 env = { SMOKE_MARK = "reef-env" }
+expose = { web = 8080 }
 resources = { vcpus = 1, memory-mib = 256, max-pids = 128 }
 network = { egress = ["example.com"] }
 secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
@@ -84,6 +113,8 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
     let got = reef.ok(&["agent", "get", &reef.agent, "--wait", "--json"]);
     assert!(got.contains(r#""state": "running""#), "{got}");
     assert!(got.contains(r#""vm": "running""#), "{got}");
+    let web = web_port(&got);
+    assert!(reef_core::HOST_PORTS.contains(&web), "{got}");
 
     let pid1 = reef.ok(&["agent", "exec", &reef.agent, "--", "cat", "/proc/1/comm"]);
     assert!(
@@ -180,24 +211,15 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
             .and_then(|port| port.parse::<u16>().ok())
             .unwrap_or_else(|| panic!("no forwarded port in {line:?}"))
     };
-    let mut response = String::new();
-    for _ in 0..20 {
-        use std::io::Read;
-        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_millis(500)))
-            .unwrap();
-        let mut buf = [0u8; 64];
-        if let Ok(n) = stream.read(&mut buf) {
-            response = String::from_utf8_lossy(&buf[..n]).into_owned();
-        }
-        if response.contains("reef-forward") {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+    let response = read_banner(port);
     drop(fwd);
     assert!(response.contains("reef-forward"), "{response}");
+
+    let published = read_banner(web);
+    assert!(
+        published.contains("reef-forward"),
+        "published port {web} did not reach the guest: {published}"
+    );
 
     let history = reef.ok(&["agent", "history", &reef.agent]);
     assert_eq!(

@@ -7,12 +7,13 @@ mod vmm;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, Lifecycle, Role, RoleName, VmStatus,
-    WorkspaceName, parse_role,
+    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, Lifecycle, PortName, Role, RoleName,
+    VmStatus, WorkspaceName, parse_role,
 };
 use secrets::Secrets;
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use store::Store;
 use vmm::Vmm;
@@ -156,6 +157,7 @@ struct AgentRow {
     state: &'static str,
     vm: Option<&'static str>,
     synced: bool,
+    ports: BTreeMap<PortName, u16>,
 }
 
 #[derive(Serialize)]
@@ -172,6 +174,7 @@ struct AgentDetail {
     applied_generation: u64,
     applied_digest: Option<Digest>,
     vm: Option<&'static str>,
+    ports: BTreeMap<PortName, u16>,
 }
 
 #[derive(Serialize)]
@@ -318,6 +321,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     .status(&reconcile::sandbox_name(&agent.name))
                     .await?;
                 let synced = agent.reconciled();
+                let ports = ctx.store.ports(&agent.name)?;
                 agents.push(AgentRow {
                     name: agent.name,
                     role: agent.spec.role,
@@ -326,6 +330,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     state: agent.status.lifecycle.label(),
                     vm: vm.map(VmStatus::label),
                     synced,
+                    ports,
                 });
             }
             if json {
@@ -374,6 +379,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 Lifecycle::Failed { reason } => Some(reason),
                 _ => None,
             };
+            let ports = ctx.store.ports(&agent.name)?;
             let detail = AgentDetail {
                 name: agent.name,
                 role: agent.spec.role,
@@ -387,6 +393,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 applied_generation: agent.status.applied_generation,
                 applied_digest: agent.status.applied_digest,
                 vm: vm.map(VmStatus::label),
+                ports,
             };
             if json {
                 println!("{}", serde_json::to_string_pretty(&detail)?);
@@ -407,6 +414,14 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     None => row("state", detail.state),
                 }
                 row("vm", detail.vm.unwrap_or("-"));
+                if !detail.ports.is_empty() {
+                    let ports: Vec<String> = detail
+                        .ports
+                        .iter()
+                        .map(|(name, port)| format!("{name}=127.0.0.1:{port}"))
+                        .collect();
+                    row("ports", ports.join(" "));
+                }
                 row(
                     "synced",
                     if detail.generation == detail.applied_generation {
@@ -574,6 +589,7 @@ network = { egress = ["example.com"] }
         let (_, definition) = digest_role(&role);
         assert!(!definition.contains(r#""init""#), "{definition}");
         assert!(!definition.contains(r#""env""#), "{definition}");
+        assert!(!definition.contains(r#""expose""#), "{definition}");
     }
 
     #[test]
@@ -596,10 +612,11 @@ network = { egress = ["example.com"] }
             state: "running",
             vm: None,
             synced: true,
+            ports: BTreeMap::from([("ui".parse().unwrap(), 19007)]),
         };
         assert_eq!(
             serde_json::to_string(&agent).unwrap(),
-            r#"{"name":"echo-1","role":"echo","owner":"dmytro","desired":"running","state":"running","vm":null,"synced":true}"#
+            r#"{"name":"echo-1","role":"echo","owner":"dmytro","desired":"running","state":"running","vm":null,"synced":true,"ports":{"ui":19007}}"#
         );
 
         let event = EventRow {
@@ -626,11 +643,12 @@ network = { egress = ["example.com"] }
             applied_generation: 1,
             applied_digest: None,
             vm: Some("stopped"),
+            ports: BTreeMap::new(),
         };
         assert_eq!(
             serde_json::to_string(&detail).unwrap(),
             format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped"}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","ports":{{}}}}"#
             )
         );
     }

@@ -50,6 +50,7 @@ macro_rules! name_type {
 name_type!(RoleName, "role name", is_name);
 name_type!(AgentName, "agent name", is_name);
 name_type!(WorkspaceName, "workspace name", is_name);
+name_type!(PortName, "port name", is_name);
 name_type!(EnvKey, "env key", is_env_key);
 name_type!(Domain, "domain", is_domain);
 name_type!(Host, "host", is_host);
