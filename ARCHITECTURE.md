@@ -28,7 +28,7 @@ command.
 
 Invariants:
 
-- Stop/start never destroys a VM. Only a role-version change recreates one.
+- Stop/start never destroys a VM. Only a role or env change recreates one.
 - A workspace survives everything, including recreate and `agent rm`.
 - A secret value never enters the guest (placeholder + host-side TLS
   substitution, bound to one host) and never enters reef's database, events,
@@ -40,6 +40,8 @@ Invariants:
   a lost race is a 409-style error, never a merge.
 - reef refuses to destroy a sandbox it did not create (a `reef.state` label
   carries the state dir's identity).
+- `fleet apply` prunes only agents it created; a hand-made agent is never
+  adopted or removed by a fleet file.
 
 ## Layout
 

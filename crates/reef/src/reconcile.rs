@@ -81,6 +81,7 @@ async fn run<V: Vmm>(
                 let config = vm_config(store, secrets, agent, role, sandbox, &ports)?;
                 vmm.create(config).await?;
                 agent.status.applied_digest = Some(agent.spec.role_digest.clone());
+                agent.status.applied_env = agent.spec.env.clone();
             }
             Action::Start => vmm.start(sandbox).await?,
             Action::Stop => vmm.stop(sandbox).await?,
@@ -139,7 +140,7 @@ fn vm_config<'a>(
 mod tests {
     use super::*;
     use anyhow::bail;
-    use reef_core::{AgentSpec, AgentStatus, Desired, Digest, EnvKey, VmStatus, parse_role};
+    use reef_core::{AgentSpec, Desired, Digest, EnvKey, VmStatus, parse_role};
     use std::collections::HashMap;
     use std::sync::Mutex;
 
@@ -306,10 +307,10 @@ network = { egress = ["example.com"] }
 
     fn insert(store: &Store, name: &AgentName, digest: &Digest, env: BTreeMap<EnvKey, String>) {
         store
-            .insert_agent(&Agent {
-                name: name.clone(),
-                generation: 1,
-                spec: AgentSpec {
+            .insert_agent(&Agent::new(
+                name.clone(),
+                false,
+                AgentSpec {
                     owner: "test".to_owned(),
                     role: "echo".parse().unwrap(),
                     role_digest: digest.clone(),
@@ -317,12 +318,7 @@ network = { egress = ["example.com"] }
                     desired: Desired::Running,
                     env,
                 },
-                status: AgentStatus {
-                    lifecycle: Lifecycle::Pending,
-                    applied_generation: 0,
-                    applied_digest: None,
-                },
-            })
+            ))
             .unwrap();
     }
 
@@ -381,6 +377,36 @@ network = { egress = ["example.com"] }
         );
         let err = reconcile(&store, &secrets, &vmm, &name).await.unwrap_err();
         assert!(err.to_string().contains("collides"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn env_change_recreates() {
+        let (store, secrets, digest, name) = setup();
+        let vmm = FakeVmm::default();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+
+        store
+            .set_fleet_spec(
+                &name,
+                &"echo".parse().unwrap(),
+                &digest,
+                &BTreeMap::from([("FOO".parse().unwrap(), "v2".to_owned())]),
+                agent.generation,
+            )
+            .unwrap();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert!(agent.vm_current() && agent.reconciled());
+        assert_eq!(
+            *vmm.seen_env.lock().unwrap(),
+            [("FOO".to_owned(), "v2".to_owned())]
+        );
+        let kinds: Vec<String> = store
+            .history(&name)
+            .unwrap()
+            .into_iter()
+            .map(|(_, kind, _)| kind)
+            .collect();
+        assert_eq!(kinds, ["create", "remove", "create"]);
     }
 
     #[tokio::test]

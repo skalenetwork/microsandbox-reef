@@ -273,4 +273,53 @@ network = { egress = ["example.com"] }
     assert!(!settled, "get --wait on a failed agent must exit nonzero");
     assert!(got.contains(r#""state": "failed""#), "{got}");
     assert!(got.contains(r#""reason""#), "{got}");
+
+    let member = Reef {
+        state: reef.state.clone(),
+        agent: format!("fl-{}", std::process::id()),
+    };
+    let fleet = reef.state.join("fleet.toml");
+    let entry = |env: &str| {
+        format!(
+            "version = 1\n[agents.{}]\nrole = \"echo\"\nenv = {{ FM = \"{env}\" }}\n",
+            member.agent
+        )
+    };
+    std::fs::write(&fleet, entry("one")).unwrap();
+    let fleet_path = fleet.to_str().unwrap();
+    assert!(
+        member
+            .ok(&["fleet", "apply", fleet_path])
+            .contains("created"),
+        "first apply must create"
+    );
+    assert!(
+        member
+            .ok(&["fleet", "apply", fleet_path])
+            .contains("unchanged"),
+        "second apply must be a no-op"
+    );
+    std::fs::write(&fleet, entry("two")).unwrap();
+    assert!(
+        member
+            .ok(&["fleet", "apply", fleet_path])
+            .contains("updated"),
+        "env change must update"
+    );
+    let seen = member.ok(&["agent", "exec", &member.agent, "--", "sh", "-c", "echo $FM"]);
+    assert!(seen.contains("two"), "fleet env not applied: {seen}");
+    std::fs::write(&fleet, "version = 1\n").unwrap();
+    assert!(
+        member
+            .ok(&["fleet", "apply", fleet_path])
+            .contains("removed"),
+        "empty fleet must prune"
+    );
+    assert!(
+        member
+            .run(&["agent", "get", &member.agent])
+            .1
+            .contains("no such agent"),
+        "pruned agent must be gone"
+    );
 }

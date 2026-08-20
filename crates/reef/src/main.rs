@@ -7,8 +7,8 @@ mod vmm;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Lifecycle, PortName, Role,
-    RoleName, VmStatus, WorkspaceName, parse_role,
+    Agent, AgentName, AgentSpec, Desired, Digest, EnvKey, Lifecycle, PortName, Role, RoleName,
+    VmStatus, WorkspaceName, parse_fleet, parse_role,
 };
 use secrets::Secrets;
 use serde::Serialize;
@@ -40,8 +40,19 @@ enum Command {
         #[command(subcommand)]
         command: AgentCommand,
     },
+    /// Manage the declared agent fleet
+    Fleet {
+        #[command(subcommand)]
+        command: FleetCommand,
+    },
     /// Check this host can run agents
     Doctor,
+}
+
+#[derive(Subcommand)]
+enum FleetCommand {
+    /// Converge agents toward fleet files: create, update, and prune
+    Apply { files: Vec<PathBuf> },
 }
 
 #[derive(Subcommand)]
@@ -183,6 +194,7 @@ struct AgentDetail {
     role: RoleName,
     role_digest: Digest,
     owner: String,
+    fleet: bool,
     workspace: Option<WorkspaceName>,
     desired: &'static str,
     state: &'static str,
@@ -233,6 +245,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Role { command } => role_command(Ctx::open(cli.state)?, command),
         Command::Agent { command } => agent_command(Ctx::open(cli.state)?, command).await,
+        Command::Fleet { command } => fleet_command(Ctx::open(cli.state)?, command).await,
         Command::Doctor => msb::doctor(),
     }
 }
@@ -308,11 +321,11 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             if let Some(workspace) = &workspace {
                 ctx.store.ensure_workspace(workspace)?;
             }
-            let agent = Agent {
+            let agent = Agent::new(
                 name,
-                generation: 1,
-                spec: AgentSpec {
-                    owner: std::env::var("USER").unwrap_or_else(|_| "unknown".to_owned()),
+                false,
+                AgentSpec {
+                    owner: owner(),
                     role,
                     role_digest: digest,
                     workspace,
@@ -322,12 +335,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                         .map(|EnvPair(key, value)| (key, value))
                         .collect(),
                 },
-                status: AgentStatus {
-                    lifecycle: Lifecycle::Pending,
-                    applied_generation: 0,
-                    applied_digest: None,
-                },
-            };
+            );
             ctx.store.insert_agent(&agent)?;
             ctx.store
                 .record(&agent.name, "created", &agent.spec.owner)?;
@@ -408,6 +416,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 role: agent.spec.role,
                 role_digest: agent.spec.role_digest,
                 owner: agent.spec.owner,
+                fleet: agent.fleet,
                 workspace: agent.spec.workspace,
                 desired: agent.spec.desired.label(),
                 state,
@@ -581,6 +590,117 @@ fn row(label: &str, value: impl std::fmt::Display) {
     println!("{label:10} {value}");
 }
 
+fn owner() -> String {
+    std::env::var("USER").unwrap_or_else(|_| "unknown".to_owned())
+}
+
+async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
+    let FleetCommand::Apply { files } = command;
+    if files.is_empty() {
+        bail!("no fleet files given");
+    }
+    let mut desired = BTreeMap::new();
+    for file in &files {
+        let text = std::fs::read_to_string(file)
+            .with_context(|| format!("cannot read {}", file.display()))?;
+        let fleet = parse_fleet(&text).map_err(|e| anyhow::anyhow!("{}: {e}", file.display()))?;
+        for (name, entry) in fleet.agents {
+            if desired.insert(name.clone(), entry).is_some() {
+                bail!("{name} is declared in more than one fleet file");
+            }
+        }
+    }
+    let mut digests = BTreeMap::new();
+    for (name, entry) in &desired {
+        let (digest, _) = ctx
+            .store
+            .active_role(&entry.role)?
+            .with_context(|| format!("{name}: no such role: {}", entry.role))?;
+        digests.insert(name.clone(), digest);
+    }
+    let mut failed = false;
+    for name in ctx.store.fleet_agents()? {
+        if !desired.contains_key(&name) {
+            match ctx.vmm.remove(&reconcile::sandbox_name(&name)).await {
+                Ok(()) => {
+                    if ctx.store.delete_fleet_agent(&name)? {
+                        ctx.store.record(&name, "deleted", "fleet")?;
+                        println!("{name} removed");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("{name}: {e:#}");
+                    failed = true;
+                }
+            }
+        }
+    }
+    for (name, entry) in desired {
+        let digest = digests.remove(&name).expect("resolved above");
+        let outcome = match ctx.store.get_agent(&name)? {
+            None => {
+                if let Some(workspace) = &entry.workspace {
+                    ctx.store.ensure_workspace(workspace)?;
+                }
+                let agent = Agent::new(
+                    name.clone(),
+                    true,
+                    AgentSpec {
+                        owner: owner(),
+                        role: entry.role,
+                        role_digest: digest,
+                        workspace: entry.workspace,
+                        desired: Desired::Running,
+                        env: entry.env,
+                    },
+                );
+                ctx.store.insert_agent(&agent)?;
+                ctx.store.record(&name, "created", &agent.spec.owner)?;
+                "created"
+            }
+            Some(agent) if !agent.fleet => {
+                eprintln!("{name}: exists but is not fleet-managed; skipping");
+                failed = true;
+                continue;
+            }
+            Some(agent) if agent.spec.workspace != entry.workspace => {
+                eprintln!("{name}: workspace changes need `agent rm` first; skipping");
+                failed = true;
+                continue;
+            }
+            Some(agent)
+                if agent.spec.role == entry.role
+                    && agent.spec.role_digest == digest
+                    && agent.spec.env == entry.env =>
+            {
+                "unchanged"
+            }
+            Some(agent) => {
+                ctx.store.set_fleet_spec(
+                    &name,
+                    &entry.role,
+                    &digest,
+                    &entry.env,
+                    agent.generation,
+                )?;
+                ctx.store.record(&name, "updated", digest.as_str())?;
+                "updated"
+            }
+        };
+        match reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &name).await {
+            Ok(agent) => println!("{name} {outcome} ({})", agent.status.lifecycle.label()),
+            Err(e) => {
+                eprintln!("{name}: {e:#}");
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        bail!("some agents failed to converge");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,6 +794,7 @@ network = { egress = ["example.com"] }
             role: "echo".parse().unwrap(),
             role_digest: digest.parse().unwrap(),
             owner: "dmytro".to_owned(),
+            fleet: false,
             workspace: None,
             desired: "running",
             state: "failed",
@@ -688,7 +809,7 @@ network = { egress = ["example.com"] }
         assert_eq!(
             serde_json::to_string(&detail).unwrap(),
             format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","ports":{{}},"env":{{"FOO":"bar"}}}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","fleet":false,"workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","ports":{{}},"env":{{"FOO":"bar"}}}}"#
             )
         );
     }

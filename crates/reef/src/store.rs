@@ -1,31 +1,34 @@
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, Lifecycle, PortName, Role, RoleName,
-    WorkspaceName,
+    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Lifecycle, PortName, Role,
+    RoleName, WorkspaceName,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+const SCHEMA_VERSION: i64 = 5;
+
 const SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS role_versions (
+CREATE TABLE role_versions (
   digest      TEXT PRIMARY KEY,
   role        TEXT NOT NULL,
   definition  TEXT NOT NULL,
   imported_at INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS roles (
+CREATE TABLE roles (
   name          TEXT PRIMARY KEY,
   active_digest TEXT NOT NULL REFERENCES role_versions(digest)
 );
-CREATE TABLE IF NOT EXISTS workspaces (
+CREATE TABLE workspaces (
   name       TEXT PRIMARY KEY,
   volume     TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS agents (
+CREATE TABLE agents (
   name               TEXT PRIMARY KEY,
   generation         INTEGER NOT NULL,
+  fleet              INTEGER NOT NULL DEFAULT 0,
   owner              TEXT NOT NULL,
   role               TEXT NOT NULL,
   role_digest        TEXT NOT NULL REFERENCES role_versions(digest),
@@ -36,17 +39,18 @@ CREATE TABLE IF NOT EXISTS agents (
   last_error         TEXT,
   applied_generation INTEGER NOT NULL,
   applied_digest     TEXT,
+  applied_env        TEXT NOT NULL DEFAULT '{}',
   created_at         INTEGER NOT NULL,
   updated_at         INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS events (
+CREATE TABLE events (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
   agent  TEXT NOT NULL,
   at     INTEGER NOT NULL,
   kind   TEXT NOT NULL,
   detail TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS agent_ports (
+CREATE TABLE agent_ports (
   agent TEXT NOT NULL,
   name  TEXT NOT NULL,
   port  INTEGER NOT NULL UNIQUE,
@@ -69,15 +73,17 @@ impl Store {
         db.pragma_update(None, "foreign_keys", "ON")?;
         db.pragma_update(None, "busy_timeout", 5000)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if version < 3 {
-            db.execute_batch(SCHEMA)?;
-            if (1..=2).contains(&version) {
-                db.execute(
-                    "ALTER TABLE agents ADD COLUMN env TEXT NOT NULL DEFAULT '{}'",
-                    [],
-                )?;
+        match version {
+            0 => {
+                db.execute_batch(SCHEMA)?;
+                db.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             }
-            db.pragma_update(None, "user_version", 3)?;
+            SCHEMA_VERSION => {}
+            _ => bail!(
+                "{} is from another reef version (pre-release schema); \
+                 delete it and re-create your agents",
+                path.display()
+            ),
         }
         Ok(Self { db })
     }
@@ -152,13 +158,15 @@ impl Store {
         let env = serde_json::to_string(&agent.spec.env)?;
         let inserted = self.db.execute(
             "INSERT OR IGNORE INTO agents
-               (name, generation, owner, role, role_digest, workspace, desired, env,
-                lifecycle, last_error, applied_generation, applied_digest,
+               (name, generation, fleet, owner, role, role_digest, workspace, desired, env,
+                lifecycle, last_error, applied_generation, applied_digest, applied_env,
                 created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, unixepoch(), unixepoch())",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+                     unixepoch(), unixepoch())",
             params![
                 agent.name.as_str(),
                 agent.generation,
+                agent.fleet,
                 agent.spec.owner,
                 agent.spec.role.as_str(),
                 agent.spec.role_digest.as_str(),
@@ -169,6 +177,7 @@ impl Store {
                 error_of(&agent.status.lifecycle),
                 agent.status.applied_generation,
                 agent.status.applied_digest.as_ref().map(|d| d.as_str()),
+                serde_json::to_string(&agent.status.applied_env)?,
             ],
         )?;
         if inserted == 0 {
@@ -180,8 +189,8 @@ impl Store {
     pub fn get_agent(&self, name: &AgentName) -> Result<Option<Agent>> {
         self.db
             .query_row(
-                "SELECT name, generation, owner, role, role_digest, workspace, desired, env,
-                        lifecycle, last_error, applied_generation, applied_digest
+                "SELECT name, generation, fleet, owner, role, role_digest, workspace, desired,
+                        env, lifecycle, last_error, applied_generation, applied_digest, applied_env
                  FROM agents WHERE name = ?1",
                 [name.as_str()],
                 agent_row,
@@ -193,8 +202,8 @@ impl Store {
 
     pub fn list_agents(&self) -> Result<Vec<Agent>> {
         let mut stmt = self.db.prepare(
-            "SELECT name, generation, owner, role, role_digest, workspace, desired, env,
-                    lifecycle, last_error, applied_generation, applied_digest
+            "SELECT name, generation, fleet, owner, role, role_digest, workspace, desired,
+                    env, lifecycle, last_error, applied_generation, applied_digest, applied_env
              FROM agents ORDER BY name",
         )?;
         let rows = stmt.query_map([], agent_row)?;
@@ -208,6 +217,41 @@ impl Store {
 
     pub fn set_role_digest(&self, name: &AgentName, digest: &Digest, expected: u64) -> Result<()> {
         self.cas_set(name, "role_digest", digest.as_str(), expected)
+    }
+
+    pub fn set_fleet_spec(
+        &self,
+        name: &AgentName,
+        role: &RoleName,
+        digest: &Digest,
+        env: &BTreeMap<EnvKey, String>,
+        expected: u64,
+    ) -> Result<()> {
+        let updated = self.db.execute(
+            "UPDATE agents
+             SET role = ?1, role_digest = ?2, env = ?3,
+                 generation = generation + 1, updated_at = unixepoch()
+             WHERE name = ?4 AND generation = ?5",
+            params![
+                role.as_str(),
+                digest.as_str(),
+                serde_json::to_string(env)?,
+                name.as_str(),
+                expected,
+            ],
+        )?;
+        if updated == 0 {
+            bail!("agent {name} changed underneath this command; re-run it");
+        }
+        Ok(())
+    }
+
+    pub fn fleet_agents(&self) -> Result<Vec<AgentName>> {
+        let mut stmt = self
+            .db
+            .prepare("SELECT name FROM agents WHERE fleet ORDER BY name")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|name| parsed(name?)).collect()
     }
 
     fn cas_set(&self, name: &AgentName, column: &str, value: &str, expected: u64) -> Result<()> {
@@ -228,14 +272,15 @@ impl Store {
     pub fn set_status(&self, name: &AgentName, status: &AgentStatus) -> Result<()> {
         self.db.execute(
             "UPDATE agents
-             SET lifecycle = ?1, last_error = ?2,
-                 applied_generation = ?3, applied_digest = ?4, updated_at = unixepoch()
-             WHERE name = ?5",
+             SET lifecycle = ?1, last_error = ?2, applied_generation = ?3,
+                 applied_digest = ?4, applied_env = ?5, updated_at = unixepoch()
+             WHERE name = ?6",
             params![
                 status.lifecycle.label(),
                 error_of(&status.lifecycle),
                 status.applied_generation,
                 status.applied_digest.as_ref().map(|d| d.as_str()),
+                serde_json::to_string(&status.applied_env)?,
                 name.as_str(),
             ],
         )?;
@@ -248,6 +293,19 @@ impl Store {
         tx.execute("DELETE FROM agent_ports WHERE agent = ?1", [name.as_str()])?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn delete_fleet_agent(&self, name: &AgentName) -> Result<bool> {
+        let tx = self.db.unchecked_transaction()?;
+        let deleted = tx.execute(
+            "DELETE FROM agents WHERE name = ?1 AND fleet",
+            [name.as_str()],
+        )?;
+        if deleted > 0 {
+            tx.execute("DELETE FROM agent_ports WHERE agent = ?1", [name.as_str()])?;
+        }
+        tx.commit()?;
+        Ok(deleted > 0)
     }
 
     pub fn ports(&self, agent: &AgentName) -> Result<BTreeMap<PortName, u16>> {
@@ -306,6 +364,7 @@ impl Store {
 type RawAgent = (
     String,
     u64,
+    bool,
     String,
     String,
     String,
@@ -316,6 +375,7 @@ type RawAgent = (
     Option<String>,
     u64,
     Option<String>,
+    String,
 );
 
 fn agent_row(row: &Row<'_>) -> rusqlite::Result<RawAgent> {
@@ -332,6 +392,8 @@ fn agent_row(row: &Row<'_>) -> rusqlite::Result<RawAgent> {
         row.get(9)?,
         row.get(10)?,
         row.get(11)?,
+        row.get(12)?,
+        row.get(13)?,
     ))
 }
 
@@ -339,6 +401,7 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
     let (
         name,
         generation,
+        fleet,
         owner,
         role,
         role_digest,
@@ -349,6 +412,7 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
         last_error,
         applied_generation,
         applied_digest,
+        applied_env,
     ) = raw;
     let lifecycle = match (lifecycle.as_str(), last_error) {
         ("pending", _) => Lifecycle::Pending,
@@ -360,6 +424,7 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
     Ok(Agent {
         name: parsed(name)?,
         generation,
+        fleet,
         spec: AgentSpec {
             owner,
             role: parsed(role)?,
@@ -372,6 +437,7 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
             lifecycle,
             applied_generation,
             applied_digest: applied_digest.map(parsed).transpose()?,
+            applied_env: serde_json::from_str(&applied_env)?,
         },
     })
 }
@@ -431,48 +497,14 @@ network = { egress = ["example.com"] }
     }
 
     #[test]
-    fn old_databases_gain_new_tables_on_open() {
+    fn other_schema_versions_are_refused() {
         let path = Store::temp_path();
         {
             let store = Store::open(&path).unwrap();
-            store.db.execute("DROP TABLE agent_ports", []).unwrap();
-            store
-                .db
-                .execute("ALTER TABLE agents DROP COLUMN env", [])
-                .unwrap();
-            let old = "0".repeat(64);
-            store
-                .db
-                .execute(
-                    "INSERT INTO role_versions (digest, role, definition, imported_at)
-                     VALUES (?1, 'echo', '{}', 0)",
-                    [&old],
-                )
-                .unwrap();
-            store
-                .db
-                .execute(
-                    "INSERT INTO agents
-                       (name, generation, owner, role, role_digest, workspace, desired,
-                        lifecycle, last_error, applied_generation, applied_digest,
-                        created_at, updated_at)
-                     VALUES ('legacy', 1, 'o', 'echo', ?1, NULL, 'running',
-                             'pending', NULL, 0, NULL, 0, 0)",
-                    [&old],
-                )
-                .unwrap();
-            store.db.pragma_update(None, "user_version", 1).unwrap();
+            store.db.pragma_update(None, "user_version", 3).unwrap();
         }
-        let store = Store::open(&path).unwrap();
-        let name: AgentName = "worker-1".parse().unwrap();
-        let ports = BTreeMap::from([("ui".parse().unwrap(), 19000_u16)]);
-        store.set_ports(&name, &ports).unwrap();
-        assert_eq!(store.ports(&name).unwrap(), ports);
-        let legacy = store
-            .get_agent(&"legacy".parse().unwrap())
-            .unwrap()
-            .unwrap();
-        assert!(legacy.spec.env.is_empty());
+        let err = Store::open(&path).err().expect("stale db must be refused");
+        assert!(err.to_string().contains("delete it"), "{err}");
     }
 
     #[test]
@@ -508,10 +540,10 @@ network = { egress = ["example.com"] }
         let json = serde_json::to_string(&role).unwrap();
         store.import_role(&role, &digest(), &json).unwrap();
 
-        let agent = Agent {
-            name: "worker-1".parse().unwrap(),
-            generation: 1,
-            spec: AgentSpec {
+        let agent = Agent::new(
+            "worker-1".parse().unwrap(),
+            true,
+            AgentSpec {
                 owner: "dmytro".to_owned(),
                 role: role.name.clone(),
                 role_digest: digest(),
@@ -519,18 +551,17 @@ network = { egress = ["example.com"] }
                 desired: Desired::Running,
                 env: BTreeMap::from([("FOO".parse().unwrap(), "bar".to_owned())]),
             },
-            status: AgentStatus {
-                lifecycle: Lifecycle::Pending,
-                applied_generation: 0,
-                applied_digest: None,
-            },
-        };
+        );
         store.insert_agent(&agent).unwrap();
         assert!(store.insert_agent(&agent).is_err());
 
         let loaded = store.get_agent(&agent.name).unwrap().unwrap();
         assert_eq!(loaded, agent);
         assert!(!loaded.reconciled());
+        assert_eq!(
+            store.fleet_agents().unwrap(),
+            std::slice::from_ref(&agent.name)
+        );
 
         store.set_desired(&agent.name, Desired::Stopped, 1).unwrap();
         assert!(store.set_desired(&agent.name, Desired::Stopped, 1).is_err());
@@ -544,6 +575,7 @@ network = { egress = ["example.com"] }
             },
             applied_generation: 2,
             applied_digest: Some(digest()),
+            applied_env: BTreeMap::from([("FOO".parse().unwrap(), "bar".to_owned())]),
         };
         store.set_status(&agent.name, &status).unwrap();
         let loaded = store.get_agent(&agent.name).unwrap().unwrap();

@@ -62,19 +62,37 @@ pub struct AgentStatus {
     pub lifecycle: Lifecycle,
     pub applied_generation: u64,
     pub applied_digest: Option<Digest>,
+    pub applied_env: BTreeMap<EnvKey, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Agent {
     pub name: AgentName,
     pub generation: u64,
+    pub fleet: bool,
     pub spec: AgentSpec,
     pub status: AgentStatus,
 }
 
 impl Agent {
+    pub fn new(name: AgentName, fleet: bool, spec: AgentSpec) -> Self {
+        Self {
+            name,
+            generation: 1,
+            fleet,
+            spec,
+            status: AgentStatus {
+                lifecycle: Lifecycle::Pending,
+                applied_generation: 0,
+                applied_digest: None,
+                applied_env: BTreeMap::new(),
+            },
+        }
+    }
+
     pub fn vm_current(&self) -> bool {
         self.status.applied_digest.as_ref() == Some(&self.spec.role_digest)
+            && self.status.applied_env == self.spec.env
     }
 
     pub fn reconciled(&self) -> bool {
@@ -98,6 +116,7 @@ mod tests {
         Agent {
             name: "a".parse().unwrap(),
             generation: 2,
+            fleet: false,
             spec: AgentSpec {
                 owner: "o".to_owned(),
                 role: "r".parse().unwrap(),
@@ -110,6 +129,7 @@ mod tests {
                 lifecycle,
                 applied_generation,
                 applied_digest: None,
+                applied_env: BTreeMap::new(),
             },
         }
     }

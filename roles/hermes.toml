@@ -11,7 +11,10 @@ disk-gib = 20
 
 [env]
 HERMES_DASHBOARD = "1"
-HERMES_DASHBOARD_HOST = "127.0.0.1"
+HERMES_DASHBOARD_HOST = "0.0.0.0"
+
+[expose]
+ui = 9119
 
 [network]
 egress = ["openrouter.ai"]

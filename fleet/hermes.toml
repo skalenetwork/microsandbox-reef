@@ -1,0 +1,9 @@
+version = 1
+
+[agents.ana-hermes]
+role = "hermes"
+env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "ana", HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH = "scrypt$16384$8$1$eFvebeOJxOSylyWAVqMKtw==$aoNT4djZ+JRxrQmC5gvAgDiZG/y5IQ3ndtaMMbg/XYQ=" }
+
+[agents.bob-hermes]
+role = "hermes"
+env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "bob", HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH = "scrypt$16384$8$1$TeeNzr84+YhFpPWMjwXQPw==$0JniU+uXpXiOnjli6Yiy6dFs17bkAXBMMzd0kroCcXk=" }

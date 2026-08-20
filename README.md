@@ -94,6 +94,22 @@ Secrets bind to the one host they may be sent to; the VM only ever sees a
 placeholder — the real value is substituted host-side by microsandbox's proxy
 and never enters the guest.
 
+## A fleet file
+
+Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
+listed agents are created (or recreated when their role or env drifts), and
+fleet-created agents no longer listed are removed — hand-made agents are never
+touched, and workspaces survive removal. An entry may also pin a `workspace`;
+changing it later needs `agent rm` first, and apply refuses it otherwise.
+
+```toml
+version = 1
+
+[agents.ana-hermes]
+role = "hermes"
+env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "ana" }
+```
+
 ## State
 
 `$XDG_STATE_HOME/reef` (default `~/.local/state/reef`), overridable with
