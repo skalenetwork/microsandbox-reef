@@ -36,7 +36,7 @@ reef agent forward reviewer-1 9119           # tunnel 127.0.0.1:9119 into the VM
 reef agent update reviewer-1                 # re-pin to the role's active version
 reef agent stop reviewer-1
 reef agent start reviewer-1
-reef agent rm reviewer-1                     # VM destroyed, workspace kept
+reef agent rm reviewer-1                     # VM destroyed, volumes kept
 reef events --agent reviewer-1               # the event log, oldest first
 ```
 
@@ -87,8 +87,8 @@ it key by key, and `agent create --env KEY=VALUE` overrides both for that one
 agent (kept in the record, surviving recreates; shown by `agent get`). Keys are
 `UPPER_SNAKE`. Changing an agent's env does not rebuild it: reef applies the
 change to the existing VM and restarts it, so anything written to the rootfs
-survives. Only a role change recreates the VM, and a recreate keeps just the
-workspace. Secrets never go in any env layer — values are visible verbatim
+survives. Only a role change recreates the VM, and a recreate keeps only what
+`[volumes]` declares. Secrets never go in any env layer — values are visible verbatim
 in the guest; derived material like a password hash is fine.
 
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
@@ -97,6 +97,23 @@ host port from `19000-19999` at create, binds it to loopback, and keeps it for
 the agent's life; `agent rm` releases it. The `ports` maps in `agent list
 --json` / `get --json` are the handoff to whatever ingress the org already
 runs — reef does no TLS, auth, or routing itself.
+
+`[volumes]` declares the guest paths whose contents must outlive the VM. Each
+entry gets one volume per agent, named `reef-vol-<agent>-<entry>`, created at
+first use with `size-mib` as an enforced quota:
+
+```toml
+[volumes]
+data = { dest = "/opt/data", size-mib = 10240 }
+```
+
+A volume survives stop/start, a role change (which recreates the VM), and
+`agent rm`; `agent get` prints its name so `msb volume rm <name>` can delete
+it. Everything outside a declared path lives in the rootfs and is replaced
+whenever the role changes — that is what an image upgrade *is*. reef cannot
+persist state an image neither declares nor rebuilds on its own: check where
+your image keeps state (`msb image inspect <image>` shows its OCI config) and
+declare those paths.
 
 `network.egress` is required: agents get deny-by-default egress, and the list
 is domains only (the allowlist is enforced at DNS). A wildcard `*.x` covers
@@ -114,9 +131,8 @@ in place when only their env drifts.
 Removal is opt-in: `--prune` also deletes fleet agents the given files no
 longer declare, so pass it the whole fleet directory — a partial file list
 with `--prune` deletes everything it cannot see. Without the flag, undeclared
-agents are only reported. Hand-made agents are never touched, and workspaces
-survive removal. An entry may also pin a `workspace`; changing it later needs
-`agent rm` first, and apply refuses it otherwise.
+agents are only reported. Hand-made agents are never touched, and volumes
+survive removal.
 
 ```toml
 version = 1
@@ -150,7 +166,7 @@ password `password`.
 `$XDG_STATE_HOME/reef` (default `~/.local/state/reef`), overridable with
 `--state` / `REEF_STATE`:
 
-- `reef.db` — roles, agents, workspaces, events (SQLite, WAL). Desired state
+- `reef.db` — roles, agents, ports, events (SQLite, WAL). Desired state
   plus the last applied status; VM liveness is re-read from the runtime on
   every command.
 - `secrets.toml` — resolves `reef://store/name` references; mode 0600 or reef

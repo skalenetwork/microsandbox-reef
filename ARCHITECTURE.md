@@ -20,7 +20,7 @@ every instance inherits the policy.
 ## The model
 
 The **agent record is durable; the VM is cattle.** An `Agent` is a spec
-(owner, pinned role version, workspace, desired state) plus a status only the
+(owner, pinned role version, desired state) plus a status only the
 reconciler writes. Every mutating CLI command runs one reconcile pass that
 drives the VM toward the record, then returns. There is no daemon: VMs are
 created detached, outlive reef, and are re-discovered by name on the next
@@ -31,7 +31,8 @@ Invariants:
 - Stop/start never destroys a VM. Only a role change recreates one; an env
   change is applied to the existing VM and takes effect on a restart, so the
   rootfs survives it.
-- A workspace survives everything, including recreate and `agent rm`.
+- A volume declared by a role survives everything the VM does not: stop/start,
+  the recreate a role change forces, and `agent rm`.
 - A secret value never enters the guest (placeholder + host-side TLS
   substitution, bound to one host) and never enters reef's database, events,
   or errors (`Secret` has no `Serialize`; `Debug` redacts).

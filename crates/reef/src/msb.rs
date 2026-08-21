@@ -79,9 +79,11 @@ impl Vmm for Msb {
         if let Some(pids) = role.resources.max_pids {
             builder = builder.rlimit(RlimitResource::Nproc, u64::from(pids));
         }
-        if let Some(mount) = &config.volume {
-            let volume = mount.volume.clone();
-            builder = builder.volume(&mount.dest, |m| m.named_with(volume, |n| n.ensure_exists()));
+        for mount in &config.volumes {
+            let (name, quota) = (mount.name.clone(), mount.quota_mib);
+            builder = builder.volume(&mount.dest, |m| {
+                m.named_with(name, |v| v.quota(quota).ensure_exists())
+            });
         }
         let policy = network_policy(&role.network.egress)?;
         builder = builder.network(|n| n.policy(policy));

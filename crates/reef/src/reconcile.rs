@@ -3,13 +3,17 @@ use crate::store::Store;
 use crate::vmm::{SecretEnv, VmConfig, Vmm, VolumeMount};
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Action, Agent, AgentName, Desired, EnvKey, Facts, Lifecycle, PortName, Role, allocate_ports,
-    plan,
+    Action, Agent, AgentName, Desired, EnvKey, Facts, Lifecycle, PortName, Role, VolumeName,
+    allocate_ports, plan,
 };
 use std::collections::BTreeMap;
 
 pub fn sandbox_name(agent: &AgentName) -> String {
     format!("reef-{agent}")
+}
+
+pub fn volume_name(agent: &AgentName, entry: &VolumeName) -> String {
+    format!("reef-vol-{agent}-{entry}")
 }
 
 pub async fn reconcile<V: Vmm>(
@@ -79,7 +83,7 @@ async fn run<V: Vmm>(
                 )
                 .map_err(anyhow::Error::msg)?;
                 store.set_ports(&agent.name, &ports)?;
-                let config = vm_config(store, secrets, agent, role, sandbox, &ports)?;
+                let config = vm_config(secrets, agent, role, sandbox, &ports)?;
                 vmm.create(config).await?;
                 agent.status.applied_digest = Some(agent.spec.role_digest.clone());
                 agent.status.applied_env = agent.spec.env.clone();
@@ -118,24 +122,12 @@ fn env_patch<'a>(role: &'a Role, agent: &'a Agent) -> BTreeMap<&'a EnvKey, Optio
 }
 
 fn vm_config<'a>(
-    store: &Store,
     secrets: &Secrets,
     agent: &'a Agent,
     role: &'a Role,
     sandbox: &str,
     ports: &BTreeMap<PortName, u16>,
 ) -> Result<VmConfig<'a>> {
-    let volume = agent
-        .spec
-        .workspace
-        .as_ref()
-        .map(|workspace| {
-            store.ensure_workspace(workspace).map(|volume| VolumeMount {
-                volume,
-                dest: "/workspace".to_owned(),
-            })
-        })
-        .transpose()?;
     let secret_envs = role
         .secrets
         .iter()
@@ -157,7 +149,15 @@ fn vm_config<'a>(
             .map(|(name, guest)| (ports[name], *guest))
             .collect(),
         secrets: secret_envs,
-        volume,
+        volumes: role
+            .volumes
+            .iter()
+            .map(|(entry, volume)| VolumeMount {
+                name: volume_name(&agent.name, entry),
+                dest: volume.dest.clone(),
+                quota_mib: volume.size_mib,
+            })
+            .collect(),
     })
 }
 
@@ -173,6 +173,7 @@ mod tests {
     struct FakeVmm {
         vms: Mutex<HashMap<String, VmStatus>>,
         seen_env: Mutex<Vec<(String, String)>>,
+        seen_volumes: Mutex<Vec<(String, String, u32)>>,
         removed_env: Mutex<Vec<String>>,
         fail_create: bool,
     }
@@ -190,6 +191,11 @@ mod tests {
                 .env
                 .iter()
                 .map(|(key, value)| (key.to_string(), (*value).clone()))
+                .collect();
+            *self.seen_volumes.lock().unwrap() = config
+                .volumes
+                .iter()
+                .map(|v| (v.name.clone(), v.dest.clone(), v.quota_mib))
                 .collect();
             self.vms
                 .lock()
@@ -358,7 +364,6 @@ network = { egress = ["example.com"] }
                     owner: "test".to_owned(),
                     role: "echo".parse().unwrap(),
                     role_digest: digest.clone(),
-                    workspace: None,
                     desired: Desired::Running,
                     env,
                 },
@@ -421,6 +426,31 @@ network = { egress = ["example.com"] }
         );
         let err = reconcile(&store, &secrets, &vmm, &name).await.unwrap_err();
         assert!(err.to_string().contains("collides"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn role_volumes_become_per_agent_mounts() {
+        let (store, secrets, _digest, _name) = setup();
+        let vmm = FakeVmm::default();
+        let with_volume = import(
+            &store,
+            &ROLE.replace(
+                "network =",
+                "volumes = { data = { dest = \"/opt/data\", size-mib = 2048 } }\nnetwork =",
+            ),
+            "d",
+        );
+        let name: AgentName = "worker-9".parse().unwrap();
+        insert(&store, &name, &with_volume, BTreeMap::new());
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert_eq!(
+            *vmm.seen_volumes.lock().unwrap(),
+            [(
+                "reef-vol-worker-9-data".to_owned(),
+                "/opt/data".to_owned(),
+                2048
+            )]
+        );
     }
 
     #[tokio::test]

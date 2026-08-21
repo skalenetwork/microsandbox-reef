@@ -32,6 +32,9 @@ impl Reef {
 impl Drop for Reef {
     fn drop(&mut self) {
         let _ = self.run(&["agent", "rm", &self.agent]);
+        let _ = Command::new("msb")
+            .args(["volume", "rm", &format!("reef-vol-{}-data", self.agent)])
+            .output();
     }
 }
 
@@ -63,6 +66,19 @@ fn read_banner(port: u16) -> String {
     response
 }
 
+const ROLE: &str = r#"
+version = 1
+name  = "echo"
+image = "alpine"
+init  = ["/bin/sleep", "999999999"]
+env = { SMOKE_MARK = "reef-env" }
+expose = { web = 8080 }
+volumes = { data = { dest = "/data", size-mib = 64 } }
+resources = { vcpus = 1, memory-mib = 256, max-pids = 128 }
+network = { egress = ["example.com"] }
+secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
+"#;
+
 #[test]
 #[ignore = "boots a real microVM; needs msb and KVM/HVF"]
 fn full_agent_journey() {
@@ -83,21 +99,7 @@ fn full_agent_journey() {
         .unwrap();
     }
     let role = state.join("echo.toml");
-    std::fs::write(
-        &role,
-        r#"
-version = 1
-name  = "echo"
-image = "alpine"
-init  = ["/bin/sleep", "999999999"]
-env = { SMOKE_MARK = "reef-env" }
-expose = { web = 8080 }
-resources = { vcpus = 1, memory-mib = 256, max-pids = 128 }
-network = { egress = ["example.com"] }
-secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
-"#,
-    )
-    .unwrap();
+    std::fs::write(&role, ROLE).unwrap();
 
     let reef = Reef {
         state,
@@ -181,6 +183,23 @@ secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
         pid1.contains("sleep"),
         "init lost across stop/start: {pid1}"
     );
+
+    reef.ok(&[
+        "agent",
+        "exec",
+        &reef.agent,
+        "--",
+        "sh",
+        "-c",
+        "echo durable > /data/keep",
+    ]);
+    std::fs::write(&role, ROLE.replace("memory-mib = 256", "memory-mib = 320")).unwrap();
+    reef.ok(&["role", "apply", role.to_str().unwrap()]);
+    reef.ok(&["agent", "update", &reef.agent]);
+    let kept = reef.ok(&["agent", "exec", &reef.agent, "--", "cat", "/data/keep"]);
+    assert!(kept.contains("durable"), "volume lost on recreate: {kept}");
+    let gone = reef.run(&["agent", "exec", &reef.agent, "--", "cat", "/root/marker"]);
+    assert!(!gone.1.contains("keep"), "rootfs must not survive recreate");
 
     reef.ok(&[
         "agent",

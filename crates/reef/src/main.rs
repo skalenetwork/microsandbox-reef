@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use reef_core::{
     Agent, AgentName, AgentSpec, Desired, Digest, EnvKey, Lifecycle, PortName, Role, RoleName,
-    VmStatus, WorkspaceName, parse_fleet, parse_role,
+    VmStatus, VolumeName, parse_fleet, parse_role,
 };
 use secrets::Secrets;
 use serde::Serialize;
@@ -100,8 +100,6 @@ enum AgentCommand {
         role: RoleName,
         #[arg(long)]
         name: AgentName,
-        #[arg(long)]
-        workspace: Option<WorkspaceName>,
         /// KEY=VALUE for this agent, overriding the role's [env] (repeatable)
         #[arg(long, value_name = "KEY=VALUE")]
         env: Vec<EnvPair>,
@@ -140,7 +138,7 @@ enum AgentCommand {
     Start { name: AgentName },
     /// Set desired state to stopped and reconcile
     Stop { name: AgentName },
-    /// Destroy the VM and the record; workspaces survive
+    /// Destroy the VM and the record; volumes survive
     Rm { name: AgentName },
 }
 
@@ -213,7 +211,7 @@ struct AgentDetail {
     role_digest: Digest,
     owner: String,
     fleet: bool,
-    workspace: Option<WorkspaceName>,
+    volumes: BTreeMap<VolumeName, String>,
     desired: &'static str,
     state: &'static str,
     reason: Option<String>,
@@ -335,19 +333,11 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
 
 async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
     match command {
-        AgentCommand::Create {
-            role,
-            name,
-            workspace,
-            env,
-        } => {
+        AgentCommand::Create { role, name, env } => {
             let (digest, _) = ctx
                 .store
                 .active_role(&role)?
                 .with_context(|| format!("no such role: {role} (run `reef role apply` first)"))?;
-            if let Some(workspace) = &workspace {
-                ctx.store.ensure_workspace(workspace)?;
-            }
             let agent = Agent::new(
                 name,
                 false,
@@ -355,7 +345,6 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     owner: owner(),
                     role,
                     role_digest: digest,
-                    workspace,
                     desired: Desired::Running,
                     env: env
                         .into_iter()
@@ -436,13 +425,23 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 _ => None,
             };
             let ports = ctx.store.ports(&agent.name)?;
+            let volumes = ctx
+                .store
+                .role_version(&agent.spec.role_digest)?
+                .volumes
+                .into_keys()
+                .map(|entry| {
+                    let name = reconcile::volume_name(&agent.name, &entry);
+                    (entry, name)
+                })
+                .collect();
             let detail = AgentDetail {
                 name: agent.name,
                 role: agent.spec.role,
                 role_digest: agent.spec.role_digest,
                 owner: agent.spec.owner,
                 fleet: agent.fleet,
-                workspace: agent.spec.workspace,
+                volumes,
                 desired: agent.spec.desired.label(),
                 state,
                 reason,
@@ -463,10 +462,6 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     format_args!("{}@{}", detail.role, short(detail.role_digest.as_str())),
                 );
                 row("owner", &detail.owner);
-                row(
-                    "workspace",
-                    detail.workspace.as_ref().map_or("-", |w| w.as_str()),
-                );
                 row("desired", detail.desired);
                 match &detail.reason {
                     Some(reason) => row("state", format_args!("{}: {reason}", detail.state)),
@@ -474,6 +469,9 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 }
                 row("vm", detail.vm.unwrap_or("-"));
                 row("sandbox", &detail.sandbox);
+                for (entry, name) in &detail.volumes {
+                    row("volume", format_args!("{entry} {name}"));
+                }
                 if !detail.ports.is_empty() {
                     let ports: Vec<String> = detail
                         .ports
@@ -561,10 +559,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             ctx.vmm.remove(&reconcile::sandbox_name(&name)).await?;
             ctx.store.delete_agent(&name)?;
             ctx.store.record(&name, "deleted", &agent.spec.owner)?;
-            match agent.spec.workspace {
-                Some(workspace) => println!("{name} removed (workspace {workspace} kept)"),
-                None => println!("{name} removed"),
-            }
+            println!("{name} removed");
             Ok(())
         }
     }
@@ -675,9 +670,6 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
         let digest = digests.remove(&name).expect("resolved above");
         let outcome = match ctx.store.get_agent(&name)? {
             None => {
-                if let Some(workspace) = &entry.workspace {
-                    ctx.store.ensure_workspace(workspace)?;
-                }
                 let agent = Agent::new(
                     name.clone(),
                     true,
@@ -685,7 +677,6 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                         owner: owner(),
                         role: entry.role,
                         role_digest: digest,
-                        workspace: entry.workspace,
                         desired: Desired::Running,
                         env: entry.env,
                     },
@@ -696,11 +687,6 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
             }
             Some(agent) if !agent.fleet => {
                 eprintln!("{name}: exists but is not fleet-managed; skipping");
-                failed = true;
-                continue;
-            }
-            Some(agent) if agent.spec.workspace != entry.workspace => {
-                eprintln!("{name}: workspace changes need `agent rm` first; skipping");
                 failed = true;
                 continue;
             }
@@ -833,7 +819,7 @@ network = { egress = ["example.com"] }
             role_digest: digest.parse().unwrap(),
             owner: "dmytro".to_owned(),
             fleet: false,
-            workspace: None,
+            volumes: BTreeMap::from([("data".parse().unwrap(), "reef-vol-echo-1-data".to_owned())]),
             desired: "running",
             state: "failed",
             reason: Some("boom".to_owned()),
@@ -848,7 +834,7 @@ network = { egress = ["example.com"] }
         assert_eq!(
             serde_json::to_string(&detail).unwrap(),
             format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","fleet":false,"workspace":null,"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","fleet":false,"volumes":{{"data":"reef-vol-echo-1-data"}},"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
             )
         );
     }

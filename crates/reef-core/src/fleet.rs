@@ -1,4 +1,4 @@
-use crate::name::{AgentName, EnvKey, RoleName, WorkspaceName};
+use crate::name::{AgentName, EnvKey, RoleName};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -14,8 +14,6 @@ pub struct Fleet {
 #[serde(deny_unknown_fields)]
 pub struct FleetAgent {
     pub role: RoleName,
-    #[serde(default)]
-    pub workspace: Option<WorkspaceName>,
     #[serde(default)]
     pub env: BTreeMap<EnvKey, String>,
 }
@@ -67,7 +65,6 @@ env = { FOO = "bar" }
 
 [agents.bob-hermes]
 role = "hermes"
-workspace = "bob-data"
 "#,
         )
         .unwrap();

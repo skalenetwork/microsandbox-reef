@@ -1,4 +1,4 @@
-use crate::name::{AgentName, Digest, EnvKey, RoleName, WorkspaceName};
+use crate::name::{AgentName, Digest, EnvKey, RoleName};
 use crate::plan::Drift;
 use std::collections::BTreeMap;
 
@@ -53,7 +53,6 @@ pub struct AgentSpec {
     pub owner: String,
     pub role: RoleName,
     pub role_digest: Digest,
-    pub workspace: Option<WorkspaceName>,
     pub desired: Desired,
     pub env: BTreeMap<EnvKey, String>,
 }
@@ -127,7 +126,6 @@ mod tests {
                 owner: "o".to_owned(),
                 role: "r".parse().unwrap(),
                 role_digest: "0".repeat(64).parse().unwrap(),
-                workspace: None,
                 desired,
                 env: BTreeMap::new(),
             },

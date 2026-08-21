@@ -9,7 +9,7 @@ pub struct VmConfig<'a> {
     pub env: BTreeMap<&'a EnvKey, &'a String>,
     pub ports: Vec<(u16, u16)>,
     pub secrets: Vec<SecretEnv<'a>>,
-    pub volume: Option<VolumeMount>,
+    pub volumes: Vec<VolumeMount>,
 }
 
 pub struct SecretEnv<'a> {
@@ -19,8 +19,9 @@ pub struct SecretEnv<'a> {
 }
 
 pub struct VolumeMount {
-    pub volume: String,
+    pub name: String,
     pub dest: String,
+    pub quota_mib: u32,
 }
 
 pub trait Vmm {

@@ -1,14 +1,14 @@
 use anyhow::{Context, Result, bail};
 use reef_core::{
     Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Lifecycle, PortName, Role,
-    RoleName, WorkspaceName,
+    RoleName,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 const SCHEMA: &str = "
 CREATE TABLE role_versions (
@@ -21,11 +21,6 @@ CREATE TABLE roles (
   name          TEXT PRIMARY KEY,
   active_digest TEXT NOT NULL REFERENCES role_versions(digest)
 );
-CREATE TABLE workspaces (
-  name       TEXT PRIMARY KEY,
-  volume     TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
 CREATE TABLE agents (
   name               TEXT PRIMARY KEY,
   generation         INTEGER NOT NULL,
@@ -33,7 +28,6 @@ CREATE TABLE agents (
   owner              TEXT NOT NULL,
   role               TEXT NOT NULL,
   role_digest        TEXT NOT NULL REFERENCES role_versions(digest),
-  workspace          TEXT REFERENCES workspaces(name),
   desired            TEXT NOT NULL,
   env                TEXT NOT NULL DEFAULT '{}',
   lifecycle          TEXT NOT NULL,
@@ -142,27 +136,14 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    pub fn ensure_workspace(&self, name: &WorkspaceName) -> Result<String> {
-        self.db.execute(
-            "INSERT OR IGNORE INTO workspaces (name, volume, created_at)
-             VALUES (?1, 'reef-ws-' || ?1, unixepoch())",
-            [name.as_str()],
-        )?;
-        Ok(self.db.query_row(
-            "SELECT volume FROM workspaces WHERE name = ?1",
-            [name.as_str()],
-            |row| row.get(0),
-        )?)
-    }
-
     pub fn insert_agent(&self, agent: &Agent) -> Result<()> {
         let env = serde_json::to_string(&agent.spec.env)?;
         let inserted = self.db.execute(
             "INSERT OR IGNORE INTO agents
-               (name, generation, fleet, owner, role, role_digest, workspace, desired, env,
+               (name, generation, fleet, owner, role, role_digest, desired, env,
                 lifecycle, last_error, applied_generation, applied_digest, applied_env,
                 created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
                      unixepoch(), unixepoch())",
             params![
                 agent.name.as_str(),
@@ -171,7 +152,6 @@ impl Store {
                 agent.spec.owner,
                 agent.spec.role.as_str(),
                 agent.spec.role_digest.as_str(),
-                agent.spec.workspace.as_ref().map(|w| w.as_str()),
                 agent.spec.desired.label(),
                 env,
                 agent.status.lifecycle.label(),
@@ -190,7 +170,7 @@ impl Store {
     pub fn get_agent(&self, name: &AgentName) -> Result<Option<Agent>> {
         self.db
             .query_row(
-                "SELECT name, generation, fleet, owner, role, role_digest, workspace, desired,
+                "SELECT name, generation, fleet, owner, role, role_digest, desired,
                         env, lifecycle, last_error, applied_generation, applied_digest, applied_env
                  FROM agents WHERE name = ?1",
                 [name.as_str()],
@@ -203,7 +183,7 @@ impl Store {
 
     pub fn list_agents(&self) -> Result<Vec<Agent>> {
         let mut stmt = self.db.prepare(
-            "SELECT name, generation, fleet, owner, role, role_digest, workspace, desired,
+            "SELECT name, generation, fleet, owner, role, role_digest, desired,
                     env, lifecycle, last_error, applied_generation, applied_digest, applied_env
              FROM agents ORDER BY name",
         )?;
@@ -396,7 +376,6 @@ type RawAgent = (
     String,
     String,
     String,
-    Option<String>,
     String,
     String,
     String,
@@ -421,7 +400,6 @@ fn agent_row(row: &Row<'_>) -> rusqlite::Result<RawAgent> {
         row.get(10)?,
         row.get(11)?,
         row.get(12)?,
-        row.get(13)?,
     ))
 }
 
@@ -433,7 +411,6 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
         owner,
         role,
         role_digest,
-        workspace,
         desired,
         env,
         lifecycle,
@@ -457,7 +434,6 @@ fn decode_agent(raw: RawAgent) -> Result<Agent> {
             owner,
             role: parsed(role)?,
             role_digest: parsed(role_digest)?,
-            workspace: workspace.map(parsed).transpose()?,
             desired: parsed(desired)?,
             env: serde_json::from_str(&env)?,
         },
@@ -575,7 +551,6 @@ network = { egress = ["example.com"] }
                 owner: "dmytro".to_owned(),
                 role: role.name.clone(),
                 role_digest: digest(),
-                workspace: None,
                 desired: Desired::Running,
                 env: BTreeMap::from([("FOO".parse().unwrap(), "bar".to_owned())]),
             },

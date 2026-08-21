@@ -1,6 +1,6 @@
-use crate::name::{Domain, EnvKey, Host, ImageRef, PortName, RoleName, SecretRef};
+use crate::name::{Domain, EnvKey, Host, ImageRef, PortName, RoleName, SecretRef, VolumeName};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -15,10 +15,19 @@ pub struct Role {
     pub env: BTreeMap<EnvKey, String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub expose: BTreeMap<PortName, u16>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub volumes: BTreeMap<VolumeName, Volume>,
     pub resources: Resources,
     pub network: Network,
     #[serde(default)]
     pub secrets: BTreeMap<EnvKey, SecretBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Volume {
+    pub dest: String,
+    pub size_mib: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -122,6 +131,27 @@ impl Role {
                 out.push(format!("env.{key}: NUL bytes are not allowed"));
             }
         }
+        let mut dests = BTreeSet::new();
+        for (name, volume) in &self.volumes {
+            if !volume.dest.starts_with('/') || volume.dest.contains('\\') {
+                out.push(format!(
+                    "volumes.{name}: dest {:?} must be an absolute guest path",
+                    volume.dest
+                ));
+            }
+            if volume.dest.contains('\0') {
+                out.push(format!("volumes.{name}: NUL bytes are not allowed"));
+            }
+            if volume.size_mib == 0 {
+                out.push(format!("volumes.{name}: size-mib must be at least 1"));
+            }
+            if !dests.insert(&volume.dest) {
+                out.push(format!(
+                    "volumes.{name}: dest {:?} is declared twice",
+                    volume.dest
+                ));
+            }
+        }
         if self.resources.vcpus == 0 {
             out.push("resources.vcpus: must be at least 1".to_owned());
         }
@@ -197,6 +227,32 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
         assert_eq!(role.resources.vcpus, 2);
         assert_eq!(role.network.egress.len(), 3);
         assert_eq!(role.secrets.len(), 2);
+    }
+
+    #[test]
+    fn volumes_must_be_absolute_sized_and_distinct() {
+        let volumes =
+            |body: &str| GOOD.replace("[resources]", &format!("[volumes]\n{body}\n[resources]"));
+
+        let role = parse_role(&volumes(
+            r#"data = { dest = "/opt/data", size-mib = 10240 }"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            role.volumes[&"data".parse::<VolumeName>().unwrap()].size_mib,
+            10240
+        );
+
+        let problems = invalid(&volumes(r#"data = { dest = "opt/data", size-mib = 1 }"#));
+        assert!(problems[0].contains("absolute"), "{problems:?}");
+
+        let problems = invalid(&volumes(r#"data = { dest = "/opt/data", size-mib = 0 }"#));
+        assert!(problems[0].contains("size-mib"), "{problems:?}");
+
+        let problems = invalid(&volumes(
+            "a = { dest = \"/d\", size-mib = 1 }\nb = { dest = \"/d\", size-mib = 1 }",
+        ));
+        assert!(problems[0].contains("declared twice"), "{problems:?}");
     }
 
     #[test]
