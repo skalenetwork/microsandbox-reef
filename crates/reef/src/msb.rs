@@ -10,9 +10,9 @@ use microsandbox::size::SizeExt;
 use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkAction, NetworkPolicy, Sandbox,
 };
-use reef_core::{Domain, VmStatus};
+use reef_core::{Domain, EnvKey, VmStatus};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
@@ -101,6 +101,18 @@ impl Vmm for Msb {
             ),
             Err(e) => Err(e.into()),
         }
+    }
+
+    async fn modify(&self, name: &str, env: BTreeMap<&EnvKey, Option<&String>>) -> Result<()> {
+        let mut builder = Sandbox::get(name).await?.modify().next_start();
+        for (key, value) in env {
+            builder = match value {
+                Some(value) => builder.env(key.as_str(), value.as_str()),
+                None => builder.remove_env(key.as_str()),
+            };
+        }
+        builder.apply().await?;
+        Ok(())
     }
 
     async fn start(&self, name: &str) -> Result<()> {

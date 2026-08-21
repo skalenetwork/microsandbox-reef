@@ -570,7 +570,12 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
     }
 }
 
-fn events_command(ctx: Ctx, agent: Option<AgentName>, after: Option<i64>, json: bool) -> Result<()> {
+fn events_command(
+    ctx: Ctx,
+    agent: Option<AgentName>,
+    after: Option<i64>,
+    json: bool,
+) -> Result<()> {
     let events = ctx.store.events(agent.as_ref(), after)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&events)?);

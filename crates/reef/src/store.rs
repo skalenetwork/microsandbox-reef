@@ -358,7 +358,13 @@ impl Store {
              ORDER BY id",
         )?;
         let rows = stmt.query_map(params![agent.map(AgentName::as_str), after], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })?;
         rows.map(|row| {
             let (id, agent, at, kind, detail): (i64, String, i64, String, String) = row?;

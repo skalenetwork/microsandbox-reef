@@ -10,6 +10,6 @@ pub use fleet::{Fleet, FleetAgent, parse_fleet};
 pub use name::{
     AgentName, Digest, Domain, EnvKey, Host, ImageRef, PortName, RoleName, SecretRef, WorkspaceName,
 };
-pub use plan::{Action, Facts, VmStatus, plan};
+pub use plan::{Action, Drift, Facts, VmStatus, plan};
 pub use ports::{HOST_PORTS, allocate_ports};
 pub use role::{Network, Resources, Role, RoleError, SecretBinding, parse_role};

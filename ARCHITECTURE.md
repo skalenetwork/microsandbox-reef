@@ -28,7 +28,9 @@ command.
 
 Invariants:
 
-- Stop/start never destroys a VM. Only a role or env change recreates one.
+- Stop/start never destroys a VM. Only a role change recreates one; an env
+  change is applied to the existing VM and takes effect on a restart, so the
+  rootfs survives it.
 - A workspace survives everything, including recreate and `agent rm`.
 - A secret value never enters the guest (placeholder + host-side TLS
   substitution, bound to one host) and never enters reef's database, events,
@@ -56,9 +58,9 @@ The split is compiler-enforced: decision logic cannot touch I/O.
 Flow: `role apply` parses and validates a role (line-and-column errors, all
 problems at once), stores it content-addressed by digest, and marks it active.
 `agent create` writes the record, then reconciles: the pure function
-`plan(Facts) -> &[Action]` decides Create/Start/Stop/Remove from three
-inputs (desired state, VM-matches-role, observed VM), and the executor applies
-each action through the five-method `Vmm` trait. `msb.rs` is the only module
+`plan(Facts) -> &[Action]` decides Create/Modify/Start/Stop/Remove from three
+inputs (desired state, what drifted, observed VM), and the executor applies
+each action through the six-method `Vmm` trait. `msb.rs` is the only module
 that names a microsandbox type — the blast door for a pre-1.0 dependency
 pinned at `=0.6.10` (upgrades are a deliberate task gated on the real-VM smoke
 test, never a routine bump).
@@ -80,7 +82,7 @@ reef holds no credential for the credential store.
 
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
-  exception, and it holds only the five methods the reconciler drives —
+  exception, and it holds only the six methods the reconciler drives —
   operator commands (`exec`, `forward`) live on the adapter itself.
 - Data structures first; illegal states unrepresentable (`Failed` cannot lack
   a reason; invalid names do not construct).
@@ -96,7 +98,7 @@ reef holds no credential for the credential store.
 
 HTTP API and auth (the CLI is a local tool; the API will not ship without
 auth), budgets and metering, teams and projects, a web UI, multi-host,
-encrypted secrets at rest, lossless in-place upgrade. Known limit: secret
+encrypted secrets at rest, lossless in-place image upgrade. Known limit: secret
 values also persist in microsandbox's sandbox config until the VM is
 recreated; removing that copy (env-source injection) is designed and queued.
 Each returns only as a complete, owner-approved slice.

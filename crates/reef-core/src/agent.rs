@@ -1,4 +1,5 @@
 use crate::name::{AgentName, Digest, EnvKey, RoleName, WorkspaceName};
+use crate::plan::Drift;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,9 +91,14 @@ impl Agent {
         }
     }
 
-    pub fn vm_current(&self) -> bool {
-        self.status.applied_digest.as_ref() == Some(&self.spec.role_digest)
-            && self.status.applied_env == self.spec.env
+    pub fn drift(&self) -> Drift {
+        if self.status.applied_digest.as_ref() != Some(&self.spec.role_digest) {
+            Drift::Role
+        } else if self.status.applied_env != self.spec.env {
+            Drift::Env
+        } else {
+            Drift::None
+        }
     }
 
     pub fn reconciled(&self) -> bool {

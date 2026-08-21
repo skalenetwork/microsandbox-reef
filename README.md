@@ -85,7 +85,10 @@ boots idle and is driven via `exec`.
 Env is layered: the image's own `ENV` is the base, the role's `[env]` overrides
 it key by key, and `agent create --env KEY=VALUE` overrides both for that one
 agent (kept in the record, surviving recreates; shown by `agent get`). Keys are
-`UPPER_SNAKE`. Secrets never go in any env layer — values are visible verbatim
+`UPPER_SNAKE`. Changing an agent's env does not rebuild it: reef applies the
+change to the existing VM and restarts it, so anything written to the rootfs
+survives. Only a role change recreates the VM, and a recreate keeps just the
+workspace. Secrets never go in any env layer — values are visible verbatim
 in the guest; derived material like a password hash is fine.
 
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
@@ -106,7 +109,8 @@ and never enters the guest.
 ## A fleet file
 
 Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
-listed agents are created, and recreated when their role or env drifts.
+listed agents are created, recreated when their role drifts, and restarted
+in place when only their env drifts.
 Removal is opt-in: `--prune` also deletes fleet agents the given files no
 longer declare, so pass it the whole fleet directory — a partial file list
 with `--prune` deletes everything it cannot see. Without the flag, undeclared

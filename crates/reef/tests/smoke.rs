@@ -299,6 +299,15 @@ network = { egress = ["example.com"] }
             .contains("unchanged"),
         "second apply must be a no-op"
     );
+    member.ok(&[
+        "agent",
+        "exec",
+        &member.agent,
+        "--",
+        "sh",
+        "-c",
+        "echo keep > /root/fleet-marker",
+    ]);
     std::fs::write(&fleet, entry("two")).unwrap();
     assert!(
         member
@@ -308,6 +317,18 @@ network = { egress = ["example.com"] }
     );
     let seen = member.ok(&["agent", "exec", &member.agent, "--", "sh", "-c", "echo $FM"]);
     assert!(seen.contains("two"), "fleet env not applied: {seen}");
+    let marker = member.ok(&[
+        "agent",
+        "exec",
+        &member.agent,
+        "--",
+        "cat",
+        "/root/fleet-marker",
+    ]);
+    assert!(
+        marker.contains("keep"),
+        "env change must not destroy the rootfs: {marker}"
+    );
     std::fs::write(&fleet, "version = 1\n").unwrap();
     member.ok(&["fleet", "apply", fleet_path]);
     assert!(
