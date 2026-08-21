@@ -1,0 +1,30 @@
+version = 1
+
+name  = "openclaw"
+image = "ghcr.io/openclaw/openclaw:latest"
+init  = [
+  "/usr/bin/tini", "-s", "--",
+  "/usr/sbin/runuser", "-u", "node", "--",
+  "/usr/local/bin/node", "/app/openclaw.mjs", "gateway",
+  "--allow-unconfigured", "--bind", "lan", "--auth", "token",
+]
+
+[resources]
+vcpus = 2
+memory-mib = 4096
+disk-gib = 20
+
+[env]
+HOME = "/home/node"
+
+[expose]
+gateway = 18789
+
+[volumes]
+home = { dest = "/home/node", size-mib = 10240 }
+
+[network]
+egress = ["openrouter.ai"]
+
+[secrets]
+OPENROUTER_API_KEY = { ref = "reef://openclaw/openrouter", host = "openrouter.ai" }

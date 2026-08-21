@@ -14,3 +14,15 @@ tighten egress. Every file here is parse-checked by `cargo test`.
   `password`), or org SSO via `HERMES_DASHBOARD_OIDC_ISSUER` +
   `HERMES_DASHBOARD_OIDC_CLIENT_ID` in `[env]`. Serve agents on subdomains,
   not subpaths — hermes auth breaks under path prefixes upstream.
+- `openclaw` — the OpenClaw gateway (`gateway` on guest 18789, published to a
+  per-agent loopback host port). `init` starts it under `tini` and drops to the
+  image's `node` user with `runuser`; `--bind lan` is required because
+  `[expose]` only reaches services listening on `0.0.0.0`, and `[env] HOME`
+  keeps state inside the volume. The whole home is the volume: OpenClaw's own
+  docs say persisting `.openclaw` alone is not enough, since Claude CLI auth
+  lands in `.claude` and `.local/share/claude`. Needs an OpenRouter key at
+  `reef://openclaw/openrouter`, and each agent must set
+  `OPENCLAW_GATEWAY_TOKEN` in `[env]` — auth mode `token` has no hashed form,
+  so unlike the hermes password hash this value is readable inside the guest.
+  The control UI's static assets are served without auth; the token gates the
+  WebSocket RPC, so put the published port behind org ingress.
