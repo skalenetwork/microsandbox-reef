@@ -7,6 +7,7 @@ version = "0.2.0"
 edition = "2024"
 rust-version = "1.91"
 license = "MIT"
+publish = false
 
 [workspace.lints.rust]
 unsafe_code = "deny"
