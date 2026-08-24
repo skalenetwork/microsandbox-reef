@@ -11,7 +11,7 @@ Design and invariants: [ARCHITECTURE.md](ARCHITECTURE.md).
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/skalenetwork/reef/main/install.sh | sh
+curl -fsSL https://reef.clawbits.ai/install | sh
 ```
 
 Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the

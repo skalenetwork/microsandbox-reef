@@ -10,6 +10,3 @@ max-pids = 128
 
 [network]
 egress = ["example.com"]
-
-[secrets]
-FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" }

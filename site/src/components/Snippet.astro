@@ -1,0 +1,25 @@
+---
+import { Code } from "astro:components";
+import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+
+type Props = { code: string; lang: "sh" | "text" };
+
+const kebab = (k: string) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const svg = (icon: typeof Copy01Icon) =>
+  icon
+    .map(([tag, attrs]) => {
+      const rendered = Object.entries(attrs)
+        .filter(([k]) => k !== "key")
+        .map(([k, v]) => `${kebab(k)}="${v}"`)
+        .join(" ");
+      return `<${tag} ${rendered}/>`;
+    })
+    .join("");
+---
+
+<div class="copy">
+  <Code {...Astro.props} theme="css-variables" wrap />
+  <button aria-label="Copy">
+    {[Copy01Icon, Tick02Icon].map((icon) => <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true" set:html={svg(icon)} />)}
+  </button>
+</div>
