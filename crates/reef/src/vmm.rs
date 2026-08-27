@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 pub struct VmConfig<'a> {
     pub name: String,
     pub role: &'a Role,
-    pub env: BTreeMap<&'a EnvKey, &'a String>,
+    pub env: BTreeMap<String, String>,
     pub ports: Vec<(u16, u16)>,
     pub secrets: Vec<SecretEnv<'a>>,
     pub volumes: Vec<VolumeMount>,

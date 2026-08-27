@@ -71,8 +71,9 @@ reef agent stop ana-openclaw && reef agent start ana-openclaw
 ```
 
 Use that agent's own port from `agent get`. Both land in `openclaw.json`
-inside the volume, so they survive restarts and recreates. Then open the port
-and paste the agent's token into the control UI.
+inside the volume, so they survive restarts and recreates. The gateway may
+exit while these run, so the restart is required rather than tidy. Then open
+the port and paste the agent's token into the control UI.
 
 `openclaw models status` inside an agent confirms the wiring: the default
 reads `openrouter/auto`, and openrouter's key shows as an `MSB_` placeholder,

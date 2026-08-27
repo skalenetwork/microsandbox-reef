@@ -113,6 +113,11 @@ the agent's life; `agent rm` releases it. The `ports` maps in `agent list
 --json` / `get --json` are the handoff to whatever ingress the org already
 runs - reef does no TLS, auth, or routing itself.
 
+The guest is told its own published ports as `REEF_PORT_<NAME>` (`control-ui`
+becomes `REEF_PORT_CONTROL_UI`) - the one thing about itself an agent cannot
+know, since reef picks the port at create. The `REEF_` prefix is reserved:
+role `[env]` and `--env` reject it, so the namespace is always reef's.
+
 `[volumes]` declares the guest paths whose contents must outlive the VM. Each
 entry gets one volume per agent, named `reef-vol-<agent>-<entry>`, created at
 first use with `size-mib` as an enforced quota:

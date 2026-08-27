@@ -139,6 +139,7 @@ fn is_name(s: &str) -> bool {
 fn is_env_key(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 64
+        && !s.starts_with("REEF_")
         && s.starts_with(|c: char| c.is_ascii_uppercase() || c == '_')
         && s.chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
@@ -192,6 +193,7 @@ mod tests {
     fn env_keys() {
         assert!("ANTHROPIC_API_KEY".parse::<EnvKey>().is_ok());
         assert!("lower".parse::<EnvKey>().is_err());
+        assert!("REEF_PORT_UI".parse::<EnvKey>().is_err());
         assert!("1X".parse::<EnvKey>().is_err());
     }
 

@@ -102,6 +102,10 @@ async fn run<V: Vmm>(
     Ok(())
 }
 
+fn port_env(name: &PortName) -> String {
+    format!("REEF_PORT_{}", name.as_str().to_uppercase().replace('-', "_"))
+}
+
 fn merged_env<'a>(role: &'a Role, agent: &'a Agent) -> BTreeMap<&'a EnvKey, &'a String> {
     role.env.iter().chain(&agent.spec.env).collect()
 }
@@ -142,7 +146,15 @@ fn vm_config<'a>(
     Ok(VmConfig {
         name: sandbox.to_owned(),
         role,
-        env: merged_env(role, agent),
+        env: merged_env(role, agent)
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.clone()))
+            .chain(
+                ports
+                    .iter()
+                    .map(|(name, port)| (port_env(name), port.to_string())),
+            )
+            .collect(),
         ports: role
             .expose
             .iter()
@@ -426,6 +438,24 @@ network = { egress = ["example.com"] }
         );
         let err = reconcile(&store, &secrets, &vmm, &name).await.unwrap_err();
         assert!(err.to_string().contains("collides"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn exposed_ports_reach_the_guest_as_env() {
+        let (store, secrets, _digest, _name) = setup();
+        let vmm = FakeVmm::default();
+        let with_expose = import(
+            &store,
+            &ROLE.replace("network =", "expose = { control-ui = 18789 }\nnetwork ="),
+            "c",
+        );
+        let name: AgentName = "worker-7".parse().unwrap();
+        insert(&store, &name, &with_expose, BTreeMap::new());
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        let env = vmm.seen_env.lock().unwrap().clone();
+        let entry: PortName = "control-ui".parse().unwrap();
+        let port = store.ports(&name).unwrap()[&entry];
+        assert_eq!(env, [("REEF_PORT_CONTROL_UI".to_owned(), port.to_string())]);
     }
 
     #[tokio::test]
