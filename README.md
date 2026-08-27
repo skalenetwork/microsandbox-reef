@@ -4,14 +4,14 @@ Declared agents, disposable microVMs. An org describes agent **roles** as TOML
 files; developers create **agents** from those roles; reef keeps each agent
 materialized as a [microsandbox](https://github.com/superradcompany/microsandbox)
 microVM that matches its record. The record is durable, the VM is cattle; there
-is no daemon — every mutating command reconciles inline, and VMs outlive reef.
+is no daemon - every mutating command reconciles inline, and VMs outlive reef.
 
 Design and invariants: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/skalenetwork/reef/main/install.sh | sh
+curl -fsSL https://reef.clawbits.ai/install | sh
 ```
 
 Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the
@@ -41,19 +41,19 @@ reef events --agent reviewer-1               # the event log, oldest first
 ```
 
 `role list`, `agent list`, `agent get`, and `events` take `--json`.
-`agent get --wait` polls until the agent settles — reconciled and in its
-desired state — or reports failed, which exits nonzero. It has no timeout and
+`agent get --wait` polls until the agent settles - reconciled and in its
+desired state - or reports failed, which exits nonzero. It has no timeout and
 nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
 
 `events` prints the log oldest-first; `--after ID` returns only what is newer,
 so a collector can poll it without re-reading. `agent get` prints the VM's
-`sandbox` name — the handle for the runtime's own tools, such as
+`sandbox` name - the handle for the runtime's own tools, such as
 `msb logs <sandbox>` for captured guest output.
 
 `agent forward` with no ports reads the guest's `/proc/net/tcp` and lists the
 ports it is listening on that are reachable from the guest's loopback, so every
 port it names is one you can actually forward. It binds host loopback only and
-tunnels through the guest agent channel — it reaches services on the guest's own loopback and publishes
+tunnels through the guest agent channel - it reaches services on the guest's own loopback and publishes
 nothing at the VM boundary. Like `exec`, it is operator access: the role's
 egress list stays the agent's entire network policy.
 
@@ -77,7 +77,7 @@ ANTHROPIC_API_KEY = { ref = "reef://platform/anthropic", host = "api.anthropic.c
 ```
 
 `init` (optional, exec-form: `init = ["/init"]`) names the program that becomes
-the VM's PID 1 — how service images (s6-overlay, systemd, entrypoint scripts)
+the VM's PID 1 - how service images (s6-overlay, systemd, entrypoint scripts)
 boot. The guest agent survives the handoff as its child, so `exec` and
 `forward` keep working; when the init exits, the VM stops. Absent, the VM
 boots idle and is driven via `exec`.
@@ -88,7 +88,7 @@ agent (kept in the record, surviving recreates; shown by `agent get`). Keys are
 `UPPER_SNAKE`. Changing an agent's env does not rebuild it: reef applies the
 change to the existing VM and restarts it, so anything written to the rootfs
 survives. Only a role change recreates the VM, and a recreate keeps only what
-`[volumes]` declares. Secrets never go in any env layer — values are visible verbatim
+`[volumes]` declares. Secrets never go in any env layer - values are visible verbatim
 in the guest; derived material like a password hash is fine.
 
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
@@ -96,7 +96,7 @@ on `0.0.0.0` in the guest). For each entry reef allocates the agent a stable
 host port from `19000-19999` at create, binds it to loopback, and keeps it for
 the agent's life; `agent rm` releases it. The `ports` maps in `agent list
 --json` / `get --json` are the handoff to whatever ingress the org already
-runs — reef does no TLS, auth, or routing itself.
+runs - reef does no TLS, auth, or routing itself.
 
 `[volumes]` declares the guest paths whose contents must outlive the VM. Each
 entry gets one volume per agent, named `reef-vol-<agent>-<entry>`, created at
@@ -110,7 +110,7 @@ data = { dest = "/opt/data", size-mib = 10240 }
 A volume survives stop/start, a role change (which recreates the VM), and
 `agent rm`; `agent get` prints its name so `msb volume rm <name>` can delete
 it. Everything outside a declared path lives in the rootfs and is replaced
-whenever the role changes — that is what an image upgrade *is*. reef cannot
+whenever the role changes - that is what an image upgrade *is*. reef cannot
 persist state an image neither declares nor rebuilds on its own: check where
 your image keeps state (`msb image inspect <image>` shows its OCI config) and
 declare those paths.
@@ -120,7 +120,7 @@ is domains only (the allowlist is enforced at DNS). A wildcard `*.x` covers
 `x` and its subdomains, and a raw-IP connection is allowed only while a live
 DNS answer for an allowed domain pins that IP (pins last the record's TTL).
 Secrets bind to the one host they may be sent to; the VM only ever sees a
-placeholder — the real value is substituted host-side by microsandbox's proxy
+placeholder - the real value is substituted host-side by microsandbox's proxy
 and never enters the guest.
 
 ## A fleet file
@@ -129,7 +129,7 @@ Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
 listed agents are created, recreated when their role drifts, and restarted
 in place when only their env drifts.
 Removal is opt-in: `--prune` also deletes fleet agents the given files no
-longer declare, so pass it the whole fleet directory — a partial file list
+longer declare, so pass it the whole fleet directory - a partial file list
 with `--prune` deletes everything it cannot see. Without the flag, undeclared
 agents are only reported. Hand-made agents are never touched, and volumes
 survive removal.
@@ -158,7 +158,7 @@ reef agent get bob-hermes
 ```
 
 Two [Hermes](https://github.com/NousResearch/hermes-agent) agents, each with
-its dashboard on the `ports` line of `agent get` — log in as `ana` or `bob`,
+its dashboard on the `ports` line of `agent get` - log in as `ana` or `bob`,
 password `password`.
 
 ## State
@@ -166,12 +166,12 @@ password `password`.
 `$XDG_STATE_HOME/reef` (default `~/.local/state/reef`), overridable with
 `--state` / `REEF_STATE`:
 
-- `reef.db` — roles, agents, ports, events (SQLite, WAL). Desired state
+- `reef.db` - roles, agents, ports, events (SQLite, WAL). Desired state
   plus the last applied status; VM liveness is re-read from the runtime on
   every command.
-- `secrets.toml` — resolves `reef://store/name` references; mode 0600 or reef
+- `secrets.toml` - resolves `reef://store/name` references; mode 0600 or reef
   refuses to read it. A store is an inline table (**plaintext at rest**) or,
-  under `[resolvers]`, a command run at VM create whose stdout is the value —
+  under `[resolvers]`, a command run at VM create whose stdout is the value -
   plugging reef into whatever the org already runs:
 
   ```toml
@@ -190,12 +190,12 @@ password `password`.
 
 - Secrets are plaintext at rest in two places: `secrets.toml` (0600-guarded)
   and microsandbox's sandbox config under `~/.microsandbox` until the VM is
-  recreated — editing `secrets.toml` alone does not refresh a running agent.
+  recreated - editing `secrets.toml` alone does not refresh a running agent.
   `reef doctor` warns when `~/.microsandbox` is readable by other users.
 - Published host ports are unique per state dir only: a second `--state` on
-  this host, or an unrelated process squatting `19000-19999`, can collide —
+  this host, or an unrelated process squatting `19000-19999`, can collide -
   and microsandbox reports a failed port bind only in its own logs.
-- No disk I/O throttling — microsandbox caps disk size, not IOPS.
+- No disk I/O throttling - microsandbox caps disk size, not IOPS.
 - One host, no auth on the CLI (a local tool; the HTTP API comes later and
   will not ship without auth).
 - `microsandbox` is pinned exactly (`=0.6.10`, beta upstream); upgrades are a
