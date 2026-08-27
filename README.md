@@ -198,8 +198,10 @@ password `password`.
 - No disk I/O throttling - microsandbox caps disk size, not IOPS.
 - One host, no auth on the CLI (a local tool; the HTTP API comes later and
   will not ship without auth).
-- `microsandbox` is pinned exactly (`=0.6.10`, beta upstream); upgrades are a
-  deliberate task, never a routine bump.
+- `microsandbox` is pinned exactly (`=0.6.15`, beta upstream); upgrades are a
+  deliberate task, never a routine bump. reef migrates `~/.microsandbox` to
+  that schema on first run, and an older `msb` refuses the store afterwards -
+  upgrade `msb` alongside reef, or roll back with `msb self downgrade`.
 
 ## Test
 

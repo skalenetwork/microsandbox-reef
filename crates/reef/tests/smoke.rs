@@ -183,6 +183,12 @@ fn full_agent_journey() {
         pid1.contains("sleep"),
         "init lost across stop/start: {pid1}"
     );
+    let events = reef.ok(&["events", "--agent", &reef.agent]);
+    assert_eq!(
+        events.matches(" create ").count(),
+        1,
+        "stop/start must not recreate:\n{events}"
+    );
 
     reef.ok(&[
         "agent",
@@ -250,13 +256,6 @@ fn full_agent_journey() {
     assert!(
         published.contains("reef-forward"),
         "published port {web} did not reach the guest: {published}"
-    );
-
-    let events = reef.ok(&["events", "--agent", &reef.agent]);
-    assert_eq!(
-        events.matches(" create ").count(),
-        1,
-        "stop/start must not recreate:\n{events}"
     );
 
     let removed = reef.ok(&["agent", "rm", &reef.agent]);
