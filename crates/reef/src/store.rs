@@ -206,17 +206,19 @@ impl Store {
         role: &RoleName,
         digest: &Digest,
         env: &BTreeMap<EnvKey, String>,
+        owner: &str,
         expected: u64,
     ) -> Result<()> {
         let updated = self.db.execute(
             "UPDATE agents
-             SET role = ?1, role_digest = ?2, env = ?3,
+             SET role = ?1, role_digest = ?2, env = ?3, owner = ?4,
                  generation = generation + 1, updated_at = unixepoch()
-             WHERE name = ?4 AND generation = ?5",
+             WHERE name = ?5 AND generation = ?6",
             params![
                 role.as_str(),
                 digest.as_str(),
                 serde_json::to_string(env)?,
+                owner,
                 name.as_str(),
                 expected,
             ],
@@ -571,6 +573,33 @@ network = { egress = ["example.com"] }
         let loaded = store.get_agent(&agent.name).unwrap().unwrap();
         assert_eq!(loaded.generation, 2);
         assert_eq!(loaded.spec.desired, Desired::Stopped);
+
+        store
+            .set_fleet_spec(
+                &agent.name,
+                &role.name,
+                &digest(),
+                &BTreeMap::new(),
+                "ana",
+                2,
+            )
+            .unwrap();
+        assert!(
+            store
+                .set_fleet_spec(
+                    &agent.name,
+                    &role.name,
+                    &digest(),
+                    &BTreeMap::new(),
+                    "ana",
+                    2
+                )
+                .is_err()
+        );
+        let loaded = store.get_agent(&agent.name).unwrap().unwrap();
+        assert_eq!(loaded.generation, 3);
+        assert_eq!(loaded.spec.owner, "ana");
+        assert!(loaded.spec.env.is_empty());
 
         let status = AgentStatus {
             lifecycle: Lifecycle::Failed {

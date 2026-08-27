@@ -1,0 +1,11 @@
+version = 1
+
+[agents.ana-openclaw]
+role = "openclaw"
+owner = "ana"
+env = { OPENCLAW_GATEWAY_TOKEN = "change-me-ana" }
+
+[agents.bob-openclaw]
+role = "openclaw"
+owner = "bob"
+env = { OPENCLAW_GATEWAY_TOKEN = "change-me-bob" }

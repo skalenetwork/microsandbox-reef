@@ -1,6 +1,7 @@
 mod msb;
 mod reconcile;
 mod secrets;
+mod serve;
 mod store;
 mod update;
 mod vmm;
@@ -100,6 +101,9 @@ enum AgentCommand {
         role: RoleName,
         #[arg(long)]
         name: AgentName,
+        /// Owner recorded on the agent; serve admits this certificate principal (default: $USER)
+        #[arg(long)]
+        owner: Option<String>,
         /// KEY=VALUE for this agent, overriding the role's [env] (repeatable)
         #[arg(long, value_name = "KEY=VALUE")]
         env: Vec<EnvPair>,
@@ -132,6 +136,10 @@ enum AgentCommand {
         /// GUEST or LOCAL:GUEST (LOCAL 0 picks a free port); omit to list what the VM is listening on
         ports: Vec<PortSpec>,
     },
+    /// Open an interactive terminal in an agent's VM over SSH
+    Ssh { name: AgentName },
+    /// Bridge one SSH session into the caller's agent (sshd ForceCommand target)
+    Serve,
     /// Re-pin to the role's active version and recreate the VM
     Update { name: AgentName },
     /// Set desired state to running and reconcile
@@ -333,7 +341,12 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
 
 async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
     match command {
-        AgentCommand::Create { role, name, env } => {
+        AgentCommand::Create {
+            role,
+            name,
+            owner,
+            env,
+        } => {
             let (digest, _) = ctx
                 .store
                 .active_role(&role)?
@@ -342,7 +355,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 name,
                 false,
                 AgentSpec {
-                    owner: owner(),
+                    owner: owner.unwrap_or_else(user),
                     role,
                     role_digest: digest,
                     desired: Desired::Running,
@@ -525,6 +538,11 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .forward(&reconcile::sandbox_name(&name), &ports)
                 .await
         }
+        AgentCommand::Ssh { name } => {
+            require_agent(&ctx, &name)?;
+            ctx.vmm.ssh(&reconcile::sandbox_name(&name))
+        }
+        AgentCommand::Serve => serve::run(&ctx.store),
         AgentCommand::Update { name } => {
             let agent = require_agent(&ctx, &name)?;
             let (active, _) = ctx
@@ -616,7 +634,7 @@ fn row(label: &str, value: impl std::fmt::Display) {
     println!("{label:10} {value}");
 }
 
-fn owner() -> String {
+fn user() -> String {
     std::env::var("USER").unwrap_or_else(|_| "unknown".to_owned())
 }
 
@@ -674,7 +692,7 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                     name.clone(),
                     true,
                     AgentSpec {
-                        owner: owner(),
+                        owner: entry.owner.unwrap_or_else(user),
                         role: entry.role,
                         role_digest: digest,
                         desired: Desired::Running,
@@ -693,7 +711,8 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
             Some(agent)
                 if agent.spec.role == entry.role
                     && agent.spec.role_digest == digest
-                    && agent.spec.env == entry.env =>
+                    && agent.spec.env == entry.env
+                    && entry.owner.as_ref().is_none_or(|o| *o == agent.spec.owner) =>
             {
                 "unchanged"
             }
@@ -703,6 +722,7 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                     &entry.role,
                     &digest,
                     &entry.env,
+                    entry.owner.as_deref().unwrap_or(&agent.spec.owner),
                     agent.generation,
                 )?;
                 ctx.store.record(&name, "updated", digest.as_str())?;

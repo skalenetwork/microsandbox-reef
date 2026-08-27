@@ -465,6 +465,7 @@ network = { egress = ["example.com"] }
                 &"echo".parse().unwrap(),
                 &digest,
                 &BTreeMap::from([("FOO".parse().unwrap(), "v2".to_owned())]),
+                "test",
                 agent.generation,
             )
             .unwrap();
@@ -482,6 +483,7 @@ network = { egress = ["example.com"] }
                 &"echo".parse().unwrap(),
                 &digest,
                 &BTreeMap::new(),
+                "test",
                 agent.generation,
             )
             .unwrap();

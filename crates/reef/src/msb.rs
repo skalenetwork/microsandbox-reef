@@ -148,6 +148,14 @@ impl Vmm for Msb {
 }
 
 impl Msb {
+    pub fn ssh(&self, name: &str) -> Result<()> {
+        use std::os::unix::process::CommandExt;
+        let error = std::process::Command::new(msb_path()?)
+            .args(["ssh", "connect", name])
+            .exec();
+        Err(error).context("cannot run msb ssh connect")
+    }
+
     pub async fn exec(&self, name: &str, command: &[String]) -> Result<i32> {
         let (cmd, args) = command.split_first().context("empty command")?;
         let sandbox = Sandbox::get(name)
@@ -398,10 +406,13 @@ fn is_already_exists(error: &MicrosandboxError) -> bool {
     matches!(error, MicrosandboxError::SandboxAlreadyExists(_))
 }
 
+pub fn msb_path() -> Result<PathBuf> {
+    microsandbox::config::resolve_msb_path()
+        .context("msb not found: set MSB_PATH or install microsandbox (https://microsandbox.dev)")
+}
+
 pub fn doctor() -> Result<()> {
-    let msb = microsandbox::config::resolve_msb_path().context(
-        "msb not found: set MSB_PATH or install microsandbox (https://microsandbox.dev)",
-    )?;
+    let msb = msb_path()?;
     let version = std::process::Command::new(&msb).arg("--version").output()?;
     if !version.status.success() {
         bail!("{} exists but `--version` failed", msb.display());

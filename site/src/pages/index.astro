@@ -1,10 +1,8 @@
 ---
-import { Font, Image, getImage } from "astro:assets";
 import { Code } from "astro:components";
+import Layout from "../layouts/Layout.astro";
 import Snippet from "../components/Snippet.astro";
 import { bullets, description, install, url } from "../content";
-import logo from "../assets/reef.png";
-import og from "../assets/og.jpg";
 
 const journey = `# is this host ready?
 reef doctor
@@ -19,191 +17,20 @@ reef agent get demo --wait
 reef agent exec demo -- uname -a`;
 const prompt = `Install reef and create my first agent.
 Start with ${url("/llms.txt")}`;
-const icon = await getImage({ src: logo, width: 64, format: "png" });
 const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>reef - {description}</title>
-    <meta name="description" content={description} />
-    <link rel="icon" href={icon.src} />
-    <link rel="canonical" href={url("/")} />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content={url("/")} />
-    <meta property="og:title" content="reef" />
-    <meta property="og:description" content={description} />
-    <meta property="og:image" content={url(og.src)} />
-    <meta property="og:image:width" content={og.width} />
-    <meta property="og:image:height" content={og.height} />
-    <meta name="twitter:card" content="summary_large_image" />
-    <Font cssVariable="--font" preload />
-  </head>
-  <body>
-    <main>
-      <div class="hero">
-        <Image src={logo} width={40} densities={[1, 2, 3]} loading="eager" alt="" />
-        <div>
-          <h1>reef</h1>
-          <p>{description}</p>
-        </div>
-      </div>
-      <nav>
-        <a href="https://github.com/skalenetwork/reef">GitHub</a>
-        <a href="https://github.com/skalenetwork/reef/blob/main/ARCHITECTURE.md">Architecture</a>
-        <a href="https://github.com/skalenetwork/reef/releases">Releases</a>
-      </nav>
-      <Snippet code={install} lang="sh" />
-      <ul>
-        {bullets.map((bullet) => <li set:html={html(bullet)} />)}
-      </ul>
-      <div class="group">
-        <p>In your terminal</p>
-        <Code code={journey} lang="sh" theme="css-variables" />
-      </div>
-      <div class="group">
-        <p>Or tell your agent</p>
-        <Snippet code={prompt} lang="text" />
-      </div>
-    </main>
-    <footer>© {new Date().getFullYear()} SKALE Labs. MIT License.</footer>
-    <script>
-      for (const button of document.querySelectorAll("button")) {
-        button.addEventListener("click", async () => {
-          await navigator.clipboard.writeText(button.previousElementSibling!.textContent!);
-          button.dataset.copied = "";
-          setTimeout(() => delete button.dataset.copied, 1500);
-        });
-      }
-    </script>
-  </body>
-</html>
-
-<style is:global>
-  :root {
-    --text: #000;
-    --text-2: #666;
-    --bg: #fff;
-    --surface: #f5f5f5;
-    --accent: #ca342b;
-    --radius: 8px;
-    --astro-code-foreground: var(--text);
-    --astro-code-background: var(--surface);
-    --astro-code-token-comment: var(--text-2);
-    --astro-code-token-keyword: var(--text-2);
-    --astro-code-token-function: var(--accent);
-    --astro-code-token-string: var(--text);
-  }
-
-  * {
-    margin: 0;
-  }
-
-  html {
-    font: 16px/24px var(--font);
-    color: var(--text);
-    background: var(--bg);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  body {
-    max-width: 560px;
-    margin: 0 auto;
-    padding: 0 20px;
-  }
-
-  a {
-    color: inherit;
-  }
-
-  main {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-    padding: 128px 0;
-  }
-
-  .hero,
-  nav {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  nav {
-    flex-wrap: wrap;
-  }
-
-  footer {
-    padding-bottom: 32px;
-    color: var(--text-2);
-  }
-
-  h1 {
-    font-size: 20px;
-    font-weight: 500;
-  }
-
-  p {
-    color: var(--text-2);
-  }
-
-  ul,
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  ul {
-    padding: 0;
-    list-style: "- ";
-  }
-
-  li::marker {
-    color: var(--text-2);
-  }
-
-  pre,
-  code {
-    font: inherit;
-  }
-
-  pre {
-    padding: 12px 16px;
-    border-radius: var(--radius);
-  }
-
-  .copy {
-    position: relative;
-  }
-
-  .copy pre {
-    padding-right: 48px;
-  }
-
-  button {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    display: grid;
-    padding: 8px;
-    border: 0;
-    border-radius: var(--radius);
-    background: none;
-    color: var(--text-2);
-    cursor: pointer;
-  }
-
-  button:hover {
-    color: var(--text);
-  }
-
-  button:not([data-copied]) svg:last-child,
-  button[data-copied] svg:first-child {
-    display: none;
-  }
-</style>
+<Layout title={`reef - ${description}`} path="/">
+  <Snippet code={install} lang="sh" />
+  <ul>
+    {bullets.map((bullet) => <li set:html={html(bullet)} />)}
+  </ul>
+  <div class="group">
+    <p>In your terminal</p>
+    <Code code={journey} lang="sh" theme="css-variables" />
+  </div>
+  <div class="group">
+    <p>Or tell your agent</p>
+    <Snippet code={prompt} lang="text" />
+  </div>
+</Layout>

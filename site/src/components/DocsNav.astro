@@ -1,0 +1,29 @@
+---
+import { docs } from "../content";
+
+type Props = { current?: string };
+
+const { current } = Astro.props;
+const sections = [...new Set(docs.map((doc) => doc.section))];
+---
+
+<nav class="docs">
+  {
+    sections.map((section) => (
+      <div class="group">
+        <p>{section}</p>
+        <ul>
+          {docs
+            .filter((doc) => doc.section === section)
+            .map((doc) => (
+              <li>
+                <a href={doc.path} aria-current={doc.path === current ? "page" : undefined}>
+                  {doc.title}
+                </a>
+              </li>
+            ))}
+        </ul>
+      </div>
+    ))
+  }
+</nav>

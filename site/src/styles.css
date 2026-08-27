@@ -1,0 +1,214 @@
+:root {
+  --text: #000;
+  --text-2: #666;
+  --bg: #fff;
+  --surface: #f5f5f5;
+  --accent: #ca342b;
+  --radius: 8px;
+  --scrollbar: #00000026;
+  --scrollbar-hover: #00000059;
+  --astro-code-foreground: var(--text);
+  --astro-code-background: var(--surface);
+  --astro-code-token-comment: var(--text-2);
+  --astro-code-token-keyword: var(--text-2);
+  --astro-code-token-function: var(--accent);
+  --astro-code-token-string: var(--text);
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  scrollbar-gutter: stable;
+  font: 16px/24px var(--font);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+a {
+  color: inherit;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 128px 0;
+}
+
+.hero,
+nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.hero {
+  text-decoration: none;
+}
+
+nav {
+  flex-wrap: wrap;
+}
+
+nav.docs {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+nav a {
+  text-decoration: none;
+}
+
+nav a:hover,
+nav a[aria-current] {
+  text-decoration: underline;
+}
+
+aside {
+  display: none;
+  position: fixed;
+  top: 264px;
+  left: calc(50% - 500px);
+  width: 180px;
+}
+
+@media (min-width: 1140px) {
+  aside {
+    display: block;
+  }
+}
+
+footer {
+  padding-bottom: 32px;
+  color: var(--text-2);
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+h2 {
+  margin-top: 16px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+p {
+  color: var(--text-2);
+}
+
+article p {
+  color: var(--text);
+}
+
+article,
+ul,
+ol,
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+article {
+  gap: 16px;
+}
+
+ul {
+  padding: 0;
+  list-style: "- ";
+}
+
+ol {
+  padding-left: 20px;
+}
+
+li::marker {
+  color: var(--text-2);
+}
+
+pre,
+code {
+  font: inherit;
+}
+
+pre {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+:not(pre) > code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.copy {
+  position: relative;
+}
+
+.copy pre {
+  padding-right: 48px;
+}
+
+button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+button:hover {
+  color: var(--text);
+}
+
+button:not([data-copied]) svg:last-child,
+button[data-copied] svg:first-child {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+  background-clip: padding-box;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-hover) transparent;
+  }
+}

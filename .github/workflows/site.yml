@@ -3,7 +3,7 @@ name: site
 on:
   push:
     branches: [main]
-    paths: &paths [site/**, install.sh, README.md, ARCHITECTURE.md, roles/*.toml, fleet/*.toml, .github/workflows/site.yml]
+    paths: &paths [site/**, install.sh, README.md, ARCHITECTURE.md, docs/**, roles/*.toml, fleet/*.toml, .github/workflows/site.yml]
   pull_request:
     paths: *paths
 

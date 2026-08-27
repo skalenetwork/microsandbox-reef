@@ -11,8 +11,17 @@ export const bullets = [
 ];
 
 export const files = import.meta.glob(
-  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../roles/*.toml", "../../fleet/*.toml"],
+  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../roles/*.toml", "../../fleet/*.toml"],
   { query: "?raw", import: "default", eager: true },
 );
 
 export const route = (file: string) => file.replace("../../", "").replace("install.sh", "install");
+
+export const docs = Object.entries(files)
+  .filter(([file]) => file.includes("/docs/"))
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([file, body]) => ({
+    path: `/${route(file).replace(".md", "")}`,
+    section: route(file).split("/")[1].replace(/^./, (c) => c.toUpperCase()),
+    title: body.split("\n")[0].slice(2),
+  }));

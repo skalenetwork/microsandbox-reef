@@ -31,6 +31,7 @@ reef agent create --role code-reviewer --name reviewer-1
 reef agent list
 reef agent get reviewer-1 --wait             # one agent in detail; --wait blocks until settled
 reef agent exec reviewer-1 -- echo hi
+reef agent ssh reviewer-1                    # interactive terminal in the VM
 reef agent forward reviewer-1                # no ports: list what the VM is listening on
 reef agent forward reviewer-1 9119           # tunnel 127.0.0.1:9119 into the VM until Ctrl-C
 reef agent update reviewer-1                 # re-pin to the role's active version
@@ -56,6 +57,20 @@ port it names is one you can actually forward. It binds host loopback only and
 tunnels through the guest agent channel - it reaches services on the guest's own loopback and publishes
 nothing at the VM boundary. Like `exec`, it is operator access: the role's
 egress list stays the agent's entire network policy.
+
+`agent ssh` drops you into an interactive shell in the VM over microsandbox's
+SSH bridge - local operator access like `exec`, no identity involved. Authorize
+your key once with `msb ssh authorize --file ~/.ssh/id_ed25519.pub`. For remote,
+identity-gated access, `agent serve` is the counterpart below.
+
+`agent serve` bridges one SSH session into an agent and is meant to run as an
+sshd `ForceCommand`: it reads the client's CA-signed certificate from
+`SSH_USER_AUTH`, the requested agent name from `SSH_ORIGINAL_COMMAND`, admits
+the caller only if a certificate principal matches the agent's `owner` (set
+with `--owner` at create, or per agent in a fleet file; default `$USER`),
+records a `served` event, and hands the session to `msb ssh serve --stdio`.
+The full pattern - certificates, sshd config, client config - is
+[enterprise terminal access](https://reef.clawbits.ai/docs/enterprise/access).
 
 ## A role file
 
@@ -139,8 +154,12 @@ version = 1
 
 [agents.ana-hermes]
 role = "hermes"
+owner = "ana"
 env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "ana" }
 ```
+
+`owner` names who `agent serve` admits; omitted, an existing agent keeps its
+owner and a new one records the applying user.
 
 ## Try it: a hermes fleet
 

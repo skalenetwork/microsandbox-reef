@@ -3,6 +3,7 @@ import { defineConfig, fontProviders } from "astro/config";
 export default defineConfig({
   site: "https://reef.clawbits.ai",
   devToolbar: { enabled: false },
+  markdown: { shikiConfig: { theme: "css-variables" } },
   fonts: [
     {
       provider: fontProviders.fontsource(),

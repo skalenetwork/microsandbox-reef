@@ -15,6 +15,8 @@ pub struct Fleet {
 pub struct FleetAgent {
     pub role: RoleName,
     #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
     pub env: BTreeMap<EnvKey, String>,
 }
 
@@ -61,6 +63,7 @@ version = 1
 
 [agents.ana-hermes]
 role = "hermes"
+owner = "ana"
 env = { FOO = "bar" }
 
 [agents.bob-hermes]
@@ -70,7 +73,9 @@ role = "hermes"
         .unwrap();
         assert_eq!(fleet.agents.len(), 2);
         let ana = &fleet.agents[&"ana-hermes".parse().unwrap()];
+        assert_eq!(ana.owner.as_deref(), Some("ana"));
         assert_eq!(ana.env.len(), 1);
+        assert_eq!(fleet.agents[&"bob-hermes".parse().unwrap()].owner, None);
 
         assert!(parse_fleet("version = 1\n").unwrap().agents.is_empty());
         assert!(

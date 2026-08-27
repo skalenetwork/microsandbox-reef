@@ -1,0 +1,22 @@
+---
+import type { InferGetStaticPropsType, MarkdownInstance } from "astro";
+import Layout from "../../layouts/Layout.astro";
+import { docs } from "../../content";
+
+export const getStaticPaths = () =>
+  Object.entries(import.meta.glob<MarkdownInstance<Record<string, unknown>>>("../../../../docs/*/*.md", { eager: true })).map(
+    ([file, doc]) => ({ params: { slug: file.split("/docs/")[1]!.replace(".md", "") }, props: { doc } }),
+  );
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+
+const path = `/docs/${Astro.params.slug}`;
+const { Content } = Astro.props.doc;
+const title = docs.find((doc) => doc.path === path)!.title;
+---
+
+<Layout title={`${title} - reef`} path={path}>
+  <article>
+    <Content />
+  </article>
+</Layout>
