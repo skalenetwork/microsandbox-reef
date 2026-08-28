@@ -41,7 +41,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 32px;
-  padding: 128px 0;
+  padding: 64px 0;
 }
 
 .hero,
@@ -52,6 +52,7 @@ nav {
 }
 
 .hero {
+  align-items: start;
   text-decoration: none;
 }
 
@@ -65,7 +66,18 @@ nav.docs {
 }
 
 nav a {
+  position: relative;
   text-decoration: none;
+}
+
+nav a::after {
+  content: "";
+  position: absolute;
+  inset: -10px 0;
+}
+
+nav.docs a::after {
+  inset: -4px 0;
 }
 
 nav a:hover,
@@ -73,17 +85,12 @@ nav a[aria-current] {
   text-decoration: underline;
 }
 
-aside {
-  display: none;
-  position: fixed;
-  top: 264px;
-  left: calc(50% - 500px);
-  width: 180px;
-}
-
 @media (min-width: 1140px) {
-  aside {
-    display: block;
+  nav.docs {
+    position: fixed;
+    top: 264px;
+    left: calc(50% - 500px);
+    width: 180px;
   }
 }
 
@@ -143,8 +150,8 @@ code {
 }
 
 pre {
-  padding: 12px 16px;
-  border-radius: var(--radius);
+  margin: 0 -20px;
+  padding: 12px 48px 12px 20px;
   overflow-x: auto;
 }
 
@@ -152,25 +159,22 @@ pre {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--surface);
+  overflow-wrap: anywhere;
 }
 
 .copy {
   position: relative;
 }
 
-.copy pre {
-  padding-right: 48px;
-}
-
 button {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 2px;
+  right: -14px;
   display: grid;
-  padding: 8px;
+  padding: 14px;
   border: 0;
   border-radius: var(--radius);
-  background: none;
+  background: var(--surface);
   color: var(--text-2);
   cursor: pointer;
 }
@@ -182,6 +186,22 @@ button:hover {
 button:not([data-copied]) svg:last-child,
 button[data-copied] svg:first-child {
   display: none;
+}
+
+@media (min-width: 600px) {
+  main {
+    padding: 128px 0;
+  }
+
+  pre {
+    margin: 0;
+    padding: 12px 48px 12px 16px;
+    border-radius: var(--radius);
+  }
+
+  button {
+    right: 2px;
+  }
 }
 
 ::-webkit-scrollbar {

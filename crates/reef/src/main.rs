@@ -16,6 +16,7 @@ use secrets::Secrets;
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
+use std::net::{Ipv4Addr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use store::Store;
 use vmm::Vmm;
@@ -274,7 +275,11 @@ async fn main() -> Result<()> {
         Command::Events { agent, after, json } => {
             events_command(Ctx::open(&dir)?, agent, after, json)
         }
-        Command::Doctor => msb::doctor(),
+        Command::Doctor => {
+            msb::doctor()?;
+            print_names();
+            Ok(())
+        }
         Command::Update => update::run().await,
     };
     if let Some(notice) = notice {
@@ -371,6 +376,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             let agent =
                 reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &agent.name).await?;
             println!("{} {}", agent.name, agent.status.lifecycle.label());
+            print_urls(&ctx.store, &agent)?;
             Ok(())
         }
         AgentCommand::List { json } => {
@@ -486,10 +492,11 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     row("volume", format_args!("{entry} {name}"));
                 }
                 if !detail.ports.is_empty() {
+                    let host = reconcile::host_name(&detail.name);
                     let ports: Vec<String> = detail
                         .ports
                         .iter()
-                        .map(|(name, port)| format!("{name}=127.0.0.1:{port}"))
+                        .map(|(name, port)| format!("{name}=http://{host}:{port}"))
                         .collect();
                     row("ports", ports.join(" "));
                 }
@@ -535,7 +542,11 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             require_agent(&ctx, &name)?;
             let ports: Vec<(u16, u16)> = ports.iter().map(|p| (p.local, p.guest)).collect();
             ctx.vmm
-                .forward(&reconcile::sandbox_name(&name), &ports)
+                .forward(
+                    &reconcile::sandbox_name(&name),
+                    &reconcile::host_name(&name),
+                    &ports,
+                )
                 .await
         }
         AgentCommand::Ssh { name } => {
@@ -610,6 +621,7 @@ async fn set_desired(ctx: &Ctx, name: &AgentName, desired: Desired) -> Result<()
     }
     let agent = reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, name).await?;
     println!("{} {}", agent.name, agent.status.lifecycle.label());
+    print_urls(&ctx.store, &agent)?;
     Ok(())
 }
 
@@ -628,6 +640,30 @@ fn digest_role(role: &Role) -> (Digest, String) {
 
 fn short(digest: &str) -> &str {
     &digest[..12]
+}
+
+fn print_urls(store: &Store, agent: &Agent) -> Result<()> {
+    if agent.status.lifecycle != Lifecycle::Running {
+        return Ok(());
+    }
+    let ports = store.ports(&agent.name)?;
+    let host = reconcile::host_name(&agent.name);
+    let width = ports.keys().map(|p| p.as_str().len()).max().unwrap_or(0);
+    for (name, port) in &ports {
+        println!("  {:width$}  http://{host}:{port}", name.as_str());
+    }
+    Ok(())
+}
+
+fn print_names() {
+    let resolves = ("probe.localhost", 0)
+        .to_socket_addrs()
+        .is_ok_and(|mut addrs| addrs.any(|addr| addr.ip() == Ipv4Addr::LOCALHOST));
+    if resolves {
+        println!("names  *.localhost -> 127.0.0.1");
+    } else {
+        println!("warn   *.localhost does not resolve to 127.0.0.1 here; use 127.0.0.1:<port>");
+    }
 }
 
 fn row(label: &str, value: impl std::fmt::Display) {
@@ -730,7 +766,12 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
             }
         };
         match reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &name).await {
-            Ok(agent) => println!("{name} {outcome} ({})", agent.status.lifecycle.label()),
+            Ok(agent) => {
+                println!("{name} {outcome} ({})", agent.status.lifecycle.label());
+                if outcome == "created" {
+                    print_urls(&ctx.store, &agent)?;
+                }
+            }
             Err(e) => {
                 eprintln!("{name}: {e:#}");
                 failed = true;

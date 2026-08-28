@@ -33,7 +33,7 @@ reef agent get reviewer-1 --wait             # one agent in detail; --wait block
 reef agent exec reviewer-1 -- echo hi
 reef agent ssh reviewer-1                    # interactive terminal in the VM
 reef agent forward reviewer-1                # no ports: list what the VM is listening on
-reef agent forward reviewer-1 9119           # tunnel 127.0.0.1:9119 into the VM until Ctrl-C
+reef agent forward reviewer-1 9119           # tunnel reviewer-1.localhost:9119 into the VM until Ctrl-C
 reef agent update reviewer-1                 # re-pin to the role's active version
 reef agent stop reviewer-1
 reef agent start reviewer-1
@@ -109,9 +109,13 @@ in the guest; derived material like a password hash is fine.
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
 on `0.0.0.0` in the guest). For each entry reef allocates the agent a stable
 host port from `19000-19999` at create, binds it to loopback, and keeps it for
-the agent's life; `agent rm` releases it. The `ports` maps in `agent list
---json` / `get --json` are the handoff to whatever ingress the org already
-runs - reef does no TLS, auth, or routing itself.
+the agent's life; `agent rm` releases it. `create`, `start`, and `get` print
+each as `http://<agent>.localhost:<port>`, as does `fleet apply` for what it
+creates - every name under `.localhost` resolves to loopback, so an agent's
+pages get their own browser origin instead of sharing one `127.0.0.1` jar.
+The `ports` maps in `agent list --json` / `get --json` are the handoff to
+whatever ingress the org already runs - reef does no TLS, auth, or routing
+itself.
 
 The guest is told its own published ports as `REEF_PORT_<NAME>` (`control-ui`
 becomes `REEF_PORT_CONTROL_UI`) - the one thing about itself an agent cannot
@@ -219,6 +223,10 @@ password `password`.
 - Published host ports are unique per state dir only: a second `--state` on
   this host, or an unrelated process squatting `19000-19999`, can collide -
   and microsandbox reports a failed port bind only in its own logs.
+- `<agent>.localhost` is a name, not a route: it resolves to `127.0.0.1` on
+  macOS and on Linux with systemd-resolved, and nowhere else - a minimal glibc
+  or musl host resolves only `localhost`, where the same port still answers on
+  `127.0.0.1`. `reef doctor` says which host you are on.
 - No disk I/O throttling - microsandbox caps disk size, not IOPS.
 - One host, no auth on the CLI (a local tool; the HTTP API comes later and
   will not ship without auth).

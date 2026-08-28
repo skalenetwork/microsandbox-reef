@@ -1,7 +1,6 @@
 ---
 import { Code } from "astro:components";
 import Layout from "../layouts/Layout.astro";
-import Snippet from "../components/Snippet.astro";
 import { bullets, description, install, url } from "../content";
 
 const journey = `# is this host ready?
@@ -21,7 +20,7 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
 ---
 
 <Layout title={`reef - ${description}`} path="/">
-  <Snippet code={install} lang="sh" />
+  <Code code={install} lang="sh" theme="css-variables" wrap />
   <ul>
     {bullets.map((bullet) => <li set:html={html(bullet)} />)}
   </ul>
@@ -31,6 +30,6 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
   </div>
   <div class="group">
     <p>Or tell your agent</p>
-    <Snippet code={prompt} lang="text" />
+    <Code code={prompt} lang="text" theme="css-variables" wrap />
   </div>
 </Layout>

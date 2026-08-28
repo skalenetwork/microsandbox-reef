@@ -51,12 +51,12 @@ curl -fsSLO https://reef.clawbits.ai/roles/hermes.toml
 curl -fsSLO https://reef.clawbits.ai/fleet/hermes.toml
 reef role apply hermes.toml
 reef fleet apply hermes.toml
-reef agent get ana-hermes
 ```
 
-The `ports` line names the loopback host port carrying guest 9119. Open it
-and log in as `ana`. The shipped fleet file is a demo: its hashes are the
-password `password`, so replace them before this reaches anyone.
+`fleet apply` prints each agent's URL as it creates it, and `agent get` shows
+it again later. Open ana's and log in as `ana`. The shipped fleet file is a
+demo: its hashes are the password `password`, so replace them before this
+reaches anyone.
 
 Re-run `reef fleet apply` after editing the file. An env change restarts the
 agent in place; only a role change recreates the VM.

@@ -198,7 +198,7 @@ impl Msb {
         Ok(ports)
     }
 
-    pub async fn forward(&self, name: &str, ports: &[(u16, u16)]) -> Result<()> {
+    pub async fn forward(&self, name: &str, host: &str, ports: &[(u16, u16)]) -> Result<()> {
         let sandbox = Sandbox::get(name)
             .await?
             .connect()
@@ -216,8 +216,8 @@ impl Msb {
                 .await
                 .with_context(|| format!("cannot bind 127.0.0.1:{local}"))?;
             println!(
-                "forwarding http://{} -> {name}:{guest}",
-                listener.local_addr()?
+                "forwarding http://{host}:{} -> {name}:{guest}",
+                listener.local_addr()?.port()
             );
             let client = client.clone();
             serve.spawn(async move {

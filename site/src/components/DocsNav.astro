@@ -7,7 +7,7 @@ const { current } = Astro.props;
 const sections = [...new Set(docs.map((doc) => doc.section))];
 ---
 
-<nav class="docs">
+<nav class="docs" aria-label="Docs">
   {
     sections.map((section) => (
       <div class="group">

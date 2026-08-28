@@ -50,30 +50,31 @@ curl -fsSLO https://reef.clawbits.ai/roles/openclaw.toml
 curl -fsSLO https://reef.clawbits.ai/fleet/openclaw.toml
 reef role apply openclaw.toml
 reef fleet apply openclaw.toml
-reef agent get ana-openclaw
 ```
 
-The `ports` line names the loopback host port carrying guest 18789. Replace
-the shipped `change-me-*` tokens before this reaches anyone.
+`fleet apply` prints each agent's URL as it creates it, and `agent get` shows
+it again later. Replace the shipped `change-me-*` tokens before this reaches
+anyone.
 
 Each agent then needs two settings written once. OpenClaw ships a default
 model that is not OpenRouter, so it would ignore the key and fail on its first
 reply; and the control UI checks the browser's origin against the gateway's
-own port, so the published port is rejected with `origin not allowed` until
+own port, so the published URL is rejected with `origin not allowed` until
 you name it:
 
 ```sh
 reef agent exec ana-openclaw -- openclaw config set \
   agents.defaults.model.primary openrouter/auto
 reef agent exec ana-openclaw -- openclaw config set \
-  gateway.controlUi.allowedOrigins '["http://127.0.0.1:19002"]' --strict-json
+  gateway.controlUi.allowedOrigins \
+  '["http://ana-openclaw.localhost:19002"]' --strict-json
 reef agent stop ana-openclaw && reef agent start ana-openclaw
 ```
 
-Use that agent's own port from `agent get`. Both land in `openclaw.json`
+Use that agent's own URL from `agent get`. Both land in `openclaw.json`
 inside the volume, so they survive restarts and recreates. The gateway may
 exit while these run, so the restart is required rather than tidy. Then open
-the port and paste the agent's token into the control UI.
+that URL and paste the agent's token into the control UI.
 
 `openclaw models status` inside an agent confirms the wiring: the default
 reads `openrouter/auto`, and openrouter's key shows as an `MSB_` placeholder,

@@ -1,5 +1,6 @@
 ---
 import { Font, Image, getImage } from "astro:assets";
+import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import DocsNav from "../components/DocsNav.astro";
 import { description, url } from "../content";
 import logo from "../assets/reef.png";
@@ -15,7 +16,18 @@ const links = [
   { href: "/docs", label: "Docs" },
   { href: "https://github.com/skalenetwork/reef", label: "GitHub" },
 ];
-const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+const current = (href: string) => (href === path ? "page" : href !== "/" && path.startsWith(href) ? "true" : undefined);
+const kebab = (k: string) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const svg = (icon: typeof Copy01Icon) =>
+  icon
+    .map(([tag, attrs]) => {
+      const rendered = Object.entries(attrs)
+        .filter(([k]) => k !== "key")
+        .map(([k, v]) => `${kebab(k)}="${v}"`)
+        .join(" ");
+      return `<${tag} ${rendered}/>`;
+    })
+    .join("");
 ---
 
 <!doctype html>
@@ -46,16 +58,38 @@ const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(
           <p>{description}</p>
         </div>
       </a>
-      <nav>
-        {links.map((link) => <a href={link.href} aria-current={active(link.href) ? "page" : undefined}>{link.label}</a>)}
+      <nav aria-label="Site">
+        {links.map((link) => <a href={link.href} aria-current={current(link.href)}>{link.label}</a>)}
       </nav>
       <slot />
+      {path.startsWith("/docs") && <DocsNav current={path} />}
     </main>
     <footer>© {new Date().getFullYear()} SKALE Labs. MIT License.</footer>
-    {path.startsWith("/docs") && (
-      <aside>
-        <DocsNav current={path} />
-      </aside>
-    )}
+    <template id="copy">
+      <button aria-label="Copy">
+        {[Copy01Icon, Tick02Icon].map((icon) => <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true" set:html={svg(icon)} />)}
+      </button>
+    </template>
+    <script>
+      const template = document.querySelector<HTMLTemplateElement>("#copy")!;
+
+      for (const pre of document.querySelectorAll("pre")) {
+        const copy = document.createElement("div");
+        copy.className = "copy";
+        pre.before(copy);
+        copy.append(pre, template.content.cloneNode(true));
+
+        const button = copy.querySelector("button")!;
+        button.addEventListener("click", async () => {
+          await navigator.clipboard.writeText(pre.textContent!);
+          button.dataset.copied = "";
+          button.ariaLabel = "Copied";
+          setTimeout(() => {
+            delete button.dataset.copied;
+            button.ariaLabel = "Copy";
+          }, 1500);
+        });
+      }
+    </script>
   </body>
 </html>

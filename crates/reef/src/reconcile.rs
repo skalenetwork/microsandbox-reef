@@ -12,6 +12,10 @@ pub fn sandbox_name(agent: &AgentName) -> String {
     format!("reef-{agent}")
 }
 
+pub fn host_name(agent: &AgentName) -> String {
+    format!("{agent}.localhost")
+}
+
 pub fn volume_name(agent: &AgentName, entry: &VolumeName) -> String {
     format!("reef-vol-{agent}-{entry}")
 }
