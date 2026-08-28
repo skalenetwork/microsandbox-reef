@@ -20,7 +20,7 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
 ---
 
 <Layout title={`reef - ${description}`} path="/">
-  <Code code={install} lang="sh" theme="css-variables" wrap />
+  <Code code={install} lang="sh" theme="css-variables" class="clear" />
   <ul>
     {bullets.map((bullet) => <li set:html={html(bullet)} />)}
   </ul>
@@ -30,6 +30,6 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
   </div>
   <div class="group">
     <p>Or tell your agent</p>
-    <Code code={prompt} lang="text" theme="css-variables" wrap />
+    <Code code={prompt} lang="text" theme="css-variables" wrap class="clear" />
   </div>
 </Layout>
