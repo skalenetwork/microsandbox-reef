@@ -1,6 +1,6 @@
 # reef
 
-Declared agents, disposable microVMs. An org describes agent **roles** as TOML
+Isolated computers for agents. An org describes agent **roles** as TOML
 files; developers create **agents** from those roles; reef keeps each agent
 materialized as a [microsandbox](https://github.com/superradcompany/microsandbox)
 microVM that matches its record. The record is durable, the VM is cattle; there

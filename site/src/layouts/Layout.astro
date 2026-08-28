@@ -52,7 +52,7 @@ const svg = (icon: typeof Copy01Icon) =>
   <body>
     <main>
       <a class="hero" href="/">
-        <Image src={logo} width={40} densities={[1, 2, 3]} loading="eager" alt="" />
+        <Image src={logo} width={40} densities={[1, 2, 3]} format="png" loading="eager" alt="" />
         <div>
           <h1>reef</h1>
           <p>{description}</p>
@@ -62,9 +62,13 @@ const svg = (icon: typeof Copy01Icon) =>
         {links.map((link) => <a href={link.href} aria-current={current(link.href)}>{link.label}</a>)}
       </nav>
       <slot />
-      {path.startsWith("/docs") && <DocsNav current={path} />}
     </main>
     <footer>© {new Date().getFullYear()} SKALE Labs. MIT License.</footer>
+    {path.startsWith("/docs/") && (
+      <aside>
+        <DocsNav current={path} />
+      </aside>
+    )}
     <template id="copy">
       <button aria-label="Copy">
         {[Copy01Icon, Tick02Icon].map((icon) => <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true" set:html={svg(icon)} />)}

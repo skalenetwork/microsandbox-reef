@@ -1,5 +1,8 @@
 ---
-import { docs } from "../../content";
-
-return Astro.redirect(docs[0]!.path);
+import Layout from "../../layouts/Layout.astro";
+import DocsNav from "../../components/DocsNav.astro";
 ---
+
+<Layout title="Docs - reef" path="/docs">
+  <DocsNav />
+</Layout>
