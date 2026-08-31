@@ -37,7 +37,9 @@ Invariants:
   substitution, bound to one host) and never enters reef's database, events,
   or errors (`Secret` has no `Serialize`; `Debug` redacts).
 - Egress is deny-by-default, enforced at DNS; the role's domain list is the
-  entire policy.
+  entire policy. A role opts out with the single rule `"*"`, which must stand
+  alone and which `role apply` warns about; a secret's host binding still
+  holds, so an unrestricted role spends secrets without reading them.
 - Drift is explicit: `generation != applied_generation` is visible in
   `agent list`, and every spec write is a compare-and-swap on `generation` —
   a lost race is a 409-style error, never a merge.

@@ -9,8 +9,8 @@ mod vmm;
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use reef_core::{
-    Agent, AgentName, AgentSpec, Desired, Digest, EnvKey, Lifecycle, PortName, Role, RoleName,
-    VmStatus, VolumeName, parse_fleet, parse_role,
+    Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, Lifecycle, PortName, Role,
+    RoleName, VmStatus, VolumeName, parse_fleet, parse_role,
 };
 use secrets::Secrets;
 use serde::Serialize;
@@ -309,6 +309,12 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                             role.name,
                             short(digest.as_str())
                         );
+                        if role.network.egress.iter().any(Domain::is_any) {
+                            eprintln!(
+                                "warn   {} disables egress filtering; its agents reach any host",
+                                role.name
+                            );
+                        }
                     }
                     Err(e) => {
                         failed = true;

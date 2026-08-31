@@ -370,20 +370,23 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
 }
 
 fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
-    let mut exact = Vec::new();
-    let mut suffixes = Vec::new();
-    for domain in domains {
-        match domain.wildcard_suffix() {
-            Some(suffix) => suffixes.push(suffix),
-            None => exact.push(domain.as_str()),
+    let builder = NetworkPolicy::builder().default_ingress(NetworkAction::Allow);
+    let policy = if domains.iter().any(Domain::is_any) {
+        builder.default_egress(NetworkAction::Allow)
+    } else {
+        let mut exact = Vec::new();
+        let mut suffixes = Vec::new();
+        for domain in domains {
+            match domain.wildcard_suffix() {
+                Some(suffix) => suffixes.push(suffix),
+                None => exact.push(domain.as_str()),
+            }
         }
-    }
-    NetworkPolicy::builder()
-        .default_egress(NetworkAction::Deny)
-        .default_ingress(NetworkAction::Allow)
-        .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
-        .build()
-        .context("network policy")
+        builder
+            .default_egress(NetworkAction::Deny)
+            .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
+    };
+    policy.build().context("network policy")
 }
 
 fn map_status(status: SandboxStatus) -> VmStatus {

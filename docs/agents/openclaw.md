@@ -58,23 +58,34 @@ anyone.
 
 Each agent then needs two settings written once. OpenClaw ships a default
 model that is not OpenRouter, so it would ignore the key and fail on its first
-reply; and the control UI checks the browser's origin against the gateway's
-own port, so the published URL is rejected with `origin not allowed` until
-you name it:
+reply; and the control UI trusts only origins it is told about plus its own
+loopback hostnames, so an `<agent>.localhost` URL is rejected with `origin
+not allowed` until you name it:
 
 ```sh
 reef agent exec ana-openclaw -- openclaw config set \
   agents.defaults.model.primary openrouter/auto
+reef agent get ana-openclaw
 reef agent exec ana-openclaw -- openclaw config set \
   gateway.controlUi.allowedOrigins \
-  '["http://ana-openclaw.localhost:19002"]' --strict-json
+  '["http://ana-openclaw.localhost:19000"]' --strict-json
 reef agent stop ana-openclaw && reef agent start ana-openclaw
 ```
 
-Use that agent's own URL from `agent get`. Both land in `openclaw.json`
-inside the volume, so they survive restarts and recreates. The gateway may
-exit while these run, so the restart is required rather than tidy. Then open
-that URL and paste the agent's token into the control UI.
+Take the port from `agent get`. reef allocates the lowest free one from
+19000 upwards, so every agent needs its own entry. Both settings land in
+`openclaw.json` inside the volume, so they survive restarts and recreates.
+The gateway may exit while these run, so the restart is required rather than
+tidy.
+
+Then open that URL and paste the agent's token into the control UI. The
+token alone is not enough: OpenClaw asks the browser to pair, and the page
+prints the request id to approve.
+
+```sh
+reef agent exec ana-openclaw -- openclaw devices list
+reef agent exec ana-openclaw -- openclaw devices approve <request-id>
+```
 
 `openclaw models status` inside an agent confirms the wiring: the default
 reads `openrouter/auto`, and openrouter's key shows as an `MSB_` placeholder,
@@ -86,10 +97,10 @@ agent in place; only a role change recreates the VM.
 
 ## Notes
 
-- The whole of `/home/node` is the volume, because OpenClaw's state is spread
-  across it: `.openclaw` holds the config, SQLite databases and workspace,
-  and `.config/openclaw` holds the encryption key for OAuth token material.
-  Persisting `.openclaw` alone loses that key.
+- The whole of `/home/node` is the volume, though `.openclaw` is the only
+  path this role writes: it holds the config, SQLite databases and
+  workspace. [openclaw-browser](/docs/agents/openclaw-browser) mounts that
+  path alone; changing this role to match would strand existing agents' data.
 - The token gates the WebSocket RPC, chat and `/v1/*` routes. The control
   UI's static assets and health probes are served unauthenticated, so put
   the published port behind the org's ingress rather than on a LAN.

@@ -1,0 +1,11 @@
+version = 1
+
+[agents.ana-browse]
+role = "openclaw-browser"
+owner = "ana"
+env = { OPENCLAW_GATEWAY_TOKEN = "change-me-ana" }
+
+[agents.bob-browse]
+role = "openclaw-browser"
+owner = "bob"
+env = { OPENCLAW_GATEWAY_TOKEN = "change-me-bob" }

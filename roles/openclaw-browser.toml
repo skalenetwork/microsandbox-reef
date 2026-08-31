@@ -1,0 +1,34 @@
+version = 1
+
+name  = "openclaw-browser"
+image = "ghcr.io/openclaw/openclaw@sha256:ea7bcb53509d00c23365fa687fd5fb40a12b53a0ed3e8e814c7adbbf85f5785d"
+init  = [
+  "/usr/bin/tini", "-s", "--",
+  "/usr/sbin/runuser", "-u", "node", "--",
+  "/usr/local/bin/node", "/app/openclaw.mjs", "gateway",
+  "--allow-unconfigured", "--bind", "lan", "--auth", "token",
+]
+
+[resources]
+vcpus = 4
+memory-mib = 6144
+disk-gib = 20
+
+[env]
+HOME = "/home/node"
+XDG_CACHE_HOME = "/home/node/.openclaw/cache"
+OPENCLAW_STATE_DIR = "/home/node/.openclaw"
+OPENCLAW_SUPERVISOR_MODE = "external"
+OPENCLAW_NO_AUTO_UPDATE = "1"
+
+[expose]
+gateway = 18789
+
+[volumes]
+state = { dest = "/home/node/.openclaw", size-mib = 10240 }
+
+[network]
+egress = ["*"]
+
+[secrets]
+OPENROUTER_API_KEY = { ref = "reef://openclaw/openrouter", host = "openrouter.ai" }

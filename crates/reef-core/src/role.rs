@@ -173,6 +173,9 @@ impl Role {
                 ));
             }
         }
+        if self.network.egress.len() > 1 && self.network.egress.iter().any(Domain::is_any) {
+            out.push(r#"network.egress: "*" allows every host, so it must stand alone"#.to_owned());
+        }
         for (key, binding) in &self.secrets {
             if key.as_str().starts_with("MSB_") {
                 out.push(format!(
@@ -287,12 +290,13 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
 
     #[test]
     fn secret_hosts_cannot_be_wildcards() {
-        let text = GOOD.replace(
-            r#"host = "raw.githubusercontent.com""#,
-            r#"host = "*.githubusercontent.com""#,
-        );
-        let err = parse_role(&text).unwrap_err();
+        let host = |value: &str| GOOD.replace(r#"host = "raw.githubusercontent.com""#, value);
+
+        let err = parse_role(&host(r#"host = "*.githubusercontent.com""#)).unwrap_err();
         assert!(err.to_string().contains("*.githubusercontent.com"), "{err}");
+
+        let err = parse_role(&host(r#"host = "*""#)).unwrap_err();
+        assert!(err.to_string().contains('*'), "{err}");
     }
 
     #[test]
@@ -306,6 +310,23 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
         let text = GOOD.replace(r#""*.githubusercontent.com""#, r#""*.internal""#);
         let problems = invalid(&text);
         assert!(problems[0].contains("*.internal"), "{problems:?}");
+    }
+
+    #[test]
+    fn unrestricted_egress_must_stand_alone() {
+        let egress = |list: &str| {
+            GOOD.replace(
+                r#"egress = ["api.anthropic.com", "github.com", "*.githubusercontent.com"]"#,
+                &format!("egress = {list}"),
+            )
+        };
+
+        let role = parse_role(&egress(r#"["*"]"#)).unwrap();
+        assert!(role.network.egress[0].covers("anything.example.com"));
+        assert_eq!(role.secrets.len(), 2, "every secret host stays reachable");
+
+        let problems = invalid(&egress(r#"["*", "github.com"]"#));
+        assert!(problems[0].contains("stand alone"), "{problems:?}");
     }
 
     #[test]

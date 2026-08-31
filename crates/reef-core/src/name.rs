@@ -58,7 +58,14 @@ name_type!(ImageRef, "image reference", is_image);
 name_type!(Digest, "digest", is_digest);
 
 impl Domain {
+    pub fn is_any(&self) -> bool {
+        self.0 == "*"
+    }
+
     pub fn covers(&self, host: &str) -> bool {
+        if self.is_any() {
+            return true;
+        }
         match self.0.strip_prefix("*.") {
             Some(suffix) => host
                 .strip_suffix(suffix)
@@ -146,6 +153,9 @@ fn is_env_key(s: &str) -> bool {
 }
 
 fn is_domain(s: &str) -> bool {
+    if s == "*" {
+        return true;
+    }
     let host = s.strip_prefix("*.").unwrap_or(s);
     !host.is_empty()
         && host.len() <= 253
@@ -161,7 +171,7 @@ fn is_domain(s: &str) -> bool {
 }
 
 fn is_host(s: &str) -> bool {
-    !s.starts_with("*.") && is_domain(s)
+    !s.contains('*') && is_domain(s)
 }
 
 fn is_image(s: &str) -> bool {
