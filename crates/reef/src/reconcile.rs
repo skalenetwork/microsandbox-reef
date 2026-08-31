@@ -153,6 +153,7 @@ fn vm_config<'a>(
         env: merged_env(role, agent)
             .into_iter()
             .map(|(key, value)| (key.to_string(), value.clone()))
+            .chain([("REEF_AGENT".to_owned(), agent.name.to_string())])
             .chain(
                 ports
                     .iter()
@@ -417,6 +418,7 @@ network = { egress = ["example.com"] }
                 ("EXTRA".to_owned(), "new".to_owned()),
                 ("FOO".to_owned(), "agent".to_owned()),
                 ("KEEP".to_owned(), "role".to_owned()),
+                ("REEF_AGENT".to_owned(), "worker-2".to_owned()),
             ]
         );
     }
@@ -459,7 +461,13 @@ network = { egress = ["example.com"] }
         let env = vmm.seen_env.lock().unwrap().clone();
         let entry: PortName = "control-ui".parse().unwrap();
         let port = store.ports(&name).unwrap()[&entry];
-        assert_eq!(env, [("REEF_PORT_CONTROL_UI".to_owned(), port.to_string())]);
+        assert_eq!(
+            env,
+            [
+                ("REEF_AGENT".to_owned(), "worker-7".to_owned()),
+                ("REEF_PORT_CONTROL_UI".to_owned(), port.to_string()),
+            ]
+        );
     }
 
     #[tokio::test]

@@ -29,12 +29,14 @@ narrowest path that holds the state you need.
   inside the guest.
   The control UI's static assets are served without auth; the token gates the
   WebSocket RPC, so put the published port behind org ingress.
-- `openclaw-browser` — the same gateway on the `-browser` image, which bakes
-  Chromium into `/home/node/.cache/ms-playwright`. `egress = ["*"]` turns
-  filtering off, because an agent that browses the web has to reach the web.
+- `openclaw-browser` — OpenClaw 2.0 pinned to a digest, on the `-browser`
+  image, which bakes Chromium into `/home/node/.cache/ms-playwright`.
+  `egress = ["*"]` turns filtering off, because an agent that browses the web
+  has to reach the web.
   The volume is `/home/node/.openclaw` alone so the mount does not hide the
   browsers, and `XDG_CACHE_HOME` moves the gateway's cache into it because
-  `/home/node/.cache` is root-owned. See
-  [openclaw-browser](../docs/agents/openclaw-browser.md) for the settings
-  each agent needs, the extra start its first boot wants, and why Chromium
-  cannot verify TLS in a guest.
+  `/home/node/.cache` is root-owned. `[files]` seeds the whole OpenClaw config
+  at a path outside the volume, which `OPENCLAW_CONFIG_PATH` selects, so the
+  agent needs no setup after `fleet apply`. See
+  [openclaw-browser](../docs/agents/openclaw-browser.md) for why the control
+  UI wants `127.0.0.1` and why Chromium cannot verify TLS in a guest.

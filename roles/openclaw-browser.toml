@@ -1,13 +1,8 @@
 version = 1
 
 name  = "openclaw-browser"
-image = "ghcr.io/openclaw/openclaw@sha256:ea7bcb53509d00c23365fa687fd5fb40a12b53a0ed3e8e814c7adbbf85f5785d"
-init  = [
-  "/usr/bin/tini", "-s", "--",
-  "/usr/sbin/runuser", "-u", "node", "--",
-  "/usr/local/bin/node", "/app/openclaw.mjs", "gateway",
-  "--allow-unconfigured", "--bind", "lan", "--auth", "token",
-]
+image = "ghcr.io/openclaw/openclaw@sha256:7be09e8c5f5370c5b0ab2f68df243ae0db57646ee1208ba1b264527d12946a01"
+init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
 vcpus = 4
@@ -20,6 +15,32 @@ XDG_CACHE_HOME = "/home/node/.openclaw/cache"
 OPENCLAW_STATE_DIR = "/home/node/.openclaw"
 OPENCLAW_SUPERVISOR_MODE = "external"
 OPENCLAW_NO_AUTO_UPDATE = "1"
+
+[files]
+"/etc/openclaw/start" = { mode = 0o755, content = '''
+#!/bin/sh
+set -e
+cfg=/home/node/.openclaw/openclaw.json
+[ -e "$cfg" ] || install -o node -g node -m 0600 /etc/openclaw/defaults.json "$cfg"
+exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway \
+  --bind lan --auth token
+''' }
+"/etc/openclaw/defaults.json" = '''
+{
+  "agents": { "defaults": { "model": { "primary": "openrouter/auto" } } },
+  "tools": { "web": { "search": { "enabled": false } } },
+  "browser": { "extraArgs": ["--ignore-certificate-errors"] },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://${REEF_AGENT}.localhost:${REEF_PORT_GATEWAY}",
+        "http://127.0.0.1:${REEF_PORT_GATEWAY}"
+      ]
+    }
+  }
+}
+'''
 
 [expose]
 gateway = 18789

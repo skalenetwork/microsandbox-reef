@@ -18,7 +18,7 @@ pub struct Role {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<EnvKey, String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub files: BTreeMap<GuestPath, String>,
+    pub files: BTreeMap<GuestPath, File>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub expose: BTreeMap<PortName, u16>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -27,6 +27,28 @@ pub struct Role {
     pub network: Network,
     #[serde(default)]
     pub secrets: BTreeMap<EnvKey, SecretBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum File {
+    Content(String),
+    WithMode { content: String, mode: u32 },
+}
+
+impl File {
+    pub fn content(&self) -> &str {
+        match self {
+            Self::Content(content) | Self::WithMode { content, .. } => content,
+        }
+    }
+
+    pub fn mode(&self) -> Option<u32> {
+        match self {
+            Self::Content(_) => None,
+            Self::WithMode { mode, .. } => Some(*mode),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -137,14 +159,14 @@ impl Role {
                 out.push(format!("env.{key}: NUL bytes are not allowed"));
             }
         }
-        let bytes: usize = self.files.values().map(String::len).sum();
+        let bytes: usize = self.files.values().map(|file| file.content().len()).sum();
         if bytes > FILES_MAX {
             out.push(format!(
                 "files: {bytes} bytes of content, over the {} KiB limit",
                 FILES_MAX / 1024
             ));
         }
-        for path in self.files.keys() {
+        for (path, file) in &self.files {
             if let Some((name, _)) = self
                 .volumes
                 .iter()
@@ -153,6 +175,9 @@ impl Role {
                 out.push(format!(
                     "files.{path}: volume {name} mounts over it, hiding the file"
                 ));
+            }
+            if file.mode().is_some_and(|mode| mode > 0o777) {
+                out.push(format!("files.{path}: mode must be 0o777 or lower"));
             }
         }
         let mut dests = BTreeSet::new();
@@ -398,7 +423,20 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
             |body: &str| GOOD.replace("[resources]", &format!("[files]\n{body}\n\n[resources]"));
 
         let role = parse_role(&files(r#""/etc/agent/config.json" = "{}""#)).unwrap();
-        assert_eq!(role.files[&"/etc/agent/config.json".parse().unwrap()], "{}");
+        let file = &role.files[&"/etc/agent/config.json".parse().unwrap()];
+        assert_eq!((file.content(), file.mode()), ("{}", None));
+
+        let role = parse_role(&files(
+            r##""/etc/agent/run" = { content = "#!/bin/sh", mode = 0o755 }"##,
+        ))
+        .unwrap();
+        let file = &role.files[&"/etc/agent/run".parse().unwrap()];
+        assert_eq!((file.content(), file.mode()), ("#!/bin/sh", Some(0o755)));
+
+        let problems = invalid(&files(
+            r#""/etc/agent/run" = { content = "x", mode = 0o4755 }"#,
+        ));
+        assert!(problems[0].contains("0o777"), "{problems:?}");
 
         let err = parse_role(&files(r#""etc/config.json" = "x""#)).unwrap_err();
         assert!(err.to_string().contains("guest path"), "{err}");

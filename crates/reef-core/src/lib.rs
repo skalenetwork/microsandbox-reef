@@ -13,4 +13,4 @@ pub use name::{
 };
 pub use plan::{Action, Drift, Facts, VmStatus, plan};
 pub use ports::{HOST_PORTS, allocate_ports};
-pub use role::{Network, Resources, Role, RoleError, SecretBinding, Volume, parse_role};
+pub use role::{File, Network, Resources, Role, RoleError, SecretBinding, Volume, parse_role};

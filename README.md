@@ -125,6 +125,12 @@ is a parse error: the volume mounts over it at start. Content is part of the
 role, stored verbatim in `reef.db` and never substituted - credentials go in
 `[secrets]`.
 
+A file is root-owned and world-readable unless it names its own mode:
+
+```toml
+"/opt/start" = { content = "#!/bin/sh\nexec /app/serve\n", mode = 0o755 }
+```
+
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
 on `0.0.0.0` in the guest). For each entry reef allocates the agent a stable
 host port from `19000-19999` at create, binds it to loopback, and keeps it for
@@ -136,10 +142,11 @@ The `ports` maps in `agent list --json` / `get --json` are the handoff to
 whatever ingress the org already runs - reef does no TLS, auth, or routing
 itself.
 
-The guest is told its own published ports as `REEF_PORT_<NAME>` (`control-ui`
-becomes `REEF_PORT_CONTROL_UI`) - the one thing about itself an agent cannot
-know, since reef picks the port at create. The `REEF_` prefix is reserved:
-role `[env]` and `--env` reject it, so the namespace is always reef's.
+The guest is told its own name as `REEF_AGENT` and its published ports as
+`REEF_PORT_<NAME>` (`control-ui` becomes `REEF_PORT_CONTROL_UI`) - between
+them, its own URL, which reef picks and the guest cannot otherwise know. The
+`REEF_` prefix is reserved: role `[env]` and `--env` reject it, so the
+namespace is always reef's.
 
 `[volumes]` declares the guest paths whose contents must outlive the VM. Each
 entry gets one volume per agent, named `reef-vol-<agent>-<entry>`, created at
