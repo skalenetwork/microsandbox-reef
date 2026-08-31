@@ -56,6 +56,15 @@ name_type!(Domain, "domain", is_domain);
 name_type!(Host, "host", is_host);
 name_type!(ImageRef, "image reference", is_image);
 name_type!(Digest, "digest", is_digest);
+name_type!(GuestPath, "guest path", is_guest_path);
+
+impl GuestPath {
+    pub fn under(&self, dir: &Self) -> bool {
+        self.0
+            .strip_prefix(&dir.0)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    }
+}
 
 impl Domain {
     pub fn is_any(&self) -> bool {
@@ -181,6 +190,15 @@ fn is_image(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "._:/@+-".contains(c))
 }
 
+fn is_guest_path(s: &str) -> bool {
+    s.starts_with('/')
+        && s.len() <= 255
+        && !s.contains(['\\', '\0'])
+        && s.split('/')
+            .skip(1)
+            .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
 fn is_digest(s: &str) -> bool {
     s.len() == 64
         && s.chars()
@@ -231,6 +249,23 @@ mod tests {
         assert!("api.anthropic.com".parse::<Host>().is_ok());
         assert!("*.anthropic.com".parse::<Host>().is_err());
         assert!("bad..dot".parse::<Host>().is_err());
+    }
+
+    #[test]
+    fn guest_paths_are_absolute_and_normalized() {
+        assert!("/etc/agent/config.json".parse::<GuestPath>().is_ok());
+        for bad in [
+            "", "/", "etc/x", "/a/", "/a//b", "/a/../b", "/a/./b", "/a\\b", "/a\0b",
+        ] {
+            assert!(bad.parse::<GuestPath>().is_err(), "{bad:?}");
+        }
+
+        let path = |text: &str| text.parse::<GuestPath>().unwrap();
+        let home = path("/root");
+        assert!(path("/root").under(&home));
+        assert!(path("/root/.config/app").under(&home));
+        assert!(!path("/rootfs/x").under(&home));
+        assert!(!path("/etc/x").under(&home));
     }
 
     #[test]

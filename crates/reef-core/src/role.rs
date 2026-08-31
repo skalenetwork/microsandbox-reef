@@ -1,7 +1,11 @@
-use crate::name::{Domain, EnvKey, Host, ImageRef, PortName, RoleName, SecretRef, VolumeName};
+use crate::name::{
+    Domain, EnvKey, GuestPath, Host, ImageRef, PortName, RoleName, SecretRef, VolumeName,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+const FILES_MAX: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -13,6 +17,8 @@ pub struct Role {
     pub init: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<EnvKey, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub files: BTreeMap<GuestPath, String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub expose: BTreeMap<PortName, u16>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -26,7 +32,7 @@ pub struct Role {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Volume {
-    pub dest: String,
+    pub dest: GuestPath,
     pub size_mib: u32,
 }
 
@@ -131,23 +137,32 @@ impl Role {
                 out.push(format!("env.{key}: NUL bytes are not allowed"));
             }
         }
-        let mut dests = BTreeSet::new();
-        for (name, volume) in &self.volumes {
-            if !volume.dest.starts_with('/') || volume.dest.contains('\\') {
+        let bytes: usize = self.files.values().map(String::len).sum();
+        if bytes > FILES_MAX {
+            out.push(format!(
+                "files: {bytes} bytes of content, over the {} KiB limit",
+                FILES_MAX / 1024
+            ));
+        }
+        for path in self.files.keys() {
+            if let Some((name, _)) = self
+                .volumes
+                .iter()
+                .find(|(_, volume)| path.under(&volume.dest))
+            {
                 out.push(format!(
-                    "volumes.{name}: dest {:?} must be an absolute guest path",
-                    volume.dest
+                    "files.{path}: volume {name} mounts over it, hiding the file"
                 ));
             }
-            if volume.dest.contains('\0') {
-                out.push(format!("volumes.{name}: NUL bytes are not allowed"));
-            }
+        }
+        let mut dests = BTreeSet::new();
+        for (name, volume) in &self.volumes {
             if volume.size_mib == 0 {
                 out.push(format!("volumes.{name}: size-mib must be at least 1"));
             }
             if !dests.insert(&volume.dest) {
                 out.push(format!(
-                    "volumes.{name}: dest {:?} is declared twice",
+                    "volumes.{name}: dest {} is declared twice",
                     volume.dest
                 ));
             }
@@ -246,8 +261,9 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
             10240
         );
 
-        let problems = invalid(&volumes(r#"data = { dest = "opt/data", size-mib = 1 }"#));
-        assert!(problems[0].contains("absolute"), "{problems:?}");
+        let err =
+            parse_role(&volumes(r#"data = { dest = "opt/data", size-mib = 1 }"#)).unwrap_err();
+        assert!(err.to_string().contains("guest path"), "{err}");
 
         let problems = invalid(&volumes(r#"data = { dest = "/opt/data", size-mib = 0 }"#));
         assert!(problems[0].contains("size-mib"), "{problems:?}");
@@ -371,6 +387,32 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
 
         let text = GOOD.replace("[network]", "[env]\nANTHROPIC_API_KEY = \"x\"\n\n[network]");
         assert!(invalid(&text)[0].contains("secrets"));
+    }
+
+    #[test]
+    fn files_seed_the_rootfs_and_stay_out_of_volumes() {
+        let role = parse_role(GOOD).unwrap();
+        assert!(role.files.is_empty());
+
+        let files =
+            |body: &str| GOOD.replace("[resources]", &format!("[files]\n{body}\n\n[resources]"));
+
+        let role = parse_role(&files(r#""/etc/agent/config.json" = "{}""#)).unwrap();
+        assert_eq!(role.files[&"/etc/agent/config.json".parse().unwrap()], "{}");
+
+        let err = parse_role(&files(r#""etc/config.json" = "x""#)).unwrap_err();
+        assert!(err.to_string().contains("guest path"), "{err}");
+
+        let shadowed = files(
+            r#""/root/.gitconfig" = "x"
+
+[volumes]
+home = { dest = "/root", size-mib = 1 }"#,
+        );
+        assert!(invalid(&shadowed)[0].contains("volume home"));
+
+        let big = format!(r#""/etc/big" = "{}""#, "x".repeat(64 * 1024 + 1));
+        assert!(invalid(&files(&big))[0].contains("KiB"));
     }
 
     #[test]

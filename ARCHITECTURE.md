@@ -43,6 +43,9 @@ Invariants:
 - Drift is explicit: `generation != applied_generation` is visible in
   `agent list`, and every spec write is a compare-and-swap on `generation` —
   a lost race is a 409-style error, never a merge.
+- A role's `[files]` seed the rootfs before start: the image is the base, the
+  role's copy wins, and a path a volume would mount over is a parse error.
+  Content is role data, not a secret channel.
 - reef refuses to destroy a sandbox it did not create (a `reef.state` label
   carries the state dir's identity).
 - `fleet apply` removes nothing without `--prune`, and prunes only agents it

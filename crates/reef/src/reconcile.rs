@@ -170,7 +170,7 @@ fn vm_config<'a>(
             .iter()
             .map(|(entry, volume)| VolumeMount {
                 name: volume_name(&agent.name, entry),
-                dest: volume.dest.clone(),
+                dest: volume.dest.to_string(),
                 quota_mib: volume.size_mib,
             })
             .collect(),

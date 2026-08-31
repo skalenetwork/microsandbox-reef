@@ -85,6 +85,9 @@ impl Vmm for Msb {
                 m.named_with(name, |v| v.quota(quota).ensure_exists())
             });
         }
+        for (path, text) in &role.files {
+            builder = builder.patch(|patch| patch.text(path.as_str(), text, None, true));
+        }
         let policy = network_policy(&role.network.egress)?;
         builder = builder.network(|n| n.policy(policy));
         for secret in &config.secrets {

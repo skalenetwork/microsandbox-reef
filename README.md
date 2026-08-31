@@ -106,6 +106,25 @@ survives. Only a role change recreates the VM, and a recreate keeps only what
 `[volumes]` declares. Secrets never go in any env layer - values are visible verbatim
 in the guest; derived material like a password hash is fine.
 
+`[files]` seeds the rootfs before the VM starts, so a role carries the agent's
+configuration and not only its containment:
+
+```toml
+[files]
+"/etc/agent/config.json" = '''
+{ "model": "claude-sonnet-4-6" }
+'''
+```
+
+Paths are absolute and their parents are created. The role's copy replaces
+whatever the image shipped there, the same way `[env]` overrides the image's
+own `ENV`, and a file edit is a role change like any other - it recreates the
+VM. Write the small override layer an app already reads, not a copy of its
+config: the whole table is capped at 64 KiB. A path inside a `[volumes]` dest
+is a parse error: the volume mounts over it at start. Content is part of the
+role, stored verbatim in `reef.db` and never substituted - credentials go in
+`[secrets]`.
+
 `[expose]` names the guest ports a role serves (`ui = 9119`; they must listen
 on `0.0.0.0` in the guest). For each entry reef allocates the agent a stable
 host port from `19000-19999` at create, binds it to loopback, and keeps it for

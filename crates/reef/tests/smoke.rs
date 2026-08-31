@@ -72,6 +72,7 @@ name  = "echo"
 image = "alpine"
 init  = ["/bin/sleep", "999999999"]
 env = { SMOKE_MARK = "reef-env" }
+files = { "/etc/reef/seed.conf" = "seeded", "/etc/motd" = "reef-override" }
 expose = { web = 8080 }
 volumes = { data = { dest = "/data", size-mib = 64 } }
 resources = { vcpus = 1, memory-mib = 256, max-pids = 128 }
@@ -131,6 +132,21 @@ fn full_agent_journey() {
     assert!(
         pid1.contains("sleep"),
         "init handoff did not happen: {pid1}"
+    );
+
+    let seeded = reef.ok(&[
+        "agent",
+        "exec",
+        &reef.agent,
+        "--",
+        "cat",
+        "/etc/reef/seed.conf",
+        "/etc/motd",
+    ]);
+    assert!(seeded.contains("seeded"), "files not seeded: {seeded}");
+    assert!(
+        seeded.contains("reef-override"),
+        "a role file must replace the image's own: {seeded}"
     );
 
     let secret = reef.ok(&[
@@ -206,6 +222,18 @@ fn full_agent_journey() {
     assert!(kept.contains("durable"), "volume lost on recreate: {kept}");
     let gone = reef.run(&["agent", "exec", &reef.agent, "--", "cat", "/root/marker"]);
     assert!(!gone.1.contains("keep"), "rootfs must not survive recreate");
+    let reseeded = reef.ok(&[
+        "agent",
+        "exec",
+        &reef.agent,
+        "--",
+        "cat",
+        "/etc/reef/seed.conf",
+    ]);
+    assert!(
+        reseeded.contains("seeded"),
+        "files must be re-applied on recreate: {reseeded}"
+    );
 
     reef.ok(&[
         "agent",
