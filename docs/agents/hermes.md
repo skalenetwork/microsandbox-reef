@@ -11,7 +11,7 @@ tracks `latest`.
 ## Secret
 
 The role spends one OpenRouter key. Put it in
-`~/.local/state/reef/secrets.toml` (mode 0600 or reef refuses to read it):
+`~/.local/state/reef/secrets.toml`, which must be `chmod 600`:
 
 ```toml
 [hermes]
@@ -47,10 +47,10 @@ auth keys out.
 ## Run
 
 ```sh
-curl -fsSLO https://reef.clawbits.ai/roles/hermes.toml
-curl -fsSLO https://reef.clawbits.ai/fleet/hermes.toml
-reef role apply hermes.toml
-reef fleet apply hermes.toml
+curl -fsSL https://reef.clawbits.ai/roles/hermes.toml -o role.toml
+curl -fsSL https://reef.clawbits.ai/fleet/hermes.toml -o fleet.toml
+reef role apply role.toml
+reef fleet apply fleet.toml
 ```
 
 `fleet apply` prints each agent's URL as it creates it, and `agent get` shows

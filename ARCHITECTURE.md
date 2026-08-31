@@ -26,6 +26,17 @@ drives the VM toward the record, then returns. There is no daemon: VMs are
 created detached, outlive reef, and are re-discovered by name on the next
 command.
 
+```mermaid
+flowchart TD
+  role[role TOML] -->|role apply| store[(reef.db)]
+  store --> spec[agent record]
+  spec --> plan[plan]
+  observed[observed VM state] --> plan
+  plan --> action[Create / Modify / Start / Stop / Remove]
+  action --> vmm[Vmm trait] --> vm[agent microVM]
+  vm -.->|re-read every command| observed
+```
+
 Invariants:
 
 - Stop/start never destroys a VM. Only a role change recreates one; an env
@@ -37,9 +48,14 @@ Invariants:
   substitution, bound to one host) and never enters reef's database, events,
   or errors (`Secret` has no `Serialize`; `Debug` redacts).
 - Egress is deny-by-default, enforced at DNS; the role's domain list is the
-  entire policy. A role opts out with the single rule `"*"`, which must stand
-  alone and which `role apply` warns about; a secret's host binding still
-  holds, so an unrestricted role spends secrets without reading them.
+  entire policy for the internet. A role opts out with the single rule `"*"`,
+  which must stand alone and which `role apply` warns about; a secret's host
+  binding still holds, so an unrestricted role spends secrets without reading
+  them.
+- The reef host is never a destination. Every role denies the host and
+  loopback groups, so no agent reaches the host or another agent's published
+  port, whatever its egress list says. DNS is the one exception, because the
+  guest's resolver is the sandbox gateway.
 - Drift is explicit: `generation != applied_generation` is visible in
   `agent list`, and every spec write is a compare-and-swap on `generation` —
   a lost race is a 409-style error, never a merge.
@@ -74,8 +90,9 @@ test, never a routine bump).
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
 status and an append-only event log. Observed VM state is never cached — it is
 re-read from the runtime on every command. microsandbox's own state under
-`~/.microsandbox` is treated as the runtime's property; reef never reads its
-contents (doctor only checks the directory's mode).
+`~/.microsandbox` is treated as the runtime's property; reef never parses its
+files itself, reaching it only through the SDK, and doctor only checks the
+directory's mode.
 
 Secrets: roles hold `reef://store/name` references (a pasted literal is a
 parse error). Values resolve host-side at VM create from `secrets.toml` —
@@ -89,7 +106,8 @@ reef holds no credential for the credential store.
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
   exception, and it holds only the six methods the reconciler drives —
-  operator commands (`exec`, `forward`) live on the adapter itself.
+  operator commands (`ssh`, `exec`, `listening`, `forward`) live on the
+  adapter itself.
 - Data structures first; illegal states unrepresentable (`Failed` cannot lack
   a reason; invalid names do not construct).
 - No inline comments — the code carries its meaning; clap doc-comments are

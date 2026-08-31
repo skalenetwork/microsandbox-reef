@@ -194,6 +194,9 @@ declare those paths.
 is domains only (the allowlist is enforced at DNS). A wildcard `*.x` covers
 `x` and its subdomains, and a raw-IP connection is allowed only while a live
 DNS answer for an allowed domain pins that IP (pins last the record's TTL).
+The list covers the internet, never the host: an agent cannot reach the reef
+host's loopback or another agent's published port, and `"*"` does not change
+that.
 Secrets bind to the one host they may be sent to; the VM only ever sees a
 placeholder - the real value is substituted host-side by microsandbox's proxy
 and never enters the guest.
@@ -224,7 +227,7 @@ survive removal.
 
 ## Try it: a hermes fleet
 
-Put an OpenRouter key in `~/.local/state/reef/secrets.toml` (mode 0600):
+Put an OpenRouter key in `~/.local/state/reef/secrets.toml` (`chmod 600`):
 
 ```toml
 [hermes]
@@ -249,10 +252,10 @@ password `password`.
 - `reef.db` - roles, agents, ports, events (SQLite, WAL). Desired state
   plus the last applied status; VM liveness is re-read from the runtime on
   every command.
-- `secrets.toml` - resolves `reef://store/name` references; mode 0600 or reef
-  refuses to read it. A store is an inline table (**plaintext at rest**) or,
-  under `[resolvers]`, a command run at VM create whose stdout is the value -
-  plugging reef into whatever the org already runs:
+- `secrets.toml` - resolves `reef://store/name` references; `chmod 600` or
+  reef refuses to read it. A store is an inline table (**plaintext at rest**)
+  or, under `[resolvers]`, a command run at VM create whose stdout is the
+  value - plugging reef into whatever the org already runs:
 
   ```toml
   [resolvers]

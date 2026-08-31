@@ -1,0 +1,9 @@
+version = 1
+
+[agents.marketing]
+role = "openclaw-marketing"
+owner = "marketing"
+
+[agents.coding]
+role = "openclaw-coding"
+owner = "engineering"

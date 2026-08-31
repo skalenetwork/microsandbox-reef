@@ -22,6 +22,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 const STATE_LABEL: &str = "reef.state";
 const PROC_NET_LIMIT: u64 = 256 * 1024;
 const LISTEN: &str = "0A";
+const DNS_PORT: u16 = 53;
 
 pub struct Msb {
     state_id: String,
@@ -374,7 +375,10 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
 }
 
 fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
-    let builder = NetworkPolicy::builder().default_ingress(NetworkAction::Allow);
+    let builder = NetworkPolicy::builder()
+        .default_ingress(NetworkAction::Allow)
+        .egress(|rule| rule.tcp().udp().port(DNS_PORT).allow_host())
+        .egress(|rule| rule.deny_host().deny_loopback());
     let policy = if domains.iter().any(Domain::is_any) {
         builder.default_egress(NetworkAction::Allow)
     } else {
@@ -495,5 +499,27 @@ mod tests {
             Some("fe80::1".parse().unwrap())
         );
         assert_eq!(bind_address("7F"), None);
+    }
+
+    #[test]
+    fn the_host_and_loopback_are_denied_except_dns_whatever_the_egress_list_says() {
+        for egress in [vec!["*"], vec!["example.com", "*.acme.dev"]] {
+            let domains: Vec<Domain> = egress.iter().map(|d| d.parse().unwrap()).collect();
+            let policy = network_policy(&domains).unwrap();
+            let group = |name: &str| {
+                policy
+                    .rules
+                    .iter()
+                    .filter(|rule| format!("{:?}", rule.destination).contains(name))
+                    .map(|rule| rule.action)
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(
+                group("Host"),
+                [NetworkAction::Allow, NetworkAction::Deny],
+                "dns is allowed to the host, everything else denied"
+            );
+            assert_eq!(group("Loopback"), [NetworkAction::Deny]);
+        }
     }
 }

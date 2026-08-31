@@ -7,8 +7,18 @@ org's certificate authority says who you are, OpenSSH enforces what runs, and
 
 ## How it works
 
+```mermaid
+flowchart TD
+  ana[person, CA-signed cert] --> sshd[sshd on the reef host]
+  sshd -->|ForceCommand| serve[reef agent serve]
+  serve -->|principal matches owner| msb[msb ssh serve]
+  serve -.->|no match| deny[access denied]
+  msb --> vm[agent microVM]
+```
+
 1. The org's SSH CA issues short-lived certificates from the existing SSO
-   flow. The certificate's principal is the person's username: `ana`.
+   flow. Its principals are the identities the holder carries: their own
+   username, plus any team principals.
 2. `ssh hermes-ana.reef` presents the certificate to the reef host, which
    trusts the CA and accepts it on one shared account.
 3. sshd never grants a shell and never runs what the client asked for: its
@@ -52,8 +62,8 @@ user is recorded.
 
 The session inside the tunnel authenticates against microsandbox's own
 authorized keys; add each person's public key once with
-`msb ssh authorize --key "ssh-ed25519 ..."`. sshd's auth log records each
-authentication with the certificate's key id and principal, and every opened
+`msb ssh authorize --file ~/.ssh/id_ed25519.pub`. sshd's auth log records each
+authentication with the certificate's key id and principal, and every admitted
 session is a `served` event in `reef events`.
 
 ## Client setup
@@ -73,13 +83,20 @@ end.
 ## Certificates
 
 Any issuer the org already runs works - Vault's SSH engine, Smallstep,
-Teleport - as long as the principal is the person's username and the lifetime
-is short; expiry is the revocation story. A trial CA is two commands:
+Teleport - as long as a principal on the certificate matches the agent's
+`owner` and the lifetime is short; expiry is the revocation story. A trial CA
+is two commands:
 
 ```sh
 ssh-keygen -t ed25519 -f ca
 ssh-keygen -s ca -I ana -n ana -V +8h ~/.ssh/id_ed25519.pub
 ```
+
+An owner does not have to be a person. Give an agent `owner = "marketing"` and
+issue the team certificates with that principal alongside their own
+(`-n ana,marketing`), and everyone on the team can open it. `reef events` then
+records a `served` event whose detail is the owner, so the person is in sshd's
+auth log rather than reef's.
 
 Install `ca.pub` as `/etc/ssh/reef-ca.pub` on the host and keep the private
 half offline.

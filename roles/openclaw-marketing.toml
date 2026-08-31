@@ -1,6 +1,6 @@
 version = 1
 
-name  = "openclaw-browser"
+name  = "openclaw-marketing"
 image = "ghcr.io/openclaw/openclaw@sha256:7be09e8c5f5370c5b0ab2f68df243ae0db57646ee1208ba1b264527d12946a01"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
@@ -12,7 +12,6 @@ disk-gib = 20
 [env]
 HOME = "/home/node"
 XDG_CACHE_HOME = "/home/node/.openclaw/cache"
-OPENCLAW_STATE_DIR = "/home/node/.openclaw"
 OPENCLAW_SUPERVISOR_MODE = "external"
 OPENCLAW_NO_AUTO_UPDATE = "1"
 
@@ -23,21 +22,27 @@ set -e
 cfg=/home/node/.openclaw/openclaw.json
 [ -e "$cfg" ] || install -o node -g node -m 0600 /etc/openclaw/defaults.json "$cfg"
 exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway \
-  --bind lan --auth token
+  --bind lan
 ''' }
 "/etc/openclaw/defaults.json" = '''
 {
   "agents": { "defaults": { "model": { "primary": "openrouter/auto" } } },
-  "tools": { "web": { "search": { "enabled": false } } },
   "browser": { "extraArgs": ["--ignore-certificate-errors"] },
   "gateway": {
     "mode": "local",
-    "controlUi": {
-      "allowedOrigins": [
-        "http://${REEF_AGENT}.localhost:${REEF_PORT_GATEWAY}",
-        "http://127.0.0.1:${REEF_PORT_GATEWAY}"
-      ]
-    }
+    "trustedProxies": ["172.16.0.0/12"],
+    "auth": {
+      "mode": "trusted-proxy",
+      "trustedProxy": {
+        "userHeader": "cf-access-authenticated-user-email",
+        "requiredHeaders": ["cf-access-jwt-assertion"],
+        "deviceAutoApprove": {
+          "enabled": true,
+          "scopes": ["operator.read", "operator.write", "operator.approvals", "operator.questions"]
+        }
+      }
+    },
+    "controlUi": { "allowedOrigins": ["https://marketing.agents.example.com"] }
   }
 }
 '''
@@ -49,7 +54,7 @@ gateway = 18789
 state = { dest = "/home/node/.openclaw", size-mib = 10240 }
 
 [network]
-egress = ["*"]
+egress = ["openrouter.ai", "*.hubspot.com", "*.linkedin.com"]
 
 [secrets]
-OPENROUTER_API_KEY = { ref = "reef://openclaw/openrouter", host = "openrouter.ai" }
+OPENROUTER_API_KEY = { ref = "reef://openclaw-marketing/openrouter", host = "openrouter.ai" }

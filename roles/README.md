@@ -17,26 +17,32 @@ narrowest path that holds the state you need.
   `password`), or org SSO via `HERMES_DASHBOARD_OIDC_ISSUER` +
   `HERMES_DASHBOARD_OIDC_CLIENT_ID` in `[env]`. Serve agents on subdomains,
   not subpaths — hermes auth breaks under path prefixes upstream.
-- `openclaw` — the OpenClaw gateway (`gateway` on guest 18789, published to a
-  per-agent loopback host port). `init` starts it under `tini` and drops to the
-  image's `node` user with `runuser`; `--bind lan` is required because
-  `[expose]` only reaches services listening on `0.0.0.0`, and `[env] HOME`
-  keeps state inside the volume. The whole home is the volume, which is more
-  than this role writes; `openclaw-browser` below shows the narrower mount.
-  Needs an OpenRouter key at `reef://openclaw/openrouter`, and each agent
-  must set `OPENCLAW_GATEWAY_TOKEN` in `[env]` — auth mode `token` has no
-  hashed form, so unlike the hermes password hash this value is readable
-  inside the guest.
-  The control UI's static assets are served without auth; the token gates the
-  WebSocket RPC, so put the published port behind org ingress.
-- `openclaw-browser` — OpenClaw 2.0 pinned to a digest, on the `-browser`
-  image, which bakes Chromium into `/home/node/.cache/ms-playwright`.
+- `openclaw` — the OpenClaw 2.0 gateway on the browser image, pinned to the
+  digest of `2026.8.1-browser` (`gateway` on guest 18789, published to a
+  per-agent loopback host port). It boots with no model provider configured and
+  no `[secrets]` entry: `gateway.mode = "local"` is what allows that. Connecting
+  a provider at `/settings/model-setup` in the control UI is then a required
+  step, because login lands in the chat and the default model has no credential. Each agent must set
+  `OPENCLAW_GATEWAY_TOKEN` in `[env]` because `--bind lan` refuses to start
+  without auth, and the value is readable inside the guest.
   `egress = ["*"]` turns filtering off, because an agent that browses the web
-  has to reach the web.
-  The volume is `/home/node/.openclaw` alone so the mount does not hide the
-  browsers, and `XDG_CACHE_HOME` moves the gateway's cache into it because
-  `/home/node/.cache` is root-owned. `[files]` seeds the whole OpenClaw config
-  at a path outside the volume, which `OPENCLAW_CONFIG_PATH` selects, so the
-  agent needs no setup after `fleet apply`. See
-  [openclaw-browser](../docs/agents/openclaw-browser.md) for why the control
-  UI wants `127.0.0.1` and why Chromium cannot verify TLS in a guest.
+  has to reach the web. The volume is `/home/node/.openclaw` alone so the mount
+  does not hide the browsers, and `XDG_CACHE_HOME` moves the gateway's cache
+  into it because `/home/node/.cache` is root-owned. `[files]` ships the config
+  and a `start` script that copies it into the volume on first boot, so the
+  agent needs no setup after `fleet apply` and can still write its own config.
+  The `${REEF_AGENT}` and `${REEF_PORT_GATEWAY}` references in that config are
+  expanded by OpenClaw, not by reef: reef stores `[files]` content verbatim, so
+  only reuse the pattern in roles whose app resolves env references itself.
+  See [openclaw](../docs/agents/openclaw.md).
+- `openclaw-marketing`, `openclaw-coding` — the same image and the same
+  seeding, shaped for a team instead of a person: `gateway.auth.mode =
+  "trusted-proxy"` so org SSO decides who the caller is, no gateway token
+  (trusted-proxy and token auth are mutually exclusive), a narrow per-purpose
+  egress list, and a separate secret ref each so provider spend separates by
+  purpose. Declaring a secret turns on TLS interception for the whole VM, which
+  is why these two carry `--ignore-certificate-errors` and `openclaw` does not.
+  Skeletons: the domain lists and ingress hostnames are placeholders. See
+  [enterprise OpenClaw](../docs/enterprise/openclaw.md) for the shape and
+  [Cloudflare Access](../docs/enterprise/cloudflare-access.md) for the worked
+  setup.

@@ -1,9 +1,11 @@
 :root {
+  --paper: #fff;
+  --brand: #ca342b;
   --text: #000;
   --text-2: #666;
-  --bg: #fff;
+  --bg: var(--paper);
   --surface: #f5f5f5;
-  --accent: #ca342b;
+  --accent: var(--brand);
   --radius: 8px;
   --scrollbar: #00000026;
   --scrollbar-hover: #00000059;
@@ -159,6 +161,18 @@ pre {
   padding: 12px 16px;
   border-radius: var(--radius);
   overflow-x: auto;
+}
+
+.diagram {
+  margin: 24px 0;
+  overflow-x: auto;
+}
+
+.diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
 .clear {
