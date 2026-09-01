@@ -1,7 +1,7 @@
 version = 1
 
 name  = "openclaw"
-image = "ghcr.io/openclaw/openclaw@sha256:7be09e8c5f5370c5b0ab2f68df243ae0db57646ee1208ba1b264527d12946a01"
+image = "ghcr.io/openclaw/openclaw@sha256:e164a318801fad2d49dc19b99adadfa629fa5f9ffb43673e73661c1d3f9cc7de"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
@@ -34,7 +34,8 @@ exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway 
         "http://127.0.0.1:${REEF_PORT_GATEWAY}"
       ]
     }
-  }
+  },
+  "tools": { "sessions": { "visibility": "agent" } }
 }
 '''
 

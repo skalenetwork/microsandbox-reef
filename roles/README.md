@@ -25,7 +25,7 @@ narrowest path that holds the state you need.
   fetched from GitHub, which this role's one-domain egress never allows.
   See [hermes](../docs/agents/hermes.md).
 - `openclaw` — the OpenClaw 2.0 gateway on the browser image, pinned to the
-  digest of `2026.8.1-browser` (`gateway` on guest 18789, published to a
+  digest of `2026.8.2-browser` (`gateway` on guest 18789, published to a
   per-agent loopback host port). It boots with no model provider configured and
   no `[secrets]` entry: `gateway.mode = "local"` is what allows that. Connecting
   a provider at `/settings/model-setup` in the control UI is then a required
@@ -41,7 +41,10 @@ narrowest path that holds the state you need.
   The `${REEF_AGENT}` and `${REEF_PORT_GATEWAY}` references in that config are
   expanded by OpenClaw, not by reef: reef stores `[files]` content verbatim, so
   only reuse the pattern in roles whose app resolves env references itself.
-  See [openclaw](../docs/agents/openclaw.md).
+  `tools.sessions.visibility` is seeded rather than inherited because 2026.8.2
+  widened its default for unsandboxed sessions from `tree` to `agent`, and reef
+  leaves OpenClaw's own sandbox off; pinning it keeps the session tools at one
+  scope across the image bump. See [openclaw](../docs/agents/openclaw.md).
 - `openclaw-marketing`, `openclaw-coding` — the same image and the same
   seeding, shaped for a team instead of a person: `gateway.auth.mode =
   "trusted-proxy"` so org SSO decides who the caller is, no gateway token
@@ -49,6 +52,8 @@ narrowest path that holds the state you need.
   egress list, and a separate secret ref each so provider spend separates by
   purpose. Declaring a secret turns on TLS interception for the whole VM, which
   is why these two carry `--ignore-certificate-errors` and `openclaw` does not.
+  They seed the same `tools.sessions.visibility`, which on a gateway a team
+  shares is what decides whether one member's session can read another's.
   Skeletons: the domain lists and ingress hostnames are placeholders. See
   [enterprise OpenClaw](../docs/enterprise/openclaw.md) for the shape and
   [Cloudflare Access](../docs/enterprise/cloudflare-access.md) for the worked

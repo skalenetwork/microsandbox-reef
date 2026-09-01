@@ -48,6 +48,9 @@ credential for, so the first message fails until you do this.
 - **The config is seeded once, then the agent owns it.** Editing the role does
   not re-seed: delete `/home/node/.openclaw/openclaw.json` and restart to pick
   up new defaults.
+- **Session tools reach every session on the agent.** 2026.8.2 widened the
+  default from `tree` to `agent`, so the role pins `tools.sessions.visibility`
+  instead of inheriting it. Set `tree` or `self` to narrow it.
 - **The token is the whole boundary.** It gates the WebSocket RPC but not the
   control UI's static assets, and through the operator terminal it gets a shell
   as `node` - the access `reef agent ssh` already gives. Put the published port

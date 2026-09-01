@@ -36,6 +36,10 @@ credential pool, one browser cookie jar. Upstream is explicit that one gateway
 is one trusted operator domain. When the people are not in one trust domain,
 give each their own agent instead; they cost one role file between them.
 
+Both roles pin `tools.sessions.visibility = "agent"`, the default since
+2026.8.2: any session on the agent reads any other. `tree` or `self` narrows
+it, but neither separates the shared workspace or credential pool.
+
 ## Group ownership
 
 `owner` is matched against the principals on the caller's SSH certificate, so
