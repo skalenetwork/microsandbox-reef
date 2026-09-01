@@ -1,4 +1,4 @@
-export const description = "Isolated computers for agents.";
+export const description = "Isolated computers for agents in your org.";
 
 export const url = (path: string) => new URL(path, import.meta.env.SITE);
 
