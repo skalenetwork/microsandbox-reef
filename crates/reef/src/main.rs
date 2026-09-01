@@ -9,8 +9,8 @@ mod vmm;
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use reef_core::{
-    Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, Lifecycle, PortName, Role,
-    RoleName, VmStatus, VolumeName, parse_fleet, parse_role,
+    Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, ImageRef, Lifecycle, PortName,
+    Resources, Role, RoleName, SecretBinding, VmStatus, VolumeName, parse_fleet, parse_role,
 };
 use secrets::Secrets;
 use serde::Serialize;
@@ -205,6 +205,9 @@ struct RoleRow {
 struct AgentRow {
     name: AgentName,
     role: RoleName,
+    role_digest: Digest,
+    role_current: bool,
+    image: ImageRef,
     owner: String,
     desired: &'static str,
     state: &'static str,
@@ -214,12 +217,36 @@ struct AgentRow {
 }
 
 #[derive(Serialize)]
+struct AgentResources {
+    vcpus: u8,
+    memory_mib: u32,
+    disk_gib: Option<u32>,
+    max_pids: Option<u32>,
+}
+
+impl From<Resources> for AgentResources {
+    fn from(resources: Resources) -> Self {
+        Self {
+            vcpus: resources.vcpus,
+            memory_mib: resources.memory_mib,
+            disk_gib: resources.disk_gib,
+            max_pids: resources.max_pids,
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct AgentDetail {
     name: AgentName,
     role: RoleName,
     role_digest: Digest,
+    role_current: bool,
+    image: ImageRef,
     owner: String,
     fleet: bool,
+    resources: AgentResources,
+    egress: Vec<Domain>,
+    secrets: BTreeMap<EnvKey, SecretBinding>,
     volumes: BTreeMap<VolumeName, String>,
     desired: &'static str,
     state: &'static str,
@@ -386,6 +413,12 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             Ok(())
         }
         AgentCommand::List { json } => {
+            let active: BTreeMap<String, String> = ctx
+                .store
+                .list_roles()?
+                .into_iter()
+                .map(|(name, digest, _)| (name, digest))
+                .collect();
             let mut agents = Vec::new();
             for agent in ctx.store.list_agents()? {
                 let vm = ctx
@@ -394,9 +427,16 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     .await?;
                 let synced = agent.reconciled();
                 let ports = ctx.store.ports(&agent.name)?;
+                let image = ctx.store.role_version(&agent.spec.role_digest)?.image;
+                let role_current = active
+                    .get(agent.spec.role.as_str())
+                    .is_none_or(|digest| digest == agent.spec.role_digest.as_str());
                 agents.push(AgentRow {
                     name: agent.name,
                     role: agent.spec.role,
+                    role_digest: agent.spec.role_digest,
+                    role_current,
+                    image,
                     owner: agent.spec.owner,
                     desired: agent.spec.desired.label(),
                     state: agent.status.lifecycle.label(),
@@ -450,10 +490,19 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 _ => None,
             };
             let ports = ctx.store.ports(&agent.name)?;
-            let volumes = ctx
+            let Role {
+                image,
+                resources,
+                network,
+                secrets,
+                volumes,
+                ..
+            } = ctx.store.role_version(&agent.spec.role_digest)?;
+            let role_current = ctx
                 .store
-                .role_version(&agent.spec.role_digest)?
-                .volumes
+                .active_role(&agent.spec.role)?
+                .is_none_or(|(digest, _)| digest == agent.spec.role_digest);
+            let volumes = volumes
                 .into_keys()
                 .map(|entry| {
                     let name = reconcile::volume_name(&agent.name, &entry);
@@ -464,8 +513,13 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 name: agent.name,
                 role: agent.spec.role,
                 role_digest: agent.spec.role_digest,
+                role_current,
+                image,
                 owner: agent.spec.owner,
                 fleet: agent.fleet,
+                resources: resources.into(),
+                egress: network.egress,
+                secrets,
                 volumes,
                 desired: agent.spec.desired.label(),
                 state,
@@ -482,10 +536,13 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 row("name", detail.name.as_str());
-                row(
-                    "role",
-                    format_args!("{}@{}", detail.role, short(detail.role_digest.as_str())),
-                );
+                let pinned = format!("{}@{}", detail.role, short(detail.role_digest.as_str()));
+                if detail.role_current {
+                    row("role", pinned);
+                } else {
+                    row("role", format_args!("{pinned} (stale)"));
+                }
+                row("image", detail.image.as_str());
                 row("owner", &detail.owner);
                 row("desired", detail.desired);
                 match &detail.reason {
@@ -494,8 +551,34 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 }
                 row("vm", detail.vm.unwrap_or("-"));
                 row("sandbox", &detail.sandbox);
+                let disk = match detail.resources.disk_gib {
+                    Some(gib) => format!(", {gib} GiB disk"),
+                    None => String::new(),
+                };
+                row(
+                    "resources",
+                    format_args!(
+                        "{} vcpu, {} MiB{disk}",
+                        detail.resources.vcpus, detail.resources.memory_mib
+                    ),
+                );
                 for (entry, name) in &detail.volumes {
                     row("volume", format_args!("{entry} {name}"));
+                }
+                let egress: Vec<&str> = detail.egress.iter().map(Domain::as_str).collect();
+                row(
+                    "egress",
+                    if egress.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        egress.join(" ")
+                    },
+                );
+                for (key, binding) in &detail.secrets {
+                    row(
+                        "secret",
+                        format_args!("{key}={} host={}", binding.secret, binding.host),
+                    );
                 }
                 if !detail.ports.is_empty() {
                     let host = reconcile::host_name(&detail.name);
@@ -852,9 +935,13 @@ network = { egress = ["example.com"] }
             r#"{"name":"echo","digest":"abc","image":"alpine"}"#
         );
 
+        let digest = "0".repeat(64);
         let agent = AgentRow {
             name: "echo-1".parse().unwrap(),
             role: "echo".parse().unwrap(),
+            role_digest: digest.parse().unwrap(),
+            role_current: false,
+            image: "alpine".parse().unwrap(),
             owner: "dmytro".to_owned(),
             desired: "running",
             state: "running",
@@ -864,7 +951,9 @@ network = { egress = ["example.com"] }
         };
         assert_eq!(
             serde_json::to_string(&agent).unwrap(),
-            r#"{"name":"echo-1","role":"echo","owner":"dmytro","desired":"running","state":"running","vm":null,"synced":true,"ports":{"ui":19007}}"#
+            format!(
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","role_current":false,"image":"alpine","owner":"dmytro","desired":"running","state":"running","vm":null,"synced":true,"ports":{{"ui":19007}}}}"#
+            )
         );
 
         let event = store::Event {
@@ -879,13 +968,22 @@ network = { egress = ["example.com"] }
             r#"{"id":7,"agent":"echo-1","at":1,"kind":"created","detail":"dmytro"}"#
         );
 
-        let digest = "0".repeat(64);
         let detail = AgentDetail {
             name: "echo-1".parse().unwrap(),
             role: "echo".parse().unwrap(),
             role_digest: digest.parse().unwrap(),
+            role_current: true,
+            image: "alpine".parse().unwrap(),
             owner: "dmytro".to_owned(),
             fleet: false,
+            resources: AgentResources {
+                vcpus: 2,
+                memory_mib: 1024,
+                disk_gib: None,
+                max_pids: None,
+            },
+            egress: vec!["example.com".parse().unwrap()],
+            secrets: BTreeMap::new(),
             volumes: BTreeMap::from([("data".parse().unwrap(), "reef-vol-echo-1-data".to_owned())]),
             desired: "running",
             state: "failed",
@@ -901,7 +999,7 @@ network = { egress = ["example.com"] }
         assert_eq!(
             serde_json::to_string(&detail).unwrap(),
             format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","owner":"dmytro","fleet":false,"volumes":{{"data":"reef-vol-echo-1-data"}},"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","role_current":true,"image":"alpine","owner":"dmytro","fleet":false,"resources":{{"vcpus":2,"memory_mib":1024,"disk_gib":null,"max_pids":null}},"egress":["example.com"],"secrets":{{}},"volumes":{{"data":"reef-vol-echo-1-data"}},"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
             )
         );
     }

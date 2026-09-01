@@ -52,6 +52,13 @@ turns the notice off.
 | `reef events --agent reviewer-1` | The event log, oldest first |
 
 `role list`, `agent list`, `agent get`, and `events` take `--json`.
+
+`agent get` reads an agent's whole blast radius off the role version it is
+pinned to: image, resources, egress and secret bindings (the `reef://` ref and
+its host, never a value). Both commands mark that pin against the role's active
+version - `(stale)` on the role line, `role_current` in JSON - so an agent left
+behind by a `role apply` is visible without comparing digests by hand.
+
 `agent get --wait` polls until the agent settles - reconciled and in its
 desired state - or reports failed, which exits nonzero. It has no timeout and
 nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
