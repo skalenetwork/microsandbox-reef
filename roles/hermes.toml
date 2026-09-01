@@ -1,17 +1,18 @@
 version = 1
 
 name  = "hermes"
-image = "nousresearch/hermes-agent:latest"
-init  = ["/opt/hermes/docker/entrypoint-dispatch.sh"]
+image = "nousresearch/hermes-agent@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524"
+init  = ["/opt/hermes/docker/entrypoint-dispatch.sh", "gateway", "run"]
 
 [resources]
-vcpus = 2
-memory-mib = 4096
+vcpus = 4
+memory-mib = 6144
 disk-gib = 20
 
 [env]
 HERMES_DASHBOARD = "1"
 HERMES_DASHBOARD_HOST = "0.0.0.0"
+TIRITH_ENABLED = "0"
 
 [expose]
 ui = 9119
