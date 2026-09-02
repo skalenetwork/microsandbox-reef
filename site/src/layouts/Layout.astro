@@ -2,7 +2,7 @@
 import { Font, Image, getImage } from "astro:assets";
 import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import DocsNav from "../components/DocsNav.astro";
-import { description, url } from "../content";
+import { description, latest, repo, url } from "../content";
 import logo from "../assets/reef.png";
 import og from "../assets/og.jpg";
 import "../styles.css";
@@ -14,7 +14,7 @@ const icon = await getImage({ src: logo, width: 64, format: "png" });
 const links = [
   { href: "/", label: "Home" },
   { href: "/docs", label: "Docs" },
-  { href: "https://github.com/skalenetwork/reef", label: "GitHub" },
+  { href: repo, label: "GitHub" },
 ];
 const current = (href: string) => (href === path ? "page" : href !== "/" && path.startsWith(href) ? "true" : undefined);
 const kebab = (k: string) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
@@ -61,6 +61,7 @@ const svg = (icon: typeof Copy01Icon) =>
       </a>
       <nav aria-label="Site">
         {links.map((link) => <a href={link.href} aria-current={current(link.href)}>{link.label}</a>)}
+        <a class="release" data-latest={latest} href={`${repo}/releases/latest`} hidden></a>
       </nav>
       <slot />
     </main>
@@ -94,6 +95,17 @@ const svg = (icon: typeof Copy01Icon) =>
             button.ariaLabel = "Copy";
           }, 1500);
         });
+      }
+
+      const release = document.querySelector<HTMLAnchorElement>(".release")!;
+      const version = await fetch(release.dataset.latest!)
+        .then((res) => res.json())
+        .then((data) => String(data.value))
+        .catch(() => "");
+
+      if (/^v\d/.test(version)) {
+        release.textContent = version;
+        release.hidden = false;
       }
     </script>
   </body>

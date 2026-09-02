@@ -88,6 +88,11 @@ nav a[aria-current] {
   text-decoration: underline;
 }
 
+nav .release {
+  margin-left: auto;
+  color: var(--text-2);
+}
+
 aside {
   display: none;
   position: fixed;

@@ -1,12 +1,18 @@
 export const description = "Isolated computers for agents in your org.";
 
+const slug = "skalenetwork/reef";
+
+export const repo = `https://github.com/${slug}`;
+
+export const latest = `https://img.shields.io/github/v/release/${slug}.json`;
+
 export const url = (path: string) => new URL(path, import.meta.env.SITE);
 
 export const install = `curl -fsSL ${url("/install")} | sh`;
 
 export const bullets = [
   "Each agent runs in its own microVM on your own servers and can only reach the domains its role allows.",
-  "A role is a [small TOML file](https://github.com/skalenetwork/reef/blob/main/roles/hermes.toml) with the image, allowed domains and secrets. The secret values never enter the VM.",
+  `A role is a [small TOML file](${repo}/blob/main/roles/hermes.toml) with the image, allowed domains and secrets. The secret values never enter the VM.`,
   "Developers create agents from the roles you approved with one command. There is no daemon or server to run.",
 ];
 
