@@ -19,10 +19,46 @@ use std::thread;
 use std::time::Duration;
 
 const POLL: Duration = Duration::from_secs(5);
-const PLAIN: Style = Style::new();
-const DIM: Style = Style::new().add_modifier(Modifier::DIM);
-const RED: Style = Style::new().fg(Color::Red);
 const SELECTED: Style = Style::new().add_modifier(Modifier::REVERSED);
+
+#[derive(Clone, Copy)]
+enum Tone {
+    Plain,
+    Muted,
+    Ok,
+    Warn,
+    Bad,
+}
+
+impl Tone {
+    fn state(state: State) -> Self {
+        match state {
+            State::Pending => Self::Warn,
+            State::Running => Self::Ok,
+            State::Stopped => Self::Muted,
+            State::Failed => Self::Bad,
+        }
+    }
+
+    fn vm(vm: Option<VmStatus>) -> Self {
+        match vm {
+            Some(VmStatus::Running) => Self::Ok,
+            Some(VmStatus::Stopped) | None => Self::Muted,
+        }
+    }
+
+    fn style(self, color: bool) -> Style {
+        match (self, color) {
+            (Self::Plain, _) => Style::new(),
+            (Self::Muted, _) => Style::new().add_modifier(Modifier::DIM),
+            (Self::Ok, true) => Style::new().fg(Color::Green),
+            (Self::Warn, true) => Style::new().fg(Color::Yellow),
+            (Self::Bad, true) => Style::new().fg(Color::Red),
+            (Self::Ok | Self::Warn, false) => Style::new(),
+            (Self::Bad, false) => Style::new().add_modifier(Modifier::BOLD),
+        }
+    }
+}
 
 pub fn hosts(aliases: Vec<Alias>, reef: String, state: PathBuf) -> Result<Vec<Host>> {
     if aliases.is_empty() {
@@ -163,7 +199,7 @@ enum Screen {
 enum Item<'a> {
     Agent(usize, &'a AgentRow),
     Role(usize, &'a RoleRow),
-    Host(usize, String, Style),
+    Host(usize, String, Tone),
 }
 
 impl Item<'_> {
@@ -183,6 +219,7 @@ struct App {
     screen: Screen,
     flash: Option<String>,
     quit: bool,
+    color: bool,
     tx: Sender<Msg>,
 }
 
@@ -210,6 +247,7 @@ impl App {
             screen: Screen::Table,
             flash: None,
             quit: false,
+            color: color(),
             tx,
         }
     }
@@ -414,11 +452,22 @@ impl App {
         frame.render_widget(self.footer(), footer);
     }
 
+    fn style(&self, tone: Tone) -> Style {
+        tone.style(self.color)
+    }
+
+    fn field(&self, label: &str, value: String, tone: Tone) -> Line<'static> {
+        Line::from(vec![
+            Span::styled(pad(label, 10), self.style(Tone::Muted)),
+            Span::styled(value, self.style(tone)),
+        ])
+    }
+
     fn table(&self, area: Rect) -> Paragraph<'static> {
         let columns = self.view.spec().columns;
         let items = self.items();
         let first = usize::from(self.hosts.len() == 1);
-        let cells: Vec<Vec<(String, Style)>> = items.iter().map(|item| self.cells(item)).collect();
+        let cells: Vec<Vec<(String, Tone)>> = items.iter().map(|item| self.cells(item)).collect();
         let widths: Vec<usize> = (0..columns.len())
             .map(|column| {
                 cells
@@ -433,22 +482,25 @@ impl App {
         let header = columns[first..]
             .iter()
             .zip(&widths[first..])
-            .map(|(name, width)| Span::styled(pad(name, *width), DIM))
+            .map(|(name, width)| Span::styled(pad(name, *width), self.style(Tone::Muted)))
             .collect::<Vec<_>>();
         let visible = usize::from(area.height.saturating_sub(1));
         let offset = self.selected.saturating_sub(visible.saturating_sub(1));
         let mut lines = vec![Line::from(header)];
         for (position, (item, cells)) in items.iter().zip(&cells).enumerate().skip(offset) {
             let spans = match item {
-                Item::Host(index, status, style) => [
-                    Span::styled(pad(self.hosts[*index].host.label(), widths[0]), DIM),
-                    Span::styled(status.clone(), *style),
+                Item::Host(index, status, tone) => [
+                    Span::styled(
+                        pad(self.hosts[*index].host.label(), widths[0]),
+                        self.style(Tone::Muted),
+                    ),
+                    Span::styled(status.clone(), self.style(*tone)),
                 ][first..]
                     .to_vec(),
                 _ => cells[first..]
                     .iter()
                     .zip(&widths[first..])
-                    .map(|((text, style), width)| Span::styled(pad(text, *width), *style))
+                    .map(|((text, tone), width)| Span::styled(pad(text, *width), self.style(*tone)))
                     .collect(),
             };
             let mut line = Line::from(spans);
@@ -462,18 +514,18 @@ impl App {
         Paragraph::new(lines)
     }
 
-    fn cells(&self, item: &Item) -> Vec<(String, Style)> {
+    fn cells(&self, item: &Item) -> Vec<(String, Tone)> {
         match item {
             Item::Agent(index, agent) => {
                 let host = &self.hosts[*index];
-                let state = host
-                    .busy
-                    .get(&agent.name)
-                    .map_or(agent.state.label(), |verb| verb.progress());
+                let (state, tone) = match host.busy.get(&agent.name) {
+                    Some(verb) => (verb.progress(), Tone::Warn),
+                    None => (agent.state.label(), Tone::state(agent.state)),
+                };
                 let role = if agent.role_current {
-                    agent.role.to_string()
+                    (agent.role.to_string(), Tone::Plain)
                 } else {
-                    format!("{} stale", agent.role)
+                    (format!("{} stale", agent.role), Tone::Warn)
                 };
                 let ports: Vec<String> = agent
                     .ports
@@ -481,33 +533,37 @@ impl App {
                     .map(|(name, port)| format!("{name}={port}"))
                     .collect();
                 vec![
-                    (host.host.label().to_owned(), DIM),
-                    (agent.name.to_string(), PLAIN),
-                    (role, PLAIN),
-                    (agent.owner.clone(), DIM),
-                    (agent.desired.label().to_owned(), PLAIN),
+                    (host.host.label().to_owned(), Tone::Muted),
+                    (agent.name.to_string(), Tone::Plain),
+                    role,
+                    (agent.owner.clone(), Tone::Muted),
+                    (agent.desired.label().to_owned(), Tone::Muted),
+                    (state.to_owned(), tone),
                     (
-                        state.to_owned(),
-                        if agent.state == State::Failed {
-                            RED
-                        } else {
-                            PLAIN
-                        },
+                        agent.vm.map_or("-", VmStatus::label).to_owned(),
+                        Tone::vm(agent.vm),
                     ),
-                    (agent.vm.map_or("-", VmStatus::label).to_owned(), PLAIN),
-                    (if agent.synced { "yes" } else { "drift" }.to_owned(), PLAIN),
-                    (ports.join(" "), PLAIN),
+                    if agent.synced {
+                        ("yes".to_owned(), Tone::Muted)
+                    } else {
+                        ("drift".to_owned(), Tone::Warn)
+                    },
+                    (ports.join(" "), Tone::Plain),
                 ]
             }
             Item::Role(index, role) => vec![
-                (self.hosts[*index].host.label().to_owned(), DIM),
-                (role.name.to_string(), PLAIN),
-                (role.digest.short().to_owned(), DIM),
-                (role.image.to_string(), PLAIN),
-                (role.agents.to_string(), PLAIN),
+                (self.hosts[*index].host.label().to_owned(), Tone::Muted),
+                (role.name.to_string(), Tone::Plain),
+                (role.digest.short().to_owned(), Tone::Muted),
+                (role.image.to_string(), Tone::Plain),
+                (role.agents.to_string(), Tone::Plain),
                 (
                     role.stale.to_string(),
-                    if role.stale > 0 { RED } else { DIM },
+                    if role.stale > 0 {
+                        Tone::Warn
+                    } else {
+                        Tone::Muted
+                    },
                 ),
             ],
             Item::Host(..) => Vec::new(),
@@ -518,28 +574,29 @@ impl App {
         let host = &self.hosts[row.host()].host;
         let lines = match detail {
             None => vec![
-                field("name", row.name().to_owned(), PLAIN),
-                field("state", "loading".to_owned(), DIM),
+                self.field("name", row.name().to_owned(), Tone::Plain),
+                self.field("state", "loading".to_owned(), Tone::Muted),
             ],
             Some(Err(failure)) => vec![
-                field("name", row.name().to_owned(), PLAIN),
-                field("error", failure.to_string(), RED),
+                self.field("name", row.name().to_owned(), Tone::Plain),
+                self.field("error", failure.to_string(), Tone::Bad),
             ],
             Some(Ok(Detail::Role(role))) => role
                 .rows()
                 .into_iter()
-                .map(|(label, value)| field(label, value, PLAIN))
+                .map(|(label, value)| self.field(label, value, Tone::Plain))
                 .collect(),
             Some(Ok(Detail::Agent(agent))) => {
                 let mut lines: Vec<Line<'static>> = agent
                     .rows()
                     .into_iter()
                     .map(|(label, value)| {
-                        let style = match label {
-                            "state" if agent.reason.is_some() => RED,
-                            _ => PLAIN,
+                        let tone = match label {
+                            "state" => Tone::state(agent.state),
+                            "vm" => Tone::vm(agent.vm),
+                            _ => Tone::Plain,
                         };
-                        field(label, value, style)
+                        self.field(label, value, tone)
                     })
                     .collect();
                 lines.extend(
@@ -547,9 +604,9 @@ impl App {
                         .ports
                         .values()
                         .filter_map(|port| host.forward(*port))
-                        .map(|forward| field("forward", forward, DIM)),
+                        .map(|forward| self.field("forward", forward, Tone::Muted)),
                 );
-                lines.push(field("terminal", host.terminal(&agent.name), DIM));
+                lines.push(self.field("terminal", host.terminal(&agent.name), Tone::Muted));
                 lines
             }
         };
@@ -558,11 +615,13 @@ impl App {
 
     fn footer(&self) -> Line<'static> {
         if let Some(flash) = &self.flash {
-            return Line::styled(flash.clone(), RED);
+            return Line::styled(flash.clone(), self.style(Tone::Bad));
         }
         match &self.screen {
-            Screen::Table => Line::styled(self.view.spec().keys, DIM),
-            Screen::Detail { .. } => Line::styled("j/k scroll  esc back  q quit", DIM),
+            Screen::Table => Line::styled(self.view.spec().keys, self.style(Tone::Muted)),
+            Screen::Detail { .. } => {
+                Line::styled("j/k scroll  esc back  q quit", self.style(Tone::Muted))
+            }
             Screen::Confirm(verb, index, name) => Line::from(format!(
                 "{} {name} on {}? y/n",
                 verb.arg(),
@@ -570,6 +629,10 @@ impl App {
             )),
         }
     }
+}
+
+fn color() -> bool {
+    std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
 }
 
 fn poll(index: usize, host: Host, tx: Sender<Msg>, wake: Receiver<View>) {
@@ -600,18 +663,13 @@ fn listing<'a, T>(
     item: fn(usize, &'a T) -> Item<'a>,
 ) -> Vec<Item<'a>> {
     match fetched {
-        None => vec![Item::Host(index, "connecting".to_owned(), DIM)],
-        Some(Err(failure)) => vec![Item::Host(index, failure.to_string(), RED)],
-        Some(Ok(rows)) if rows.is_empty() => vec![Item::Host(index, empty.to_owned(), DIM)],
+        None => vec![Item::Host(index, "connecting".to_owned(), Tone::Muted)],
+        Some(Err(failure)) => vec![Item::Host(index, failure.to_string(), Tone::Bad)],
+        Some(Ok(rows)) if rows.is_empty() => {
+            vec![Item::Host(index, empty.to_owned(), Tone::Muted)]
+        }
         Some(Ok(rows)) => rows.iter().map(|row| item(index, row)).collect(),
     }
-}
-
-fn field(label: &str, value: String, style: Style) -> Line<'static> {
-    Line::from(vec![
-        Span::styled(pad(label, 10), DIM),
-        Span::styled(value, style),
-    ])
 }
 
 fn pad(text: &str, width: usize) -> String {
@@ -674,6 +732,7 @@ mod tests {
             screen: Screen::Table,
             flash: None,
             quit: false,
+            color: true,
             tx,
         }
     }
@@ -842,5 +901,47 @@ mod tests {
                 " j/k scroll  esc back  q quit                               ",
             ]
         );
+    }
+
+    fn tone(app: &App, width: u16, height: u16, column: &str, row: u16) -> (Color, Modifier) {
+        let header = &screen(app, width, height)[0];
+        let x = u16::try_from(header.find(column).unwrap()).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let cell = &terminal.backend().buffer()[(x, row)];
+        (cell.fg, cell.modifier)
+    }
+
+    #[test]
+    fn color_tracks_state_and_vm() {
+        let app = app(vec![state(
+            ssh("prod-eu"),
+            Some(Ok(vec![
+                agent("echo-1", State::Running, true, &[]),
+                agent("echo-2", State::Failed, true, &[]),
+                agent("echo-3", State::Pending, true, &[]),
+            ])),
+        )]);
+        assert_eq!(tone(&app, 80, 6, "state", 1).0, Color::Green);
+        assert_eq!(tone(&app, 80, 6, "state", 2).0, Color::Red);
+        assert_eq!(tone(&app, 80, 6, "state", 3).0, Color::Yellow);
+        assert_eq!(tone(&app, 80, 6, "vm", 1).0, Color::Green);
+        assert_eq!(tone(&app, 80, 6, "vm", 2).0, Color::Reset);
+    }
+
+    #[test]
+    fn no_color_keeps_failures_visible() {
+        let mut app = app(vec![state(
+            ssh("prod-eu"),
+            Some(Ok(vec![
+                agent("echo-1", State::Running, true, &[]),
+                agent("echo-2", State::Failed, true, &[]),
+            ])),
+        )]);
+        app.color = false;
+        assert_eq!(tone(&app, 80, 5, "state", 1).0, Color::Reset);
+        let (color, modifier) = tone(&app, 80, 5, "state", 2);
+        assert_eq!(color, Color::Reset);
+        assert!(modifier.contains(Modifier::BOLD));
     }
 }

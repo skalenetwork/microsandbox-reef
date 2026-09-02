@@ -93,7 +93,10 @@ It fetches them by running this binary locally or `ssh ALIAS <reef> agent list
 --json` remotely, polls every five seconds, and runs the same `agent start`,
 `stop`, `update` and `rm` commands an operator would type. It never opens the
 store and names no runtime type; a host knows only its own agents, and the
-console merges independent hosts on the laptop.
+console merges independent hosts on the laptop. Cells carry a `Tone`, not a
+`Style`: the render pass resolves it against one bool, so `NO_COLOR` needs no
+second path and the palette stays named ANSI for the terminal's own theme to
+shade.
 
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
 status and an append-only event log. Observed VM state is never cached — it is

@@ -122,6 +122,12 @@ refreshes every five seconds and after each action; `ControlMaster auto`,
 one connection open between polls. The detail view prints the `ssh -L` and `agent ssh` lines that reach an
 agent's ports and terminal from your laptop.
 
+Color marks status only: green for running, yellow for pending, for drift and
+for an action in flight, red for failed and for a host that will not answer.
+Names, images and ports stay plain and metadata stays dim, so a healthy fleet
+reads quietly. Setting `NO_COLOR` drops the color and marks failures bold
+instead.
+
 ## Roles
 
 ```toml
