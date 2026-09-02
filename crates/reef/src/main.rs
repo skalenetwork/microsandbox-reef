@@ -14,7 +14,7 @@ use reef_core::{
     Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, Lifecycle, Role, RoleName,
     VmStatus, parse_fleet, parse_role,
 };
-use rows::{AgentDetail, AgentRow, RoleRow};
+use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow};
 use secrets::Secrets;
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
@@ -104,6 +104,13 @@ enum RoleCommand {
     Apply { files: Vec<PathBuf> },
     /// List roles and their active versions
     List {
+        /// Print JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show one role's active definition and the agents on it
+    Get {
+        name: RoleName,
         /// Print JSON
         #[arg(long)]
         json: bool,
@@ -285,7 +292,7 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                             "{} {}@{} ({state})",
                             file.display(),
                             role.name,
-                            short(digest.as_str())
+                            digest.short()
                         );
                         if role.network.egress.iter().any(Domain::is_any) {
                             eprintln!(
@@ -306,21 +313,55 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
             Ok(())
         }
         RoleCommand::List { json } => {
-            let roles: Vec<RoleRow> = ctx
-                .store
-                .list_roles()?
-                .into_iter()
-                .map(|(name, digest, image)| RoleRow {
+            let mut roles = Vec::new();
+            for (name, digest, image) in ctx.store.list_roles()? {
+                let on = ctx.store.agents_on_role(&name)?;
+                let stale = on.iter().filter(|(_, pinned)| *pinned != digest).count();
+                roles.push(RoleRow {
                     name,
                     digest,
                     image,
-                })
-                .collect();
+                    agents: on.len(),
+                    stale,
+                });
+            }
             if json {
                 println!("{}", serde_json::to_string_pretty(&roles)?);
             } else {
                 for role in &roles {
-                    println!("{:24} {} {}", role.name, short(&role.digest), role.image);
+                    println!(
+                        "{:24} {} {}",
+                        role.name.as_str(),
+                        role.digest.short(),
+                        role.image
+                    );
+                }
+            }
+            Ok(())
+        }
+        RoleCommand::Get { name, json } => {
+            let (digest, role) = ctx
+                .store
+                .active_role(&name)?
+                .with_context(|| format!("no such role: {name}"))?;
+            let (current, stale) = ctx
+                .store
+                .agents_on_role(&name)?
+                .into_iter()
+                .partition::<Vec<_>, _>(|(_, pinned)| *pinned == digest);
+            let names =
+                |on: Vec<(AgentName, Digest)>| on.into_iter().map(|(name, _)| name).collect();
+            let detail = RoleDetail {
+                digest,
+                role,
+                agents: names(current),
+                stale: names(stale),
+            };
+            if json {
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                for (label, value) in detail.rows() {
+                    row(label, value);
                 }
             }
             Ok(())
@@ -364,7 +405,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             Ok(())
         }
         AgentCommand::List { json } => {
-            let active: BTreeMap<String, String> = ctx
+            let active: BTreeMap<RoleName, Digest> = ctx
                 .store
                 .list_roles()?
                 .into_iter()
@@ -380,8 +421,8 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 let ports = ctx.store.ports(&agent.name)?;
                 let image = ctx.store.role_version(&agent.spec.role_digest)?.image;
                 let role_current = active
-                    .get(agent.spec.role.as_str())
-                    .is_none_or(|digest| digest == agent.spec.role_digest.as_str());
+                    .get(&agent.spec.role)
+                    .is_none_or(|digest| *digest == agent.spec.role_digest);
                 agents.push(AgentRow {
                     name: agent.name,
                     role: agent.spec.role,
@@ -542,7 +583,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 println!(
                     "{name} is already on {}@{}",
                     agent.spec.role,
-                    short(active.as_str())
+                    active.short()
                 );
                 return Ok(());
             }
@@ -555,7 +596,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 agent.name,
                 agent.status.lifecycle.label(),
                 agent.spec.role,
-                short(active.as_str())
+                active.short()
             );
             Ok(())
         }
@@ -614,10 +655,6 @@ fn digest_role(role: &Role) -> (Digest, String) {
     let hash = Sha256::digest(definition.as_bytes());
     let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
     (hex.parse().expect("sha256 hex is a digest"), definition)
-}
-
-fn short(digest: &str) -> &str {
-    &digest[..12]
 }
 
 fn print_urls(store: &Store, agent: &Agent) -> Result<()> {

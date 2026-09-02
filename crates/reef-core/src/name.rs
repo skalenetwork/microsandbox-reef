@@ -66,6 +66,12 @@ impl GuestPath {
     }
 }
 
+impl Digest {
+    pub fn short(&self) -> &str {
+        &self.0[..12]
+    }
+}
+
 impl Domain {
     pub fn is_any(&self) -> bool {
         self.0 == "*"

@@ -1,8 +1,8 @@
 use crate::rows::Event;
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Lifecycle, PortName, Role,
-    RoleName,
+    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, ImageRef, Lifecycle,
+    PortName, Role, RoleName,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::{BTreeMap, BTreeSet};
@@ -126,14 +126,38 @@ impl Store {
             .with_context(|| format!("corrupt role definition {digest}"))
     }
 
-    pub fn list_roles(&self) -> Result<Vec<(String, String, String)>> {
+    pub fn list_roles(&self) -> Result<Vec<(RoleName, Digest, ImageRef)>> {
         let mut stmt = self.db.prepare(
             "SELECT r.name, r.active_digest, json_extract(v.definition, '$.image')
              FROM roles r JOIN role_versions v ON v.digest = r.active_digest
              ORDER BY r.name",
         )?;
-        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (name, digest, image) = row?;
+            Ok((parsed(name)?, parsed(digest)?, parsed(image)?))
+        })
+        .collect()
+    }
+
+    pub fn agents_on_role(&self, role: &RoleName) -> Result<Vec<(AgentName, Digest)>> {
+        let mut stmt = self
+            .db
+            .prepare("SELECT name, role_digest FROM agents WHERE role = ?1 ORDER BY name")?;
+        let rows = stmt.query_map([role.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.map(|row| {
+            let (name, digest) = row?;
+            Ok((parsed(name)?, parsed(digest)?))
+        })
+        .collect()
     }
 
     pub fn insert_agent(&self, agent: &Agent) -> Result<()> {

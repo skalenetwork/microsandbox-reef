@@ -37,6 +37,7 @@ turns the notice off.
 | `reef doctor` | Can this host run agents? |
 | `reef role apply roles/*.toml` | Validate and import, from CI or by hand |
 | `reef role list` | Roles and their active versions |
+| `reef role get code-reviewer` | One role's active definition and the agents on it |
 | `reef agent create --role code-reviewer --name reviewer-1` | Create an agent and reconcile it |
 | `reef agent list` | Every agent with its observed VM state |
 | `reef agent get reviewer-1 --wait` | One agent in detail; `--wait` blocks until settled |
@@ -52,7 +53,8 @@ turns the notice off.
 | `reef events --agent reviewer-1` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
 
-`role list`, `agent list`, `agent get`, and `events` take `--json`.
+`role list`, `role get`, `agent list`, `agent get`, and `events` take
+`--json`.
 
 `agent get` reads an agent's whole blast radius off the role version it is
 pinned to: image, resources, egress and secret bindings (the `reef://` ref and
@@ -98,7 +100,10 @@ The full pattern - certificates, sshd config, client config - is
 `reef ui` is a full-screen view of every agent on this host: state, VM, drift
 and ports in one table, Enter for what `agent get` prints, and `s`, `x`, `u`,
 `d` to start, stop, update and remove the selected agent (update and remove
-ask first). It is a client of the `--json` commands above and never opens the
+ask first). Tab switches to the roles table - active version, image, and how
+many agents run each role and how many are stale - where Enter prints what
+`role get` prints. Roles are read-only there; `role apply` stays a CLI
+command, since it takes files. It is a client of the `--json` commands above and never opens the
 state directory itself: locally it runs this binary, and given ssh host aliases
 it runs `ssh ALIAS ~/.local/bin/reef ...` on each and merges the tables:
 

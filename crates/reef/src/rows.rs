@@ -1,16 +1,80 @@
 use crate::reconcile::host_name;
 use reef_core::{
-    AgentName, Desired, Digest, Domain, EnvKey, ImageRef, PortName, Resources, RoleName,
+    AgentName, Desired, Digest, Domain, EnvKey, ImageRef, PortName, Resources, Role, RoleName,
     SecretBinding, State, VmStatus, VolumeName,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RoleRow {
-    pub name: String,
-    pub digest: String,
-    pub image: String,
+    pub name: RoleName,
+    pub digest: Digest,
+    pub image: ImageRef,
+    pub agents: usize,
+    pub stale: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RoleDetail {
+    pub digest: Digest,
+    #[serde(flatten)]
+    pub role: Role,
+    pub agents: Vec<AgentName>,
+    pub stale: Vec<AgentName>,
+}
+
+impl RoleDetail {
+    pub fn rows(&self) -> Vec<(&'static str, String)> {
+        let role = &self.role;
+        let mut rows = vec![
+            ("name", role.name.to_string()),
+            ("digest", self.digest.short().to_owned()),
+            ("image", role.image.to_string()),
+        ];
+        if let Some(init) = &role.init {
+            rows.push(("init", init.join(" ")));
+        }
+        rows.push((
+            "resources",
+            capacity(
+                role.resources.vcpus,
+                role.resources.memory_mib,
+                role.resources.disk_gib,
+            ),
+        ));
+        rows.extend(role.volumes.iter().map(|(name, volume)| {
+            (
+                "volume",
+                format!("{name} {} {} MiB", volume.dest, volume.size_mib),
+            )
+        }));
+        rows.push(("egress", egress(&role.network.egress)));
+        rows.extend(role.secrets.iter().map(|(key, binding)| {
+            (
+                "secret",
+                format!("{key}={} host={}", binding.secret, binding.host),
+            )
+        }));
+        rows.extend(
+            role.expose
+                .iter()
+                .map(|(name, port)| ("expose", format!("{name}={port}"))),
+        );
+        rows.extend(role.files.keys().map(|path| ("file", path.to_string())));
+        rows.extend(
+            role.env
+                .iter()
+                .map(|(key, value)| ("env", format!("{key}={value}"))),
+        );
+        rows.extend(self.agents.iter().map(|name| ("agent", name.to_string())));
+        rows.extend(
+            self.stale
+                .iter()
+                .map(|name| ("agent", format!("{name} (stale)"))),
+        );
+        rows
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -79,15 +143,11 @@ impl AgentDetail {
             Some(reason) => format!("{}: {reason}", self.state.label()),
             None => self.state.label().to_owned(),
         };
-        let disk = self
-            .resources
-            .disk_gib
-            .map_or(String::new(), |gib| format!(", {gib} GiB disk"));
         let mut rows = vec![
             ("name", self.name.to_string()),
             (
                 "role",
-                format!("{}@{}{stale}", self.role, &self.role_digest.as_str()[..12]),
+                format!("{}@{}{stale}", self.role, self.role_digest.short()),
             ),
             ("image", self.image.to_string()),
             ("owner", self.owner.clone()),
@@ -97,9 +157,10 @@ impl AgentDetail {
             ("sandbox", self.sandbox.clone()),
             (
                 "resources",
-                format!(
-                    "{} vcpu, {} MiB{disk}",
-                    self.resources.vcpus, self.resources.memory_mib
+                capacity(
+                    self.resources.vcpus,
+                    self.resources.memory_mib,
+                    self.resources.disk_gib,
                 ),
             ),
         ];
@@ -108,15 +169,7 @@ impl AgentDetail {
                 .iter()
                 .map(|(entry, name)| ("volume", format!("{entry} {name}"))),
         );
-        let egress: Vec<&str> = self.egress.iter().map(Domain::as_str).collect();
-        rows.push((
-            "egress",
-            if egress.is_empty() {
-                "none".to_owned()
-            } else {
-                egress.join(" ")
-            },
-        ));
+        rows.push(("egress", egress(&self.egress)));
         rows.extend(self.secrets.iter().map(|(key, binding)| {
             (
                 "secret",
@@ -143,6 +196,22 @@ impl AgentDetail {
     }
 }
 
+fn capacity(vcpus: u8, memory_mib: u32, disk_gib: Option<u32>) -> String {
+    let disk = disk_gib.map_or(String::new(), |gib| format!(", {gib} GiB disk"));
+    format!("{vcpus} vcpu, {memory_mib} MiB{disk}")
+}
+
+fn egress(domains: &[Domain]) -> String {
+    if domains.is_empty() {
+        return "none".to_owned();
+    }
+    domains
+        .iter()
+        .map(Domain::as_str)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[derive(Serialize)]
 pub struct Event {
     pub id: i64,
@@ -156,6 +225,20 @@ pub struct Event {
 mod tests {
     use super::*;
 
+    const ROLE: &str = r#"
+version = 1
+name  = "echo"
+image = "alpine"
+
+[resources]
+vcpus = 1
+memory-mib = 256
+max-pids = 128
+
+[network]
+egress = ["example.com"]
+"#;
+
     fn round_trips<T: Serialize + serde::de::DeserializeOwned>(value: &T, json: &str) {
         assert_eq!(serde_json::to_string(value).unwrap(), json);
         let parsed: T = serde_json::from_str(json).unwrap();
@@ -164,17 +247,32 @@ mod tests {
 
     #[test]
     fn json_rows_are_a_stable_contract() {
-        let role = RoleRow {
-            name: "echo".to_owned(),
-            digest: "abc".to_owned(),
-            image: "alpine".to_owned(),
-        };
-        assert_eq!(
-            serde_json::to_string(&role).unwrap(),
-            r#"{"name":"echo","digest":"abc","image":"alpine"}"#
+        let digest = "0".repeat(64);
+        round_trips(
+            &RoleRow {
+                name: "echo".parse().unwrap(),
+                digest: digest.parse().unwrap(),
+                image: "alpine".parse().unwrap(),
+                agents: 2,
+                stale: 1,
+            },
+            &format!(
+                r#"{{"name":"echo","digest":"{digest}","image":"alpine","agents":2,"stale":1}}"#
+            ),
         );
 
-        let digest = "0".repeat(64);
+        round_trips(
+            &RoleDetail {
+                digest: digest.parse().unwrap(),
+                role: reef_core::parse_role(ROLE).unwrap(),
+                agents: vec!["echo-1".parse().unwrap()],
+                stale: vec!["echo-2".parse().unwrap()],
+            },
+            &format!(
+                r#"{{"digest":"{digest}","version":1,"name":"echo","image":"alpine","resources":{{"vcpus":1,"memory-mib":256,"disk-gib":null,"max-pids":128}},"network":{{"egress":["example.com"]}},"secrets":{{}},"agents":["echo-1"],"stale":["echo-2"]}}"#
+            ),
+        );
+
         let agent = AgentRow {
             name: "echo-1".parse().unwrap(),
             role: "echo".parse().unwrap(),

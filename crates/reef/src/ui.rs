@@ -2,7 +2,7 @@ mod host;
 
 pub use host::Alias;
 
-use crate::rows::{AgentDetail, AgentRow};
+use crate::rows::{AgentDetail, AgentRow, RoleDetail, RoleRow};
 use anyhow::{Context, Result};
 use host::{Failure, Host};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
@@ -11,7 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
-use reef_core::{AgentName, State, VmStatus};
+use reef_core::{AgentName, RoleName, State, VmStatus};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -23,9 +23,6 @@ const PLAIN: Style = Style::new();
 const DIM: Style = Style::new().add_modifier(Modifier::DIM);
 const RED: Style = Style::new().fg(Color::Red);
 const SELECTED: Style = Style::new().add_modifier(Modifier::REVERSED);
-const COLUMNS: [&str; 9] = [
-    "host", "name", "role", "owner", "desired", "state", "vm", "sync", "ports",
-];
 
 pub fn hosts(aliases: Vec<Alias>, reef: String, state: PathBuf) -> Result<Vec<Host>> {
     if aliases.is_empty() {
@@ -48,6 +45,40 @@ pub fn run(hosts: Vec<Host>) -> Result<()> {
     let outcome = app.drive(&mut terminal, &rx);
     ratatui::restore();
     outcome
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum View {
+    Agents,
+    Roles,
+}
+
+struct Spec {
+    columns: &'static [&'static str],
+    list: &'static [&'static str],
+    empty: &'static str,
+    keys: &'static str,
+}
+
+impl View {
+    fn spec(self) -> Spec {
+        match self {
+            Self::Agents => Spec {
+                columns: &[
+                    "host", "name", "role", "owner", "desired", "state", "vm", "sync", "ports",
+                ],
+                list: &["agent", "list", "--json"],
+                empty: "no agents",
+                keys: "j/k move  enter detail  s start  x stop  u update  d remove  tab roles  q quit",
+            },
+            Self::Roles => Spec {
+                columns: &["host", "name", "version", "image", "agents", "stale"],
+                list: &["role", "list", "--json"],
+                empty: "no roles",
+                keys: "j/k move  enter detail  tab agents  q quit",
+            },
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -80,23 +111,50 @@ impl Verb {
 
 enum Msg {
     Agents(usize, Result<Vec<AgentRow>, Failure>),
-    Detail(usize, AgentName, Result<Box<AgentDetail>, Failure>),
+    Roles(usize, Result<Vec<RoleRow>, Failure>),
+    Detail(Row, Result<Detail, Failure>),
     Done(usize, AgentName, Result<(), Failure>),
+}
+
+#[derive(Clone, PartialEq)]
+enum Row {
+    Agent(usize, AgentName),
+    Role(usize, RoleName),
+}
+
+impl Row {
+    fn host(&self) -> usize {
+        match self {
+            Self::Agent(host, _) | Self::Role(host, _) => *host,
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            Self::Agent(_, name) => name.as_str(),
+            Self::Role(_, name) => name.as_str(),
+        }
+    }
+}
+
+enum Detail {
+    Agent(Box<AgentDetail>),
+    Role(Box<RoleDetail>),
 }
 
 struct HostState {
     host: Host,
     agents: Option<Result<Vec<AgentRow>, Failure>>,
+    roles: Option<Result<Vec<RoleRow>, Failure>>,
     busy: BTreeMap<AgentName, Verb>,
-    wake: Sender<()>,
+    wake: Sender<View>,
 }
 
 enum Screen {
     Table,
     Detail {
-        host: usize,
-        name: AgentName,
-        detail: Option<Result<Box<AgentDetail>, Failure>>,
+        row: Row,
+        detail: Option<Result<Detail, Failure>>,
         scroll: u16,
     },
     Confirm(Verb, usize, AgentName),
@@ -104,11 +162,23 @@ enum Screen {
 
 enum Item<'a> {
     Agent(usize, &'a AgentRow),
+    Role(usize, &'a RoleRow),
     Host(usize, String, Style),
+}
+
+impl Item<'_> {
+    fn row(&self) -> Option<Row> {
+        match self {
+            Self::Agent(host, agent) => Some(Row::Agent(*host, agent.name.clone())),
+            Self::Role(host, role) => Some(Row::Role(*host, role.name.clone())),
+            Self::Host(..) => None,
+        }
+    }
 }
 
 struct App {
     hosts: Vec<HostState>,
+    view: View,
     selected: usize,
     screen: Screen,
     flash: Option<String>,
@@ -127,6 +197,7 @@ impl App {
                 HostState {
                     host,
                     agents: None,
+                    roles: None,
                     busy: BTreeMap::new(),
                     wake,
                 }
@@ -134,6 +205,7 @@ impl App {
             .collect();
         Self {
             hosts,
+            view: View::Agents,
             selected: 0,
             screen: Screen::Table,
             flash: None,
@@ -163,33 +235,32 @@ impl App {
     }
 
     fn items(&self) -> Vec<Item<'_>> {
-        let mut items = Vec::new();
-        for (index, host) in self.hosts.iter().enumerate() {
-            match &host.agents {
-                None => items.push(Item::Host(index, "connecting".to_owned(), DIM)),
-                Some(Err(failure)) => items.push(Item::Host(index, failure.to_string(), RED)),
-                Some(Ok(agents)) if agents.is_empty() => {
-                    items.push(Item::Host(index, "no agents".to_owned(), DIM));
-                }
-                Some(Ok(agents)) => {
-                    items.extend(agents.iter().map(|agent| Item::Agent(index, agent)));
-                }
-            }
-        }
-        items
+        let empty = self.view.spec().empty;
+        self.hosts
+            .iter()
+            .enumerate()
+            .flat_map(|(index, host)| match self.view {
+                View::Agents => listing(index, &host.agents, empty, Item::Agent),
+                View::Roles => listing(index, &host.roles, empty, Item::Role),
+            })
+            .collect()
+    }
+
+    fn selected_row(&self) -> Option<Row> {
+        self.items().get(self.selected)?.row()
     }
 
     fn selected_agent(&self) -> Option<(usize, AgentName)> {
-        match self.items().get(self.selected)? {
-            Item::Agent(index, agent) => Some((*index, agent.name.clone())),
-            Item::Host(..) => None,
+        match self.selected_row()? {
+            Row::Agent(index, name) => Some((index, name)),
+            Row::Role(..) => None,
         }
     }
 
-    fn position(&self, host: usize, name: &AgentName) -> Option<usize> {
+    fn position(&self, row: &Row) -> Option<usize> {
         self.items()
             .iter()
-            .position(|item| matches!(item, Item::Agent(index, agent) if *index == host && agent.name == *name))
+            .position(|item| item.row().as_ref() == Some(row))
     }
 
     fn key(&mut self, code: KeyCode) {
@@ -214,6 +285,7 @@ impl App {
                 KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
                 KeyCode::Down | KeyCode::Char('j') => self.selected = self.clamp(self.selected + 1),
                 KeyCode::Enter => self.open(),
+                KeyCode::Tab => self.switch(),
                 KeyCode::Char('s') => self.act_selected(Verb::Start),
                 KeyCode::Char('x') => self.act_selected(Verb::Stop),
                 KeyCode::Char('u') => self.confirm(Verb::Update),
@@ -225,6 +297,23 @@ impl App {
 
     fn clamp(&self, index: usize) -> usize {
         index.min(self.items().len().saturating_sub(1))
+    }
+
+    fn switch(&mut self) {
+        self.view = match self.view {
+            View::Agents => View::Roles,
+            View::Roles => View::Agents,
+        };
+        self.selected = 0;
+        for host in &self.hosts {
+            host.wake.send(self.view).ok();
+        }
+    }
+
+    fn reselect(&mut self, row: Option<Row>) {
+        self.selected = row
+            .and_then(|row| self.position(&row))
+            .unwrap_or_else(|| self.clamp(self.selected));
     }
 
     fn confirm(&mut self, verb: Verb) {
@@ -240,21 +329,25 @@ impl App {
     }
 
     fn open(&mut self) {
-        let Some((host, name)) = self.selected_agent() else {
+        let Some(row) = self.selected_row() else {
             return;
         };
-        let target = self.hosts[host].host.clone();
+        let host = self.hosts[row.host()].host.clone();
         let tx = self.tx.clone();
-        let agent = name.clone();
+        let target = row.clone();
         thread::spawn(move || {
-            let detail = target
-                .fetch(&["agent", "get", agent.as_str(), "--json"])
-                .map(Box::new);
-            tx.send(Msg::Detail(host, agent, detail)).ok();
+            let detail = match &target {
+                Row::Agent(_, name) => host
+                    .fetch(&["agent", "get", name.as_str(), "--json"])
+                    .map(|it| Detail::Agent(Box::new(it))),
+                Row::Role(_, name) => host
+                    .fetch(&["role", "get", name.as_str(), "--json"])
+                    .map(|it| Detail::Role(Box::new(it))),
+            };
+            tx.send(Msg::Detail(target, detail)).ok();
         });
         self.screen = Screen::Detail {
-            host,
-            name,
+            row,
             detail: None,
             scroll: 0,
         };
@@ -278,26 +371,27 @@ impl App {
     fn apply(&mut self, msg: Msg) {
         match msg {
             Msg::Agents(index, agents) => {
-                let anchor = self.selected_agent();
+                let anchor = self.selected_row();
                 self.hosts[index].agents = Some(agents);
-                self.selected = anchor
-                    .and_then(|(host, name)| self.position(host, &name))
-                    .unwrap_or_else(|| self.clamp(self.selected));
+                self.reselect(anchor);
             }
-            Msg::Detail(index, agent, fetched) => {
-                if let Screen::Detail {
-                    host, name, detail, ..
-                } = &mut self.screen
-                    && *host == index
-                    && *name == agent
+            Msg::Roles(index, roles) => {
+                let anchor = self.selected_row();
+                self.hosts[index].roles = Some(roles);
+                self.reselect(anchor);
+            }
+            Msg::Detail(target, fetched) => {
+                if let Screen::Detail { row, detail, .. } = &mut self.screen
+                    && *row == target
                 {
                     *detail = Some(fetched);
                 }
             }
             Msg::Done(index, name, outcome) => {
+                let view = self.view;
                 let host = &mut self.hosts[index];
                 host.busy.remove(&name);
-                host.wake.send(()).ok();
+                host.wake.send(view).ok();
                 if let Err(failure) = outcome {
                     self.flash = Some(format!("{name}: {failure}"));
                 }
@@ -311,41 +405,32 @@ impl App {
             .areas(frame.area());
         match &self.screen {
             Screen::Detail {
-                host,
-                name,
+                row,
                 detail,
                 scroll,
-            } => frame.render_widget(
-                self.detail(*host, name, detail.as_ref())
-                    .scroll((*scroll, 0)),
-                body,
-            ),
+            } => frame.render_widget(self.detail(row, detail.as_ref()).scroll((*scroll, 0)), body),
             _ => frame.render_widget(self.table(body), body),
         }
         frame.render_widget(self.footer(), footer);
     }
 
     fn table(&self, area: Rect) -> Paragraph<'static> {
+        let columns = self.view.spec().columns;
         let items = self.items();
         let first = usize::from(self.hosts.len() == 1);
-        let cells: Vec<[String; 9]> = items
-            .iter()
-            .filter_map(|item| match item {
-                Item::Agent(index, agent) => Some(self.cells(*index, agent)),
-                Item::Host(..) => None,
-            })
-            .collect();
-        let widths: Vec<usize> = (0..COLUMNS.len())
+        let cells: Vec<Vec<(String, Style)>> = items.iter().map(|item| self.cells(item)).collect();
+        let widths: Vec<usize> = (0..columns.len())
             .map(|column| {
                 cells
                     .iter()
-                    .map(|row| row[column].chars().count())
-                    .chain([COLUMNS[column].len()])
+                    .filter_map(|row| row.get(column))
+                    .map(|(text, _)| text.chars().count())
+                    .chain([columns[column].len()])
                     .max()
                     .unwrap_or(0)
             })
             .collect();
-        let header = COLUMNS[first..]
+        let header = columns[first..]
             .iter()
             .zip(&widths[first..])
             .map(|(name, width)| Span::styled(pad(name, *width), DIM))
@@ -353,26 +438,18 @@ impl App {
         let visible = usize::from(area.height.saturating_sub(1));
         let offset = self.selected.saturating_sub(visible.saturating_sub(1));
         let mut lines = vec![Line::from(header)];
-        for (position, item) in items.iter().enumerate().skip(offset) {
+        for (position, (item, cells)) in items.iter().zip(&cells).enumerate().skip(offset) {
             let spans = match item {
-                Item::Agent(index, agent) => self.cells(*index, agent)[first..]
-                    .iter()
-                    .zip(&widths[first..])
-                    .enumerate()
-                    .map(|(column, (text, width))| {
-                        let style = match COLUMNS[first + column] {
-                            "host" | "owner" => DIM,
-                            "state" if agent.state == State::Failed => RED,
-                            _ => PLAIN,
-                        };
-                        Span::styled(pad(text, *width), style)
-                    })
-                    .collect(),
                 Item::Host(index, status, style) => [
                     Span::styled(pad(self.hosts[*index].host.label(), widths[0]), DIM),
                     Span::styled(status.clone(), *style),
                 ][first..]
                     .to_vec(),
+                _ => cells[first..]
+                    .iter()
+                    .zip(&widths[first..])
+                    .map(|((text, style), width)| Span::styled(pad(text, *width), *style))
+                    .collect(),
             };
             let mut line = Line::from(spans);
             if position == self.selected {
@@ -385,71 +462,94 @@ impl App {
         Paragraph::new(lines)
     }
 
-    fn cells(&self, index: usize, agent: &AgentRow) -> [String; 9] {
-        let host = &self.hosts[index];
-        let state = host
-            .busy
-            .get(&agent.name)
-            .map_or(agent.state.label(), |verb| verb.progress());
-        let role = if agent.role_current {
-            agent.role.to_string()
-        } else {
-            format!("{} stale", agent.role)
-        };
-        let ports: Vec<String> = agent
-            .ports
-            .iter()
-            .map(|(name, port)| format!("{name}={port}"))
-            .collect();
-        [
-            host.host.label().to_owned(),
-            agent.name.to_string(),
-            role,
-            agent.owner.clone(),
-            agent.desired.label().to_owned(),
-            state.to_owned(),
-            agent.vm.map_or("-", VmStatus::label).to_owned(),
-            if agent.synced { "yes" } else { "drift" }.to_owned(),
-            ports.join(" "),
-        ]
+    fn cells(&self, item: &Item) -> Vec<(String, Style)> {
+        match item {
+            Item::Agent(index, agent) => {
+                let host = &self.hosts[*index];
+                let state = host
+                    .busy
+                    .get(&agent.name)
+                    .map_or(agent.state.label(), |verb| verb.progress());
+                let role = if agent.role_current {
+                    agent.role.to_string()
+                } else {
+                    format!("{} stale", agent.role)
+                };
+                let ports: Vec<String> = agent
+                    .ports
+                    .iter()
+                    .map(|(name, port)| format!("{name}={port}"))
+                    .collect();
+                vec![
+                    (host.host.label().to_owned(), DIM),
+                    (agent.name.to_string(), PLAIN),
+                    (role, PLAIN),
+                    (agent.owner.clone(), DIM),
+                    (agent.desired.label().to_owned(), PLAIN),
+                    (
+                        state.to_owned(),
+                        if agent.state == State::Failed {
+                            RED
+                        } else {
+                            PLAIN
+                        },
+                    ),
+                    (agent.vm.map_or("-", VmStatus::label).to_owned(), PLAIN),
+                    (if agent.synced { "yes" } else { "drift" }.to_owned(), PLAIN),
+                    (ports.join(" "), PLAIN),
+                ]
+            }
+            Item::Role(index, role) => vec![
+                (self.hosts[*index].host.label().to_owned(), DIM),
+                (role.name.to_string(), PLAIN),
+                (role.digest.short().to_owned(), DIM),
+                (role.image.to_string(), PLAIN),
+                (role.agents.to_string(), PLAIN),
+                (
+                    role.stale.to_string(),
+                    if role.stale > 0 { RED } else { DIM },
+                ),
+            ],
+            Item::Host(..) => Vec::new(),
+        }
     }
 
-    fn detail(
-        &self,
-        index: usize,
-        name: &AgentName,
-        detail: Option<&Result<Box<AgentDetail>, Failure>>,
-    ) -> Paragraph<'static> {
-        let host = &self.hosts[index].host;
+    fn detail(&self, row: &Row, detail: Option<&Result<Detail, Failure>>) -> Paragraph<'static> {
+        let host = &self.hosts[row.host()].host;
         let lines = match detail {
             None => vec![
-                field("name", name.to_string(), PLAIN),
+                field("name", row.name().to_owned(), PLAIN),
                 field("state", "loading".to_owned(), DIM),
             ],
             Some(Err(failure)) => vec![
-                field("name", name.to_string(), PLAIN),
+                field("name", row.name().to_owned(), PLAIN),
                 field("error", failure.to_string(), RED),
             ],
-            Some(Ok(detail)) => {
-                let mut lines: Vec<Line<'static>> = detail
+            Some(Ok(Detail::Role(role))) => role
+                .rows()
+                .into_iter()
+                .map(|(label, value)| field(label, value, PLAIN))
+                .collect(),
+            Some(Ok(Detail::Agent(agent))) => {
+                let mut lines: Vec<Line<'static>> = agent
                     .rows()
                     .into_iter()
                     .map(|(label, value)| {
                         let style = match label {
-                            "state" if detail.reason.is_some() => RED,
+                            "state" if agent.reason.is_some() => RED,
                             _ => PLAIN,
                         };
                         field(label, value, style)
                     })
                     .collect();
                 lines.extend(
-                    detail
+                    agent
                         .ports
                         .values()
                         .filter_map(|port| host.forward(*port))
                         .map(|forward| field("forward", forward, DIM)),
                 );
-                lines.push(field("terminal", host.terminal(name), DIM));
+                lines.push(field("terminal", host.terminal(&agent.name), DIM));
                 lines
             }
         };
@@ -461,10 +561,7 @@ impl App {
             return Line::styled(flash.clone(), RED);
         }
         match &self.screen {
-            Screen::Table => Line::styled(
-                "j/k move  enter detail  s start  x stop  u update  d remove  q quit",
-                DIM,
-            ),
+            Screen::Table => Line::styled(self.view.spec().keys, DIM),
             Screen::Detail { .. } => Line::styled("j/k scroll  esc back  q quit", DIM),
             Screen::Confirm(verb, index, name) => Line::from(format!(
                 "{} {name} on {}? y/n",
@@ -475,17 +572,39 @@ impl App {
     }
 }
 
-fn poll(index: usize, host: Host, tx: Sender<Msg>, wake: Receiver<()>) {
+fn poll(index: usize, host: Host, tx: Sender<Msg>, wake: Receiver<View>) {
     thread::spawn(move || {
+        let mut view = View::Agents;
         loop {
-            let agents = host.fetch(&["agent", "list", "--json"]);
-            if tx.send(Msg::Agents(index, agents)).is_err()
-                || wake.recv_timeout(POLL) == Err(RecvTimeoutError::Disconnected)
-            {
+            let list = view.spec().list;
+            let msg = match view {
+                View::Agents => Msg::Agents(index, host.fetch(list)),
+                View::Roles => Msg::Roles(index, host.fetch(list)),
+            };
+            if tx.send(msg).is_err() {
                 return;
+            }
+            match wake.recv_timeout(POLL) {
+                Ok(next) => view = wake.try_iter().last().unwrap_or(next),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return,
             }
         }
     });
+}
+
+fn listing<'a, T>(
+    index: usize,
+    fetched: &'a Option<Result<Vec<T>, Failure>>,
+    empty: &str,
+    item: fn(usize, &'a T) -> Item<'a>,
+) -> Vec<Item<'a>> {
+    match fetched {
+        None => vec![Item::Host(index, "connecting".to_owned(), DIM)],
+        Some(Err(failure)) => vec![Item::Host(index, failure.to_string(), RED)],
+        Some(Ok(rows)) if rows.is_empty() => vec![Item::Host(index, empty.to_owned(), DIM)],
+        Some(Ok(rows)) => rows.iter().map(|row| item(index, row)).collect(),
+    }
 }
 
 fn field(label: &str, value: String, style: Style) -> Line<'static> {
@@ -526,10 +645,21 @@ mod tests {
         }
     }
 
+    fn role(name: &str, agents: usize, stale: usize) -> RoleRow {
+        RoleRow {
+            name: name.parse().unwrap(),
+            digest: "0".repeat(64).parse().unwrap(),
+            image: "alpine".parse().unwrap(),
+            agents,
+            stale,
+        }
+    }
+
     fn state(host: Host, agents: Option<Result<Vec<AgentRow>, Failure>>) -> HostState {
         HostState {
             host,
             agents,
+            roles: None,
             busy: BTreeMap::new(),
             wake: mpsc::channel().0,
         }
@@ -539,6 +669,7 @@ mod tests {
         let (tx, _) = mpsc::channel();
         App {
             hosts,
+            view: View::Agents,
             selected: 0,
             screen: Screen::Table,
             flash: None,
@@ -591,7 +722,24 @@ mod tests {
                 " prod-eu   echo-2   echo stale   ana     running   updating   -         drift                       ",
                 " prod-us   unreachable: ssh: connect refused                                                        ",
                 "                                                                                                    ",
-                " j/k move  enter detail  s start  x stop  u update  d remove  q quit                                ",
+                " j/k move  enter detail  s start  x stop  u update  d remove  tab roles  q quit                     ",
+            ]
+        );
+    }
+
+    #[test]
+    fn roles_view_counts_the_agents_on_each_role() {
+        let mut app = app(vec![state(ssh("prod-eu"), None)]);
+        app.hosts[0].roles = Some(Ok(vec![role("echo", 4, 1), role("builder", 2, 0)]));
+        app.view = View::Roles;
+        assert_eq!(
+            screen(&app, 64, 5),
+            [
+                " name      version        image    agents   stale               ",
+                " echo      000000000000   alpine   4        1                   ",
+                " builder   000000000000   alpine   2        0                   ",
+                "                                                                ",
+                " j/k move  enter detail  tab agents  q quit                     ",
             ]
         );
     }
@@ -611,6 +759,21 @@ mod tests {
                 " j/k move  enter detail  s start  x sto ",
             ]
         );
+    }
+
+    #[test]
+    fn switching_views_refreshes_every_host_at_once() {
+        let (wake, wakes) = mpsc::channel();
+        let mut app = app(vec![HostState {
+            host: ssh("prod-eu"),
+            agents: None,
+            roles: None,
+            busy: BTreeMap::new(),
+            wake,
+        }]);
+        app.key(KeyCode::Tab);
+        assert!(matches!(app.view, View::Roles));
+        assert!(matches!(wakes.try_recv(), Ok(View::Roles)));
     }
 
     #[test]
@@ -664,9 +827,8 @@ mod tests {
             env: BTreeMap::new(),
         };
         app.screen = Screen::Detail {
-            host: 0,
-            name: "echo-1".parse().unwrap(),
-            detail: Some(Ok(Box::new(detail))),
+            row: Row::Agent(0, "echo-1".parse().unwrap()),
+            detail: Some(Ok(Detail::Agent(Box::new(detail)))),
             scroll: 10,
         };
         assert_eq!(
