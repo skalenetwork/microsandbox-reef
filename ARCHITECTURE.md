@@ -71,8 +71,9 @@ Invariants:
 
 ```
 crates/reef-core   domain types, role parsing, plan()     deps: serde, toml (no I/O)
-crates/reef        the binary: CLI, store, secrets, msb   deps: reef-core, rusqlite,
-                                                          microsandbox, tokio, clap
+crates/reef        the binary: CLI, store, secrets, msb,  deps: reef-core, rusqlite,
+                   console                                microsandbox, tokio, clap,
+                                                          ratatui
 ```
 
 The split is compiler-enforced: decision logic cannot touch I/O.
@@ -86,6 +87,13 @@ each action through the six-method `Vmm` trait. `msb.rs` is the only module
 that names a microsandbox type — the blast door for a pre-1.0 dependency
 pinned at `=0.6.15` (upgrades are a deliberate task gated on the real-VM smoke
 test, never a routine bump).
+
+Console: `ui.rs` is a client of the `--json` rows the CLI prints, nothing more.
+It fetches them by running this binary locally or `ssh ALIAS <reef> agent list
+--json` remotely, polls every five seconds, and runs the same `agent start`,
+`stop`, `update` and `rm` commands an operator would type. It never opens the
+store and names no runtime type; a host knows only its own agents, and the
+console merges independent hosts on the laptop.
 
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
 status and an append-only event log. Observed VM state is never cached — it is
@@ -121,7 +129,9 @@ reef holds no credential for the credential store.
 ## Deliberately absent
 
 HTTP API and auth (the CLI is a local tool; the API will not ship without
-auth), budgets and metering, teams and projects, a web UI, multi-host,
+auth), budgets and metering, teams and projects, a web UI, multi-host state
+(each host's `reef.db` stands alone; `reef ui` fans out over ssh and merges
+nothing on the hosts),
 encrypted secrets at rest, lossless in-place image upgrade. Known limit: secret
 values also persist in microsandbox's sandbox config until the VM is
 recreated; removing that copy (env-source injection) is designed and queued.

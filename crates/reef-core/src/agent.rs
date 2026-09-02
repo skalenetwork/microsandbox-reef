@@ -1,8 +1,10 @@
 use crate::name::{AgentName, Digest, EnvKey, RoleName};
 use crate::plan::Drift;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Desired {
     Running,
     Stopped,
@@ -38,12 +40,36 @@ pub enum Lifecycle {
 }
 
 impl Lifecycle {
+    pub fn state(&self) -> State {
+        match self {
+            Self::Pending => State::Pending,
+            Self::Running => State::Running,
+            Self::Stopped => State::Stopped,
+            Self::Failed { .. } => State::Failed,
+        }
+    }
+
     pub fn label(&self) -> &'static str {
+        self.state().label()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum State {
+    Pending,
+    Running,
+    Stopped,
+    Failed,
+}
+
+impl State {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Pending => "pending",
             Self::Running => "running",
             Self::Stopped => "stopped",
-            Self::Failed { .. } => "failed",
+            Self::Failed => "failed",
         }
     }
 }

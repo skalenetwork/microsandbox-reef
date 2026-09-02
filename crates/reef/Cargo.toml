@@ -10,6 +10,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
 microsandbox = { version = "=0.6.15", default-features = false, features = ["net", "prebuilt"] }
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 reef-core = { path = "../reef-core", version = "0.7.0" }
 reqwest = "0.13"
 rusqlite = { version = "0.37", features = ["bundled"] }

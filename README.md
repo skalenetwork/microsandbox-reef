@@ -50,6 +50,7 @@ turns the notice off.
 | `reef agent rm reviewer-1` | VM destroyed, volumes kept |
 | `reef fleet apply fleet/*.toml` | Converge the declared fleet |
 | `reef events --agent reviewer-1` | The event log, oldest first |
+| `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
 
 `role list`, `agent list`, `agent get`, and `events` take `--json`.
 
@@ -91,6 +92,30 @@ with `--owner` at create, or per agent in a fleet file; default `$USER`),
 records a `served` event, and hands the session to `msb ssh serve --stdio`.
 The full pattern - certificates, sshd config, client config - is
 [enterprise terminal access](https://reef.clawbits.ai/docs/enterprise/access).
+
+### Console
+
+`reef ui` is a full-screen view of every agent on this host: state, VM, drift
+and ports in one table, Enter for what `agent get` prints, and `s`, `x`, `u`,
+`d` to start, stop, update and remove the selected agent (update and remove
+ask first). It is a client of the `--json` commands above and never opens the
+state directory itself: locally it runs this binary, and given ssh host aliases
+it runs `ssh ALIAS ~/.local/bin/reef ...` on each and merges the tables:
+
+```sh
+reef ui prod-eu prod-us
+```
+
+Each alias is a `Host` in `~/.ssh/config`, so bastions, certificates and key
+agents work as they do for `ssh` itself. Connect to a new host once in a
+terminal first: the console never answers prompts. `--reef CMD` names the
+command that runs reef on the hosts when it is not `~/.local/bin/reef`, such
+as `--reef 'sudo -n -u reef -H /home/reef/.local/bin/reef'` on a host set up
+for [remote access](https://reef.clawbits.ai/docs/enterprise/access). The table
+refreshes every five seconds and after each action; `ControlMaster auto`,
+`ControlPath ~/.ssh/cm-%C` and `ControlPersist 600` on the host's block keep
+one connection open between polls. The detail view prints the `ssh -L` and `agent ssh` lines that reach an
+agent's ports and terminal from your laptop.
 
 ## Roles
 
@@ -290,8 +315,9 @@ password `password`.
   or musl host resolves only `localhost`, where the same port still answers on
   `127.0.0.1`. `reef doctor` says which host you are on.
 - No disk I/O throttling - microsandbox caps disk size, not IOPS.
-- One host, no auth on the CLI (a local tool; the HTTP API comes later and
-  will not ship without auth).
+- One host per state dir, no auth on the CLI: it runs where the state lives,
+  and `reef ui` reaches it over your own ssh (the HTTP API comes later and will
+  not ship without auth).
 - `microsandbox` is pinned exactly (`=0.6.15`, beta upstream); upgrades are a
   deliberate task, never a routine bump. reef migrates `~/.microsandbox` to
   that schema on first run, and an older `msb` refuses the store afterwards -

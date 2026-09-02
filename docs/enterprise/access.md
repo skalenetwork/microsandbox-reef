@@ -66,6 +66,29 @@ authorized keys; add each person's public key once with
 authentication with the certificate's key id and principal, and every admitted
 session is a `served` event in `reef events`.
 
+## Administrators
+
+The forced command applies to every login as `reef`, so an administrator keeps
+their own account and reaches the CLI through sudo:
+
+```
+ana ALL=(reef) NOPASSWD: /home/reef/.local/bin/reef
+```
+
+Then `ssh reef-host sudo -n -u reef -H /home/reef/.local/bin/reef agent list`
+works from a laptop, and so does the console:
+
+```sh
+reef ui --reef 'sudo -n -u reef -H /home/reef/.local/bin/reef' reef-host
+```
+
+Passwordless sudo to the reef binary is the reef account: it can replace the
+binary, point `--state` anywhere and exec into every VM, so grant it to
+administrators only. sudo's log records who ran what; reef's events do not
+record the caller. The `terminal` line the console prints runs `agent ssh` as
+`reef`, not as you; the certificate path above is how you open an agent as
+yourself.
+
 ## Client setup
 
 One block in `~/.ssh/config`:

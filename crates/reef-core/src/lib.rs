@@ -5,7 +5,7 @@ mod plan;
 mod ports;
 mod role;
 
-pub use agent::{Agent, AgentSpec, AgentStatus, Desired, Lifecycle};
+pub use agent::{Agent, AgentSpec, AgentStatus, Desired, Lifecycle, State};
 pub use fleet::{Fleet, FleetAgent, parse_fleet};
 pub use name::{
     AgentName, Digest, Domain, EnvKey, GuestPath, Host, ImageRef, PortName, RoleName, SecretRef,

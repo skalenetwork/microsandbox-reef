@@ -1,10 +1,10 @@
+use crate::rows::Event;
 use anyhow::{Context, Result, bail};
 use reef_core::{
     Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Lifecycle, PortName, Role,
     RoleName,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -360,15 +360,6 @@ impl Store {
         })
         .collect()
     }
-}
-
-#[derive(Serialize)]
-pub struct Event {
-    pub id: i64,
-    pub agent: AgentName,
-    pub at: i64,
-    pub kind: String,
-    pub detail: String,
 }
 
 type RawAgent = (
