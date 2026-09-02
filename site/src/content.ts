@@ -12,7 +12,7 @@ export const install = `curl -fsSL ${url("/install")} | sh`;
 
 export const bullets = [
   `A role is a [small TOML file](${repo}/blob/main/roles/hermes.toml): the image, the domains the agent may reach and the secrets it may spend. The secret values never enter the VM.`,
-  "Each agent runs in its own microVM on your own servers and can only reach the domains its role allows.",
+  "Each agent runs in its own [microsandbox](https://microsandbox.dev) microVM on your own servers and can only reach the domains its role allows.",
   "Developers create agents from the roles you approved with one command. There is no daemon or server to run.",
 ];
 

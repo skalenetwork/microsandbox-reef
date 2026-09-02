@@ -65,7 +65,7 @@ const svg = (icon: typeof Copy01Icon) =>
       </nav>
       <slot />
     </main>
-    <footer>© {new Date().getFullYear()} SKALE Labs. MIT License.</footer>
+    <footer>© {new Date().getFullYear()} SKALE Labs. MIT License. Built on <a href="https://microsandbox.dev">microsandbox</a>.</footer>
     {path.startsWith("/docs/") && (
       <aside>
         <DocsNav current={path} />
