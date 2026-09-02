@@ -14,7 +14,7 @@ with deny-by-default egress and secrets it can spend but never read.
 The bet: what an org actually needs from an agent host is not orchestration —
 it is **containment it can review**. A role file is the whole blast radius:
 the egress list is what the agent can reach, and each secret names the one
-host it may be spent against. A reviewer reads ten lines and signs off once;
+host it may be spent against. A reviewer reads one screen and signs off once;
 every instance inherits the policy.
 
 ## The model

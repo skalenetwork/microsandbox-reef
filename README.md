@@ -4,17 +4,18 @@
 
 # reef
 
-**Isolated computers for agents.**
+**Run OpenClaw agents from one reviewed file.**
 
 [Install](#install) · [Commands](#commands) · [Docs](https://reef.clawbits.ai/docs) · [Architecture](ARCHITECTURE.md)
 
 </div>
 
-An org describes agent **roles** as TOML files; developers create **agents**
-from those roles; reef keeps each agent materialized as a
-[microsandbox](https://github.com/superradcompany/microsandbox) microVM that
-matches its record. The record is durable, the VM is cattle; there is no
-daemon - every mutating command reconciles inline, and VMs outlive reef.
+A **role** is a TOML file: the image, the resources, the domains an agent may
+reach, and the secrets it may spend. Developers create **agents** from the
+roles you approved, one command each, and every agent runs in its own
+[microsandbox](https://github.com/superradcompany/microsandbox) microVM on
+your own servers. There is no daemon: every mutating command reconciles
+inline, and the VMs outlive reef.
 
 ## Install
 
@@ -29,6 +30,77 @@ Apple Silicon macOS. Then: `reef doctor`.
 `reef update` replaces the binary in place with the latest release. Commands
 note a newer version on stderr, checked at most once a day; `REEF_NO_UPDATE_CHECK=1`
 turns the notice off.
+
+## Run OpenClaw in a microVM
+
+```sh
+curl -fsSL https://reef.clawbits.ai/roles/openclaw.toml -o role.toml
+curl -fsSL https://reef.clawbits.ai/fleet/openclaw.toml -o fleet.toml
+# put your own OPENCLAW_GATEWAY_TOKEN in fleet.toml: openssl rand -hex 32
+reef role apply role.toml
+reef fleet apply fleet.toml
+```
+
+No secrets file and nothing configured in advance: open the URL `fleet apply`
+printed, paste the token, pick a model provider in the browser.
+
+`role apply` says what the file costs:
+
+```
+warn   openclaw disables egress filtering; its agents reach any host
+```
+
+That is this role's `egress = ["*"]`, and it is deliberate: an agent that
+browses the web has to reach the web. Opting out takes writing that rule, and
+reef warns on every apply. Either way the file is the whole policy.
+
+## Narrow it
+
+Same shape with the allowlist kept. These four lines of
+[roles/hermes.toml](roles/hermes.toml) are a
+[Hermes](https://github.com/NousResearch/hermes-agent) agent's entire blast
+radius:
+
+```toml
+[network]
+egress = ["openrouter.ai"]
+
+[secrets]
+OPENROUTER_API_KEY = { ref = "reef://hermes/openrouter", host = "openrouter.ai" }
+```
+
+One domain reachable, one key spendable against that domain and nowhere else;
+the guest sees a placeholder, never the value. The rest of the file is the
+image, resources, the dashboard port and a volume: twenty lines in all.
+Approve that version once and every agent created from it inherits the policy,
+while agents left on an older version read as stale.
+
+Put the key in `~/.local/state/reef/secrets.toml` (`chmod 600`):
+
+```toml
+[hermes]
+openrouter = "sk-or-..."
+```
+
+```sh
+reef role apply roles/hermes.toml
+reef fleet apply fleet/hermes.toml
+reef agent get bob-hermes
+```
+
+Two agents, each with its dashboard on the `ports` line of `agent get` - log
+in as `ana` or `bob`, password `password`.
+
+## What reef adds to microsandbox
+
+The isolation is
+[microsandbox](https://github.com/superradcompany/microsandbox): the microVM,
+the DNS-enforced egress allowlist, and the host-side substitution that keeps a
+secret value out of the guest are its features, reached through one module.
+reef adds the layer above them: the role file that settles all three before an
+agent exists, one reviewed version shared by every agent created from it, a
+stale mark when an agent is left behind, fleet convergence, agent records that
+outlive the VMs, and one console across hosts.
 
 ## Commands
 
@@ -267,25 +339,6 @@ longer declare, so pass it the whole fleet directory - a partial file list
 with `--prune` deletes everything it cannot see. Without the flag, undeclared
 agents are only reported. Hand-made agents are never touched, and volumes
 survive removal.
-
-## Try it: a hermes fleet
-
-Put an OpenRouter key in `~/.local/state/reef/secrets.toml` (`chmod 600`):
-
-```toml
-[hermes]
-openrouter = "sk-or-..."
-```
-
-```sh
-reef role apply roles/hermes.toml
-reef fleet apply fleet/hermes.toml
-reef agent get bob-hermes
-```
-
-Two [Hermes](https://github.com/NousResearch/hermes-agent) agents, each with
-its dashboard on the `ports` line of `agent get` - log in as `ana` or `bob`,
-password `password`.
 
 ## State
 

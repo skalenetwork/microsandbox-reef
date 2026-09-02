@@ -1,6 +1,6 @@
-export const description = "Isolated computers for agents in your org.";
+export const description = "Run OpenClaw agents from one reviewed file.";
 
-const slug = "skalenetwork/reef";
+const slug = "skalenetwork/microsandbox-reef";
 
 export const repo = `https://github.com/${slug}`;
 
@@ -11,8 +11,8 @@ export const url = (path: string) => new URL(path, import.meta.env.SITE);
 export const install = `curl -fsSL ${url("/install")} | sh`;
 
 export const bullets = [
+  `A role is a [small TOML file](${repo}/blob/main/roles/hermes.toml): the image, the domains the agent may reach and the secrets it may spend. The secret values never enter the VM.`,
   "Each agent runs in its own microVM on your own servers and can only reach the domains its role allows.",
-  `A role is a [small TOML file](${repo}/blob/main/roles/hermes.toml) with the image, allowed domains and secrets. The secret values never enter the VM.`,
   "Developers create agents from the roles you approved with one command. There is no daemon or server to run.",
 ];
 

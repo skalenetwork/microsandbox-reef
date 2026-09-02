@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::task::JoinHandle;
 
-const REPO: &str = "https://github.com/skalenetwork/reef";
+const REPO: &str = "https://github.com/skalenetwork/microsandbox-reef";
 const TTL: u64 = 24 * 60 * 60;
 const WAIT: Duration = Duration::from_secs(2);
 

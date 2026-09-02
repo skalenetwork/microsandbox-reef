@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-repo="skalenetwork/reef"
+repo="skalenetwork/microsandbox-reef"
 
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target="x86_64-unknown-linux-gnu" ;;

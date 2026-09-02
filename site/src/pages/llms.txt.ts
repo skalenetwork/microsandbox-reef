@@ -20,7 +20,7 @@ Install: \`${install}\`, then \`reef doctor\`. Linux x86_64/aarch64 and Apple Si
 - [README](${url("/README.md")}): every command, role and fleet file format, secrets.toml, state, known limits
 - [Architecture](${url("/ARCHITECTURE.md")}): goal, model, invariants, what is deliberately absent
 ${guides.join("\n")}
-- [Source](https://github.com/skalenetwork/reef): MIT, SKALE Labs
+- [Source](https://github.com/skalenetwork/microsandbox-reef): MIT, SKALE Labs
 
 ## Examples
 
