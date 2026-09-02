@@ -6,14 +6,15 @@ import { bullets, description, install, url } from "../content";
 const journey = `# is this host ready?
 reef doctor
 
-# fetch a role, create an agent
-curl -fsSLO ${url("/roles/echo.toml")}
-reef role apply echo.toml
-reef agent create --role echo --name demo
-reef agent get demo --wait
+# fetch the openclaw role and import it
+curl -fsSLO ${url("/roles/openclaw.toml")}
+reef role apply openclaw.toml
 
-# run something inside
-reef agent exec demo -- uname -a`;
+# one agent from it, with its own gateway token
+token=$(openssl rand -hex 32)
+reef agent create --role openclaw --name claw \\
+  --env OPENCLAW_GATEWAY_TOKEN=$token
+reef agent get claw --wait`;
 const prompt = `Install reef and create my first agent.
 Start with ${url("/llms.txt")}`;
 const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
