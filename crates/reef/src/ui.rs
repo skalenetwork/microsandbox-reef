@@ -306,8 +306,9 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let [body, footer] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
+        let [body, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)])
+            .horizontal_margin(1)
+            .areas(frame.area());
         match &self.screen {
             Screen::Detail {
                 host,
@@ -495,7 +496,7 @@ fn field(label: &str, value: String, style: Style) -> Line<'static> {
 }
 
 fn pad(text: &str, width: usize) -> String {
-    format!("{text:<width$} ")
+    format!("{text:<width$}   ")
 }
 
 #[cfg(test)]
@@ -583,14 +584,14 @@ mod tests {
             .busy
             .insert("echo-2".parse().unwrap(), Verb::Update);
         assert_eq!(
-            screen(&app, 80, 6),
+            screen(&app, 100, 6),
             [
-                "host    name   role       owner desired state    vm      sync  ports            ",
-                "prod-eu echo-1 echo       ana   running running  running yes   ui=19007         ",
-                "prod-eu echo-2 echo stale ana   running updating -       drift                  ",
-                "prod-us unreachable: ssh: connect refused                                       ",
-                "                                                                                ",
-                "j/k move  enter detail  s start  x stop  u update  d remove  q quit             ",
+                " host      name     role         owner   desired   state      vm        sync    ports               ",
+                " prod-eu   echo-1   echo         ana     running   running    running   yes     ui=19007            ",
+                " prod-eu   echo-2   echo stale   ana     running   updating   -         drift                       ",
+                " prod-us   unreachable: ssh: connect refused                                                        ",
+                "                                                                                                    ",
+                " j/k move  enter detail  s start  x stop  u update  d remove  q quit                                ",
             ]
         );
     }
@@ -605,9 +606,9 @@ mod tests {
         assert_eq!(
             screen(&app, 40, 3),
             [
-                "name role owner desired state vm sync po",
-                "connecting                              ",
-                "j/k move  enter detail  s start  x stop ",
+                " name   role   owner   desired   state  ",
+                " connecting                             ",
+                " j/k move  enter detail  s start  x sto ",
             ]
         );
     }
@@ -671,12 +672,12 @@ mod tests {
         assert_eq!(
             screen(&app, 60, 6),
             [
-                "ports      ui=http://echo-1.localhost:19007                 ",
-                "synced     yes                                              ",
-                "forward    ssh -N -L 19007:127.0.0.1:19007 -- prod-eu       ",
-                "terminal   ssh -t -- prod-eu reef agent ssh echo-1          ",
+                " ports        ui=http://echo-1.localhost:19007              ",
+                " synced       yes                                           ",
+                " forward      ssh -N -L 19007:127.0.0.1:19007 -- prod-eu    ",
+                " terminal     ssh -t -- prod-eu reef agent ssh echo-1       ",
                 "                                                            ",
-                "j/k scroll  esc back  q quit                                ",
+                " j/k scroll  esc back  q quit                               ",
             ]
         );
     }
