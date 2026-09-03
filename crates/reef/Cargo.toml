@@ -9,7 +9,7 @@ license.workspace = true
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
-microsandbox = { version = "=0.6.15", default-features = false, features = ["net", "prebuilt"] }
+microsandbox = { version = "=0.6.16", default-features = false, features = ["net", "prebuilt"] }
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 reef-core = { path = "../reef-core", version = "0.9.0" }
 reqwest = "0.13"

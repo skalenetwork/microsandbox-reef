@@ -6,7 +6,7 @@ init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
 vcpus = 4
-memory-mib = 6144
+memory-mib = 8192
 disk-gib = 20
 
 [env]
