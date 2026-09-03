@@ -2,9 +2,9 @@ import { renderMermaidSVG } from "beautiful-mermaid";
 import type { MdastPluginDefinition } from "satteri";
 
 const options = {
-  bg: "var(--paper)",
-  fg: "var(--text)",
-  accent: "var(--brand)",
+  bg: "var(--paper, #fff)",
+  fg: "var(--text, #000)",
+  accent: "var(--brand, #ca342b)",
   font: "Geist Mono",
   transparent: true,
 };

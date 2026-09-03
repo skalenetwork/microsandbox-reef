@@ -1,3 +1,5 @@
+import type { MarkdownInstance } from "astro";
+
 export const description = "Run OpenClaw agents from one reviewed file.";
 
 const slug = "skalenetwork/microsandbox-reef";
@@ -17,11 +19,14 @@ export const bullets = [
 ];
 
 export const files = import.meta.glob(
-  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../roles/*.toml", "../../fleet/*.toml"],
+  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/*.toml", "../../fleet/*.toml"],
   { query: "?raw", import: "default", eager: true },
 );
 
-export const route = (file: string) => file.replace("../../", "").replace("install.sh", "install");
+const DATE = /blog\/(\d{4}-\d\d-\d\d)-/;
+
+export const route = (file: string) =>
+  file.replace("../../", "").replace("install.sh", "install").replace(DATE, "blog/");
 
 export const docs = Object.entries(files)
   .filter(([file]) => file.includes("/docs/"))
@@ -31,3 +36,22 @@ export const docs = Object.entries(files)
     section: route(file).split("/")[1].replace(/^./, (c) => c.toUpperCase()),
     title: body.split("\n")[0].slice(2),
   }));
+
+const rendered = import.meta.glob<MarkdownInstance<Record<string, unknown>>>("../../blog/*.md", { eager: true });
+
+export const posts = Object.entries(files)
+  .filter(([file]) => file.includes("/blog/"))
+  .sort(([a], [b]) => b.localeCompare(a))
+  .map(([file, body]) => {
+    const [heading, summary] = body.split("\n\n");
+    const date = file.match(DATE)?.[1];
+    if (!date || !summary || !heading.startsWith("# "))
+      throw new Error(`${file}: expected blog/YYYY-MM-DD-slug.md opening with "# Title", a blank line, then a summary paragraph`);
+    return {
+      path: `/${route(file).replace(".md", "")}`,
+      date,
+      title: heading.slice(2),
+      summary: summary.trim().replace(/\n/g, " "),
+      md: rendered[file]!,
+    };
+  });

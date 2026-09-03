@@ -14,6 +14,8 @@ HOME = "/home/node"
 XDG_CACHE_HOME = "/home/node/.openclaw/cache"
 OPENCLAW_SUPERVISOR_MODE = "external"
 OPENCLAW_NO_AUTO_UPDATE = "1"
+NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
+GIT_SSL_CAINFO = "/.msb/tls/ca.pem"
 
 [files]
 "/etc/openclaw/start" = { mode = 0o755, content = '''
@@ -35,16 +37,18 @@ exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway 
       "mode": "trusted-proxy",
       "trustedProxy": {
         "userHeader": "cf-access-authenticated-user-email",
-        "requiredHeaders": ["cf-access-jwt-assertion"],
         "deviceAutoApprove": {
           "enabled": true,
           "scopes": ["operator.read", "operator.write", "operator.approvals", "operator.questions"]
         }
       }
     },
-    "controlUi": { "allowedOrigins": ["https://coding.agents.example.com"] }
+    "controlUi": { "allowedOrigins": ["https://${OPENCLAW_PUBLIC_HOST}"] }
   },
-  "tools": { "sessions": { "visibility": "agent" } }
+  "tools": {
+    "sessions": { "visibility": "agent" },
+    "web": { "search": { "enabled": false } }
+  }
 }
 '''
 
@@ -55,7 +59,14 @@ gateway = 18789
 state = { dest = "/home/node/.openclaw", size-mib = 10240 }
 
 [network]
-egress = ["openrouter.ai", "github.com", "*.githubusercontent.com", "registry.npmjs.org"]
+egress = [
+  "openrouter.ai",
+  "github.com",
+  "api.github.com",
+  "codeload.github.com",
+  "*.githubusercontent.com",
+  "registry.npmjs.org",
+]
 
 [secrets]
 OPENROUTER_API_KEY = { ref = "reef://openclaw-coding/openrouter", host = "openrouter.ai" }

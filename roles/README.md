@@ -50,11 +50,25 @@ narrowest path that holds the state you need.
   "trusted-proxy"` so org SSO decides who the caller is, no gateway token
   (trusted-proxy and token auth are mutually exclusive), a narrow per-purpose
   egress list, and a separate secret ref each so provider spend separates by
-  purpose. Declaring a secret turns on TLS interception for the whole VM, which
-  is why these two carry `--ignore-certificate-errors` and `openclaw` does not.
-  They seed the same `tools.sessions.visibility`, which on a gateway a team
-  shares is what decides whether one member's session can read another's.
-  Skeletons: the domain lists and ingress hostnames are placeholders. See
+  purpose. `requiredHeaders` is left unset on purpose: naming
+  `cf-access-jwt-assertion` there, next to `cf-access-authenticated-user-email`
+  as the `userHeader`, switches OpenClaw onto a Cloudflare Access identity
+  lookup that needs two more egress domains and a GitHub-backed Access IdP,
+  where the plain email builds the same durable user profile with neither. The
+  public hostname is an env reference, `${OPENCLAW_PUBLIC_HOST}` in
+  `controlUi.allowedOrigins`, supplied per agent from
+  [fleet/openclaw-team.toml](../fleet/openclaw-team.toml): the roles carry no
+  site-specific string, and changing a hostname is a fleet apply rather than a
+  re-seed. Declaring a secret turns on TLS interception for the whole VM, which
+  is why these two carry `--ignore-certificate-errors` and
+  `NODE_EXTRA_CA_CERTS`, and `openclaw` carries neither: without the second one
+  the gateway's own outbound TLS rejects the interception certificate. The same
+  secret is why `tools.web.search.enabled = false` is seeded, since a declared
+  `OPENROUTER_API_KEY` makes OpenClaw treat the perplexity web-search provider
+  as configured and refuse to start over its unbundled plugin. They seed the
+  same `tools.sessions.visibility`, which on a gateway a team shares is what
+  decides whether one member's session can read another's. Skeletons: the domain
+  lists are placeholders. See
   [enterprise OpenClaw](../docs/enterprise/openclaw.md) for the shape and
   [Cloudflare Access](../docs/enterprise/cloudflare-access.md) for the worked
   setup.

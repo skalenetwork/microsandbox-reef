@@ -14,6 +14,7 @@ HOME = "/home/node"
 XDG_CACHE_HOME = "/home/node/.openclaw/cache"
 OPENCLAW_SUPERVISOR_MODE = "external"
 OPENCLAW_NO_AUTO_UPDATE = "1"
+NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
 
 [files]
 "/etc/openclaw/start" = { mode = 0o755, content = '''
@@ -35,16 +36,18 @@ exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway 
       "mode": "trusted-proxy",
       "trustedProxy": {
         "userHeader": "cf-access-authenticated-user-email",
-        "requiredHeaders": ["cf-access-jwt-assertion"],
         "deviceAutoApprove": {
           "enabled": true,
           "scopes": ["operator.read", "operator.write", "operator.approvals", "operator.questions"]
         }
       }
     },
-    "controlUi": { "allowedOrigins": ["https://marketing.agents.example.com"] }
+    "controlUi": { "allowedOrigins": ["https://${OPENCLAW_PUBLIC_HOST}"] }
   },
-  "tools": { "sessions": { "visibility": "agent" } }
+  "tools": {
+    "sessions": { "visibility": "agent" },
+    "web": { "search": { "enabled": false } }
+  }
 }
 '''
 
@@ -55,7 +58,14 @@ gateway = 18789
 state = { dest = "/home/node/.openclaw", size-mib = 10240 }
 
 [network]
-egress = ["openrouter.ai", "*.hubspot.com", "*.linkedin.com"]
+egress = [
+  "openrouter.ai",
+  "*.hubspot.com",
+  "*.hsforms.net",
+  "*.hsappstatic.net",
+  "*.linkedin.com",
+  "*.licdn.com",
+]
 
 [secrets]
 OPENROUTER_API_KEY = { ref = "reef://openclaw-marketing/openrouter", host = "openrouter.ai" }

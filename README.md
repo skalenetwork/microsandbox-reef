@@ -25,7 +25,22 @@ curl -fsSL https://reef.clawbits.ai/install | sh
 
 Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the
 directory, `REEF_VERSION=0.4.0` pins a version. Linux x86_64/aarch64 and
-Apple Silicon macOS. Then: `reef doctor`.
+Apple Silicon macOS; the Linux builds are glibc and need 2.39 or newer.
+
+reef drives microsandbox rather than shipping it, so a host that never builds
+reef from source needs the `msb` bundle installed once. The installer always
+takes the newest release, which is not the one reef is pinned to, so pin it:
+
+```sh
+curl -fsSL https://install.microsandbox.dev | sh
+msb self downgrade 0.6.15 -y
+msb doctor
+```
+
+`msb doctor` is what checks the host can run microVMs: CPU virtualization, the
+KVM device, and whether this account can open it. `reef doctor` reports the msb
+it resolved, and that version has to be the pinned one or `agent create` fails
+on a launch-config mismatch.
 
 `reef update` replaces the binary in place with the latest release. Commands
 note a newer version on stderr, checked at most once a day; `REEF_NO_UPDATE_CHECK=1`

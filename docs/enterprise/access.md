@@ -46,6 +46,10 @@ Match User reef
   DisableForwarding yes
 ```
 
+`reef agent serve` reads the certificate by running `ssh-keygen -L`, so the
+host needs OpenSSH's client tools alongside sshd; `reef doctor` does not check
+for them.
+
 `reef-principals` lists one username per line: who may reach the account at
 all. `reef agent serve` is the whole authorization step: it reads the
 certificate sshd verified, admits the caller only if one of its principals
@@ -99,9 +103,13 @@ Host *.reef
   ProxyCommand ssh reef@reef-host.example.com "$(basename %h .reef)"
 ```
 
-Then `ssh hermes-ana.reef` opens a terminal in the agent, and `scp`, port
-forwarding, and editor remote sessions work unchanged: it is plain SSH end to
-end.
+Then `ssh hermes-ana.reef` opens a terminal in the agent, and `scp` and
+`ssh -L` work through it. Remote (`-R`) forwarding, agent forwarding and X11 are
+not implemented at the VM boundary.
+
+The agent's SSH host key lives in microsandbox's per-sandbox directory and is
+deleted with the VM, so any role change regenerates it and each client has to
+drop the stale `known_hosts` entry for that name.
 
 ## Certificates
 

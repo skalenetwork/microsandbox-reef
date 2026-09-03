@@ -12,7 +12,8 @@ lists and hostnames are placeholders.
 
 A fleet file is a matrix. The **role** is the blast radius: image, egress,
 secrets, resources. The **owner** is who may open a terminal into it. They move
-independently, and an owner change never touches the VM.
+independently, and an owner change never touches the VM: it is an edit to the
+agent's fleet entry, applied by `reef fleet apply`.
 
 ```mermaid
 flowchart LR
@@ -30,9 +31,11 @@ role = "openclaw-marketing"
 owner = "marketing"
 ```
 
-**Share an agent when the people sharing it are one trust domain.** A shared
-gateway has no per-person separation: one session list, one workspace, one
-credential pool, one browser cookie jar. Upstream is explicit that one gateway
+**Share an agent when the people sharing it are one trust domain.** As these
+roles ship, a shared gateway has no per-person separation: one session list, one
+workspace, one credential pool, one browser cookie jar. Each person still gets a
+durable identity from the email Access supplies, which is what names them in the
+session log and on the sessions they create. Upstream is explicit that one gateway
 is one trusted operator domain. When the people are not in one trust domain,
 give each their own agent instead; they cost one role file between them.
 
@@ -59,8 +62,8 @@ Each role names only what its purpose needs, which is what a reviewer reads:
 
 | role | reaches |
 | --- | --- |
-| `openclaw-marketing` | the provider, plus the marketing stack |
-| `openclaw-coding` | the provider, plus code hosting and the package registry |
+| `openclaw-marketing` | the provider, plus the marketing stack and its asset hosts |
+| `openclaw-coding` | the provider, plus code hosting, its API, and the package registry |
 
 Each also names its own secret, so the two purposes hold different provider
 keys and the bills separate by purpose. The value is substituted host-side and
@@ -72,6 +75,9 @@ Terminal access is [remote access](/docs/enterprise/access): SSH certificates,
 no new accounts.
 
 Browser access needs an identity-aware proxy in front of the published port.
-[Cloudflare Access](/docs/enterprise/cloudflare-access) is the worked example,
-and the only settings that change for a different proxy are `userHeader` and
-`requiredHeaders`.
+[Cloudflare Access](/docs/enterprise/cloudflare-access) is the worked example;
+for a different proxy, `userHeader` names the header that carries the identity.
+
+The role files carry the policy, never the people. Who may reach an agent is the
+Access policy on its hostname, and who may open a terminal is the agent's
+`owner`.

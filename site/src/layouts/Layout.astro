@@ -8,15 +8,16 @@ import logo from "../assets/reef.png";
 import fallback from "../assets/og.jpg";
 import "../styles.css";
 
-type Props = { title: string; path: string };
+type Props = { title: string; path: string; summary?: string };
 
-const { title, path } = Astro.props;
+const { title, path, summary = description } = Astro.props;
 const icon = await getImage({ src: logo, width: 64, format: "png" });
 const cards = import.meta.glob<{ default: ImageMetadata }>("../assets/og/**/*.jpg", { eager: true });
 const og = cards[`../assets/og${path}.jpg`]?.default ?? fallback;
 const links = [
   { href: "/", label: "Home" },
   { href: "/docs", label: "Docs" },
+  { href: "/blog", label: "Blog" },
   { href: repo, label: "GitHub" },
 ];
 const current = (href: string) => (href === path ? "page" : href !== "/" && path.startsWith(href) ? "true" : undefined);
@@ -39,18 +40,19 @@ const svg = (icon: typeof Copy01Icon) =>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
-    <meta name="description" content={description} />
+    <meta name="description" content={summary} />
     <link rel="icon" href={icon.src} />
     <link rel="canonical" href={url(path)} />
-    <meta property="og:type" content="website" />
+    <link rel="alternate" type="application/rss+xml" title="reef" href={url("/rss.xml")} />
+    <meta property="og:type" content={path.startsWith("/blog/") ? "article" : "website"} />
     <meta property="og:url" content={url(path)} />
     <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={summary} />
     <meta property="og:image" content={url(og.src)} />
     <meta property="og:image:width" content={og.width} />
     <meta property="og:image:height" content={og.height} />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content={description} />
+    <meta name="twitter:title" content={path.startsWith("/blog/") ? title : description} />
     <Font cssVariable="--font" preload />
   </head>
   <body>

@@ -1,0 +1,21 @@
+---
+import type { InferGetStaticPropsType } from "astro";
+import Layout from "../../layouts/Layout.astro";
+import { posts } from "../../content";
+
+export const getStaticPaths = () => posts.map((post) => ({ params: { slug: post.path.replace("/blog/", "") }, props: { post } }));
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+
+const { post } = Astro.props;
+const { Content } = post.md;
+---
+
+<Layout title={`${post.title} - reef`} path={post.path} summary={post.summary}>
+  <div class="group">
+    <p>{post.date}</p>
+    <article>
+      <Content />
+    </article>
+  </div>
+</Layout>

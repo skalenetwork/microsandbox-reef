@@ -1,0 +1,17 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { posts } from "../../content";
+---
+
+<Layout title="Blog - reef" path="/blog">
+  <ul>
+    {
+      posts.map((post) => (
+        <li>
+          <a href={post.path}>{post.title}</a>
+          <p>{post.date}. {post.summary}</p>
+        </li>
+      ))
+    }
+  </ul>
+</Layout>

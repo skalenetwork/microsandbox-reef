@@ -1,6 +1,9 @@
 /install
   Content-Type: text/plain; charset=utf-8
 
+/rss.xml
+  Content-Type: application/rss+xml; charset=utf-8
+
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
 

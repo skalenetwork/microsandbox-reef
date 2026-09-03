@@ -45,9 +45,13 @@ credential for, so the first message fails until you do this.
   not intercept, so Chromium validates real certificates. Adding a secret turns
   interception on for port 443 across the VM, and the role then needs
   `browser.extraArgs: ["--ignore-certificate-errors"]`.
-- **The config is seeded once, then the agent owns it.** Editing the role does
-  not re-seed: delete `/home/node/.openclaw/openclaw.json` and restart to pick
-  up new defaults.
+- **The config is seeded once, then the agent owns it.** `[files]` writes
+  `/etc/openclaw/defaults.json` into the rootfs and the `start` script copies it
+  to the volume only when the copy is absent, so a role edit reaches neither
+  until the VM is rebuilt. To pick one up: `reef role apply role.toml`,
+  `reef agent update openclaw`,
+  `reef agent exec openclaw -- rm /home/node/.openclaw/openclaw.json`, then
+  `reef agent stop openclaw` and `reef agent start openclaw`.
 - **Session tools reach every session on the agent.** 2026.8.2 widened the
   default from `tree` to `agent`, so the role pins `tools.sessions.visibility`
   instead of inheriting it. Set `tree` or `self` to narrow it.
