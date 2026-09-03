@@ -1,16 +1,19 @@
 ---
+import type { ImageMetadata } from "astro";
 import { Font, Image, getImage } from "astro:assets";
 import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import DocsNav from "../components/DocsNav.astro";
 import { description, latest, repo, url } from "../content";
 import logo from "../assets/reef.png";
-import og from "../assets/og.jpg";
+import fallback from "../assets/og.jpg";
 import "../styles.css";
 
 type Props = { title: string; path: string };
 
 const { title, path } = Astro.props;
 const icon = await getImage({ src: logo, width: 64, format: "png" });
+const cards = import.meta.glob<{ default: ImageMetadata }>("../assets/og/**/*.jpg", { eager: true });
+const og = cards[`../assets/og${path}.jpg`]?.default ?? fallback;
 const links = [
   { href: "/", label: "Home" },
   { href: "/docs", label: "Docs" },
