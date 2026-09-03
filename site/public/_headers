@@ -3,3 +3,9 @@
 
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
+
+/reef-ui.gif
+  Cache-Control: public, max-age=604800
+
+/reef-ui.png
+  Cache-Control: public, max-age=604800
