@@ -85,7 +85,7 @@ problems at once), stores it content-addressed by digest, and marks it active.
 inputs (desired state, what drifted, observed VM), and the executor applies
 each action through the six-method `Vmm` trait. `msb.rs` is the only module
 that names a microsandbox type — the blast door for a pre-1.0 dependency
-pinned at `=0.6.15` (upgrades are a deliberate task gated on the real-VM smoke
+pinned at `=0.6.16` (upgrades are a deliberate task gated on the real-VM smoke
 test, never a routine bump).
 
 Console: `ui.rs` is a client of the `--json` rows the CLI prints, nothing more.

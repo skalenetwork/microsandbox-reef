@@ -144,10 +144,7 @@ impl Vmm for Msb {
                  refusing to destroy it (remove it with `msb rm` if it is really yours)"
             );
         }
-        if map_status(handle.status_snapshot()) == VmStatus::Running {
-            handle.stop().await?;
-        }
-        Sandbox::remove(name).await?;
+        handle.destroy().await?;
         Ok(())
     }
 }
@@ -247,10 +244,7 @@ impl Msb {
         let vanished = async {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                if matches!(
-                    self.status(name).await,
-                    Ok(None) | Ok(Some(VmStatus::Stopped))
-                ) {
+                if !matches!(sandbox.status().await, Ok(s) if map_status(s) == VmStatus::Running) {
                     return;
                 }
             }
@@ -437,9 +431,7 @@ pub fn doctor() -> Result<()> {
     if !Path::new("/dev/kvm").exists() {
         bail!("/dev/kvm is missing: this host cannot run microVMs");
     }
-    let home = std::env::var("MSB_HOME")
-        .map(PathBuf::from)
-        .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".microsandbox")))?;
+    let home = microsandbox::config::config()?.home();
     println!("state  {}", home.display());
     #[cfg(unix)]
     {

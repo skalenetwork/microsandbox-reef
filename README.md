@@ -33,7 +33,7 @@ takes the newest release, which is not the one reef is pinned to, so pin it:
 
 ```sh
 curl -fsSL https://install.microsandbox.dev | sh
-msb self downgrade 0.6.15 -y
+msb self downgrade 0.6.16 -y
 msb doctor
 ```
 
@@ -397,7 +397,7 @@ survive removal.
 - One host per state dir, no auth on the CLI: it runs where the state lives,
   and `reef ui` reaches it over your own ssh (the HTTP API comes later and will
   not ship without auth).
-- `microsandbox` is pinned exactly (`=0.6.15`, beta upstream); upgrades are a
+- `microsandbox` is pinned exactly (`=0.6.16`, beta upstream); upgrades are a
   deliberate task, never a routine bump. reef migrates `~/.microsandbox` to
   that schema on first run, and an older `msb` refuses the store afterwards -
   upgrade `msb` alongside reef, or roll back with `msb self downgrade`.
