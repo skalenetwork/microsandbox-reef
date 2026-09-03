@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.10.0] - 2026-09-03
+
+### Added
+- Update to msb 0.6.16
+- Add roles viewer to tui
+- Reef ui, a console over the --json rows
+- Implement [files] for roles
+- Add openclaw-browser role, add option to allow all hosts
+- Add serve cmd, add docs, update openclaw example
+- Add volumes support, update hermes reference
+- Non-destructive env patching
+- Fleet files, exposed ports, per-agent env
+- Add active ports to forward cmd, fix minor bugs
+
+### Fixed
+- Fix openclaw enterprise roles and the cloudflare access setup
+- Package publish
+- Package publish
+
+
 ## [0.9.0] - 2026-09-02
 
 ### Added
