@@ -28,19 +28,26 @@ directory, `REEF_VERSION=0.4.0` pins a version. Linux x86_64/aarch64 and
 Apple Silicon macOS; the Linux builds are glibc and need 2.39 or newer.
 
 reef drives microsandbox rather than shipping it, so a host that never builds
-reef from source needs the `msb` bundle installed once. The installer always
-takes the newest release, which is not the one reef is pinned to, so pin it:
+reef from source needs the `msb` bundle installed once. The installer takes the
+newest release, which is not always the one reef pins, and a mismatch surfaces
+at the first `agent create` as a launch-config error rather than at install
+time. Read the pin for the release you installed and compare:
 
 ```sh
 curl -fsSL https://install.microsandbox.dev | sh
-msb self downgrade 0.6.16 -y
-msb doctor
+curl -fsSL "https://raw.githubusercontent.com/skalenetwork/microsandbox-reef/v$(reef --version | cut -d' ' -f2)/crates/reef/Cargo.toml" | grep microsandbox
+msb --version
 ```
 
-`msb doctor` is what checks the host can run microVMs: CPU virtualization, the
-KVM device, and whether this account can open it. `reef doctor` reports the msb
-it resolved, and that version has to be the pinned one or `agent create` fails
-on a launch-config mismatch.
+`msb self downgrade <version> -y` rolls msb back when the installer ran ahead.
+Then `msb doctor` checks the host can run microVMs at all: CPU virtualization,
+the KVM device, and whether this account can open it. Note that it enables
+virtualization lazily on Linux before 6.13, so a passing `msb doctor` is not
+proof that a VM will start.
+
+The full host checklist, including the glibc floor, the KVM traps and running
+alongside another reef, is
+[prepare a host](https://reef.clawbits.ai/docs/setup/host).
 
 `reef update` replaces the binary in place with the latest release. Commands
 note a newer version on stderr, checked at most once a day; `REEF_NO_UPDATE_CHECK=1`

@@ -15,7 +15,6 @@ XDG_CACHE_HOME = "/home/node/.openclaw/cache"
 OPENCLAW_SUPERVISOR_MODE = "external"
 OPENCLAW_NO_AUTO_UPDATE = "1"
 NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
-GIT_SSL_CAINFO = "/.msb/tls/ca.pem"
 
 [files]
 "/etc/openclaw/start" = { mode = 0o755, content = '''

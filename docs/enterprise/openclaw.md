@@ -8,6 +8,11 @@ egress list and its own provider credential.
 The roles are skeletons. The shape and the auth wiring are settled; the domain
 lists and hostnames are placeholders.
 
+This is one shape, not the shape. Two agents split by purpose is what these files
+demonstrate, but the axes below are the point: split by whatever your org already
+splits by, and give each split its own role, its own egress list and its own
+credential. The host itself is [prepare a host](/docs/setup/host).
+
 ## Two axes
 
 A fleet file is a matrix. The **role** is the blast radius: image, egress,
@@ -79,5 +84,6 @@ Browser access needs an identity-aware proxy in front of the published port.
 for a different proxy, `userHeader` names the header that carries the identity.
 
 The role files carry the policy, never the people. Who may reach an agent is the
-Access policy on its hostname, and who may open a terminal is the agent's
-`owner`.
+Access policy on its hostname, who may open a terminal is the agent's `owner`,
+and what either can do once inside is
+[who can do what](/docs/enterprise/operators).
