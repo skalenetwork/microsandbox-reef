@@ -1,7 +1,7 @@
 version = 1
 
 name  = "openclaw"
-image = "ghcr.io/openclaw/openclaw@sha256:e164a318801fad2d49dc19b99adadfa629fa5f9ffb43673e73661c1d3f9cc7de"
+image = "ghcr.io/openclaw/openclaw@sha256:a7945f6cb3872c86a8bdd48e9b9b0b6490a693db6932ae8e55dcea5250bf94a5"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]

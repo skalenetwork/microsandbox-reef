@@ -52,6 +52,12 @@ credential for, so the first message fails until you do this.
   `reef agent update openclaw`,
   `reef agent exec openclaw -- rm /home/node/.openclaw/openclaw.json`, then
   `reef agent stop openclaw` and `reef agent start openclaw`.
+- **An image bump migrates the state volume.** The volume outlives the image, so
+  a new digest boots against the old `/home/node/.openclaw`. On 2026.8.2 an
+  advisory migration warning exited startup, which stops the VM and is impossible
+  to miss. 2026.9.1 starts degraded instead and logs one aggregate warning naming
+  the Doctor check to run, so an agent that is up no longer proves the migration
+  finished.
 - **Session tools reach every session on the agent.** 2026.8.2 widened the
   default from `tree` to `agent`, so the role pins `tools.sessions.visibility`
   instead of inheriting it. Set `tree` or `self` to narrow it.

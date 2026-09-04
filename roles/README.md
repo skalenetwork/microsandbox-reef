@@ -25,7 +25,7 @@ narrowest path that holds the state you need.
   fetched from GitHub, which this role's one-domain egress never allows.
   See [hermes](../docs/agents/hermes.md).
 - `openclaw` — the OpenClaw 2.0 gateway on the browser image, pinned to the
-  digest of `2026.8.2-browser` (`gateway` on guest 18789, published to a
+  digest of `2026.9.1-browser` (`gateway` on guest 18789, published to a
   per-agent loopback host port). It boots with no model provider configured and
   no `[secrets]` entry: `gateway.mode = "local"` is what allows that. Connecting
   a provider at `/settings/model-setup` in the control UI is then a required

@@ -65,11 +65,14 @@ reef agent exec coding -- runuser -u node -- env HOME=/home/node \
 ```
 
 Use the whole-map form. An email contains dots, so a dotted path would be parsed
-as path segments. `runuser -u node` is not optional: the config is node-owned
-`0600`, and a write as root replaces it by rename and leaves it root-owned, which
-breaks the gateway's own config writes from then on. The command reports whether
-a restart is needed; `reef agent stop` then `reef agent start` keeps the volume,
-so the config, the sessions and the user profiles all survive.
+as path segments. The map replaces the grant list rather than adding to it, so
+read the current value first and keep every name in it; pass that value as
+`--expect-current-json` and a concurrent edit fails the write instead of losing
+it. `runuser -u node` is not optional: the config is node-owned `0600`, and a
+write as root replaces it by rename and leaves it root-owned, which breaks the
+gateway's own config writes from then on. The command reports whether a restart
+is needed; `reef agent stop` then `reef agent start` keeps the volume, so the
+config, the sessions and the user profiles all survive.
 
 The grant applies on the person's next connection, so they reload the tab. The
 gateway logs `identity scope grant elevated connection` when it happens.
