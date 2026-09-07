@@ -317,7 +317,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
 ]
 
@@ -1188,15 +1188,6 @@ checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "defmt"
-version = "0.3.100"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0963443817029b2024136fc4dd07a5107eb8f977eaf18fcd1fdeb11306b64ad"
-dependencies = [
- "defmt 1.1.1",
-]
-
-[[package]]
-name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2953bfe4f93bbd20cc71198842756f77d161884c99ebbabc41d80231ded88d1"
@@ -1223,7 +1214,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1879,7 +1870,7 @@ dependencies = [
  "jni",
  "rand 0.10.2",
  "rustls",
- "thiserror",
+ "thiserror 2.0.20",
  "tinyvec",
  "tokio",
  "tokio-rustls",
@@ -1900,7 +1891,7 @@ dependencies = [
  "once_cell",
  "rand 0.10.2",
  "ring",
- "thiserror",
+ "thiserror 2.0.20",
  "tinyvec",
  "tracing",
  "url",
@@ -2313,7 +2304,7 @@ dependencies = [
  "jni-sys",
  "log",
  "simd_cesu8",
- "thiserror",
+ "thiserror 2.0.20",
  "walkdir",
  "windows-link",
 ]
@@ -2395,7 +2386,7 @@ checksum = "bde5057d6143cc94e861d90f591b9303d6716c6b9602309150bd068853c10899"
 dependencies = [
  "hashbrown 0.16.1",
  "portable-atomic",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -2675,9 +2666,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e8b0f6d6c8b2deffa4350899b1c44ccec16c2469a32bff12f1f61bc11a26e8"
+checksum = "e26fc9180555875e57e7fbb85e25a601d2b229a72f5fb2cc47c8eb14e491775c"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -2720,7 +2711,7 @@ dependencies = [
  "sha2 0.11.0",
  "tar",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
  "tokio-tungstenite",
  "tracing",
@@ -2733,23 +2724,23 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-agent-client"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e85830dd07a8e9d2bad3e5f041cab3a426893adbcff054f4f57494ac8937a448"
+checksum = "48fb0284c0e92f19f9c71586454d1a500b03e740a3e052ed37c45a6e8b8607fa"
 dependencies = [
  "ciborium",
  "microsandbox-protocol",
  "serde",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "microsandbox-db"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee68538e3ef9b171d3b494fa5f128ceed22ee5c03bc0b81a35ece7067dabdec7"
+checksum = "c34eaf7068554a5d8ddfaf1b3d8a380a264a507bee7bf6ccb6072083ddeda103"
 dependencies = [
  "async-trait",
  "sea-orm",
@@ -2760,9 +2751,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-filesystem"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0d8793383a04a909dcfd6c4b54bbe6c4c80b95cf57bd09a7b362d1f1f933753"
+checksum = "afa894997b5712a0de94ac877e0424ab004f6d119c636afec97f92a5e5c38f03"
 dependencies = [
  "libc",
  "microsandbox-utils",
@@ -2775,9 +2766,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-image"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c0fb7ba6955eb089e3a1f06720da7e56444d8e6ccdaec085c75693233cf7ee8"
+checksum = "462aa77f80b7292843e6168fcca453f0a3d26f6795f9a3d7cc1db746205dce0a"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -2794,7 +2785,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tar",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2803,22 +2794,22 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-metrics"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e84b81ffa39a70b9bb727e56f1926f3eb94cffb38ab073f4d283fbaa50e14ed0"
+checksum = "2b227f609ba5c8306174b4af0af99c2b5662ee8fe3f335b5a7320bb54d50238d"
 dependencies = [
  "chrono",
  "libc",
- "thiserror",
+ "thiserror 2.0.20",
  "tracing",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "microsandbox-migration"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a661d5d90ee36f65a2d2cd2f59be9298461202d4b8725f99519fdc8440fa1bdf"
+checksum = "55b416bc20fe87731b87a88009b66b150ef525656aafc2975939ed037458ca88"
 dependencies = [
  "sea-orm-migration",
  "serde_json",
@@ -2826,9 +2817,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-network"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce05675cb4b8e02a9e5112757168061a6ad3923bc8510d3463355040eb4e70b9"
+checksum = "f232b4fa73d6ae30316bfef6008ee759b9c7cf8db5ca82aa3ef1f72e2399079c"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2860,10 +2851,11 @@ dependencies = [
  "smoltcp",
  "socket2",
  "system-configuration",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
  "tokio",
  "tokio-rustls",
+ "tokio-socks",
  "tracing",
  "windows-sys 0.61.2",
  "zeroize",
@@ -2871,9 +2863,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-protocol"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa880ebff690112ab72bf1e646f7700fab7c46fae9c14f5ffb73ba1300948149"
+checksum = "a800f269099ec4e5711576b4fd00c03bb2ffa083b70431709cc17046c3ca2a81"
 dependencies = [
  "chrono",
  "ciborium",
@@ -2881,15 +2873,15 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum 0.28.0",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
 ]
 
 [[package]]
 name = "microsandbox-runtime"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f131390d7cc49e1effe534c4e314244ee280855f64fe6b3ff20a73766e1207df"
+checksum = "3aafaa8fc637bc4218e283b6cc15938175424f4f8fe4dd4f357f97240e36be05"
 dependencies = [
  "bytes",
  "chrono",
@@ -2914,7 +2906,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "windows-sys 0.61.2",
@@ -2923,9 +2915,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-types"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd13a1d6d31768bc5ee0f25f25f16b307e9c2974dd5445d9bc342809e0bf3bdb"
+checksum = "8bbd5927f0c60f0d699fbfd2c478e0d692351e0b7037387125e79753a6179068"
 dependencies = [
  "chrono",
  "ipnetwork",
@@ -2933,16 +2925,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "thiserror",
+ "thiserror 2.0.20",
  "typed-path",
  "zeroize",
 ]
 
 [[package]]
 name = "microsandbox-types-macros"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbed8f2ddb826e7824431b09c5ee12334091eec7952be2791dc58af2560402a1"
+checksum = "fdec1bafdd8a51cffa67fee132259b1a7d7be240df9ab4eef7099257f0f14d56"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2951,9 +2943,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-utils"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a4a762bddc8c88e4ee0d2111d109834e2fafced4bb605725237c539d9519cd"
+checksum = "3fc3bed0e7eb25b86cfe8f8d11b9e55d0511d53926812525da471d9cef0d6b92"
 dependencies = [
  "dirs",
  "libc",
@@ -2965,9 +2957,9 @@ dependencies = [
 
 [[package]]
 name = "microsandbox-vsock"
-version = "0.6.16"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "864552f22c42d8f5c331a2c305b33faecc294ec9e5094812e289da390b31c483"
+checksum = "6319961d2ec14aaf63f498c2681a8e957b0b912c3fbe38232b2e688346fb7aa4"
 dependencies = [
  "libc",
  "msb_krun",
@@ -3037,7 +3029,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c31dfbf17e640f6d661ae17e098b87c019821fe3eb4aba0e9eeada4ba678096"
 dependencies = [
  "libc",
- "thiserror",
+ "thiserror 2.0.20",
  "winapi",
 ]
 
@@ -3358,7 +3350,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "unicase",
@@ -3378,7 +3370,7 @@ dependencies = [
  "serde_json",
  "strum 0.27.2",
  "strum_macros 0.27.2",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -3395,7 +3387,7 @@ dependencies = [
  "serde_json",
  "strum 0.27.2",
  "strum_macros 0.27.2",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -3693,7 +3685,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "web-time",
@@ -3716,7 +3708,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror",
+ "thiserror 2.0.20",
  "tinyvec",
  "tracing",
  "web-time",
@@ -3876,7 +3868,7 @@ dependencies = [
  "palette",
  "serde",
  "strum 0.28.0",
- "thiserror",
+ "thiserror 2.0.20",
  "unicode-segmentation",
  "unicode-truncate",
  "unicode-width",
@@ -3965,7 +3957,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.17",
  "libredox",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -4372,7 +4364,7 @@ dependencies = [
  "sqlx",
  "sqlx-core",
  "strum 0.28.0",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
  "tracing",
  "url",
@@ -4388,7 +4380,7 @@ checksum = "4c800d9db902534d7d01728faf98e33d13c1d57bb8c57d8e4c518309172bddda"
 dependencies = [
  "arrow",
  "sea-query",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -4465,7 +4457,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -4739,14 +4731,14 @@ dependencies = [
 
 [[package]]
 name = "smoltcp"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f73d40463bba65efc9adc6370b56df76d563cc46e2482bba58351b4afb7535e"
+checksum = "b6f8b28ad56c6e35524a37dd492af5d1a47e31e1a4d175cd12f89c075f01980f"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",
  "cfg-if",
- "defmt 0.3.100",
+ "defmt",
  "heapless",
  "managed",
 ]
@@ -4813,7 +4805,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
  "tokio",
  "tokio-stream",
@@ -4885,7 +4877,7 @@ dependencies = [
  "sha1",
  "sha2 0.11.0",
  "sqlx-core",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
  "tracing",
  "uuid",
@@ -4923,7 +4915,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
  "tracing",
  "uuid",
@@ -4950,7 +4942,7 @@ dependencies = [
  "percent-encoding",
  "serde",
  "sqlx-core",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
  "tracing",
  "url",
@@ -5137,11 +5129,31 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+dependencies = [
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
 version = "2.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 2.0.20",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -5264,6 +5276,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
 dependencies = [
  "rustls",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-socks"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7e2948f60dbe26b35f2c7fb74ac2854c1fddded0fe9d7548fcc674a246f7615"
+dependencies = [
+ "either",
+ "futures-util",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -5472,7 +5496,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "sha1",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -6213,7 +6237,7 @@ dependencies = [
  "oid-registry",
  "ring",
  "rusticata-macros",
- "thiserror",
+ "thiserror 2.0.20",
  "time",
 ]
 
