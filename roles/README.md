@@ -1,74 +1,33 @@
 # Roles
 
 Ready-made roles: `reef role apply roles/<name>.toml`, then create agents from
-them. Copy a file into your own repo to customize — pin the image to a digest,
-tighten egress. Every file here is parse-checked by `cargo test`.
+them. Copy a file into your own repo to customize: pin the image to a digest,
+tighten egress. Every role here is parse-checked by `cargo test`.
 
-A volume hides whatever the image ships at its mount point, so mount the
-narrowest path that holds the state you need.
-
-- `echo` — minimal alpine role; the smallest thing that boots.
-- `hermes` — the NousResearch Hermes agent with its dashboard exposed (`ui` on
-  guest 9119, published to a per-agent loopback host port — see `ports` in
-  `agent get`), pinned to the digest of `v2026.8.31` (v0.21.0). `init` carries
-  `gateway run`: that is what fires cron jobs, and without it the image's main
-  program is the interactive CLI, which exits and stops the VM. Needs an
-  OpenRouter key at `reef://hermes/openrouter` in secrets.toml, and each agent
-  must configure a dashboard auth provider or the dashboard fails closed:
-  per-agent basic auth via env (see [fleet/hermes.toml](../fleet/hermes.toml) —
-  ana and bob, password `password`), or org SSO via
-  `HERMES_DASHBOARD_OIDC_ISSUER` + `HERMES_DASHBOARD_OIDC_CLIENT_ID` in
-  `[env]`. Basic auth also wants `HERMES_DASHBOARD_BASIC_AUTH_SECRET` per
-  agent, or every restart logs its users out. The volume is `/opt/data` alone
-  because that is the image's own `HERMES_HOME` and everything durable lives
-  under it. `TIRITH_ENABLED = "0"` turns off a pre-exec scanner whose binary is
-  fetched from GitHub, which this role's one-domain egress never allows.
-  See [hermes](../docs/agents/hermes.md).
-- `openclaw` — the OpenClaw 2.0 gateway on the browser image, pinned to the
-  digest of `2026.9.1-browser` (`gateway` on guest 18789, published to a
-  per-agent loopback host port). It boots with no model provider configured and
-  no `[secrets]` entry: `gateway.mode = "local"` is what allows that. Connecting
-  a provider at `/settings/model-setup` in the control UI is then a required
-  step, because login lands in the chat and the default model has no credential. Each agent must set
-  `OPENCLAW_GATEWAY_TOKEN` in `[env]` because `--bind lan` refuses to start
-  without auth, and the value is readable inside the guest.
-  `egress = ["*"]` turns filtering off, because an agent that browses the web
-  has to reach the web. The volume is `/home/node/.openclaw` alone so the mount
-  does not hide the browsers, and `XDG_CACHE_HOME` moves the gateway's cache
-  into it because `/home/node/.cache` is root-owned. `[files]` ships the config
-  and a `start` script that copies it into the volume on first boot, so the
-  agent needs no setup after `fleet apply` and can still write its own config.
-  The `${REEF_AGENT}` and `${REEF_PORT_GATEWAY}` references in that config are
-  expanded by OpenClaw, not by reef: reef stores `[files]` content verbatim, so
-  only reuse the pattern in roles whose app resolves env references itself.
-  `tools.sessions.visibility` is seeded rather than inherited because 2026.8.2
-  widened its default for unsandboxed sessions from `tree` to `agent`, and reef
-  leaves OpenClaw's own sandbox off; pinning it keeps the session tools at one
-  scope across the image bump. See [openclaw](../docs/agents/openclaw.md).
-- `openclaw-marketing`, `openclaw-coding` — the same image and the same
-  seeding, shaped for a team instead of a person: `gateway.auth.mode =
-  "trusted-proxy"` so org SSO decides who the caller is, no gateway token
-  (trusted-proxy and token auth are mutually exclusive), a narrow per-purpose
-  egress list, and a separate secret ref each so provider spend separates by
-  purpose. `requiredHeaders` is left unset on purpose: naming
-  `cf-access-jwt-assertion` there, next to `cf-access-authenticated-user-email`
-  as the `userHeader`, switches OpenClaw onto a Cloudflare Access identity
-  lookup that needs two more egress domains and a GitHub-backed Access IdP,
-  where the plain email builds the same durable user profile with neither. The
-  public hostname is an env reference, `${OPENCLAW_PUBLIC_HOST}` in
-  `controlUi.allowedOrigins`, supplied per agent from
-  [fleet/openclaw-team.toml](../fleet/openclaw-team.toml): the roles carry no
-  site-specific string, and changing a hostname is a fleet apply rather than a
-  re-seed. Declaring a secret turns on TLS interception for the whole VM, which
-  is why these two carry `--ignore-certificate-errors` and
-  `NODE_EXTRA_CA_CERTS`, and `openclaw` carries neither: without the second one
-  the gateway's own outbound TLS rejects the interception certificate. The same
-  secret is why `tools.web.search.enabled = false` is seeded, since a declared
-  `OPENROUTER_API_KEY` makes OpenClaw treat the perplexity web-search provider
-  as configured and refuse to start over its unbundled plugin. They seed the
-  same `tools.sessions.visibility`, which on a gateway a team shares is what
-  decides whether one member's session can read another's. Skeletons: the domain
-  lists are placeholders. See
-  [enterprise OpenClaw](../docs/enterprise/openclaw.md) for the shape and
-  [Cloudflare Access](../docs/enterprise/cloudflare-access.md) for the worked
-  setup.
+- `echo`: minimal alpine role, the smallest thing that boots.
+- `hermes`: the NousResearch Hermes agent with its dashboard exposed, one domain
+  of egress, and an OpenRouter key it spends but never reads. Each agent has to
+  configure a dashboard auth provider or the dashboard fails closed. See
+  [hermes](../docs/agents/hermes.md) and
+  [fleet/hermes.toml](../fleet/hermes.toml).
+- `openclaw`: an OpenClaw 2.0 gateway on the browser image. `egress = ["*"]`, no
+  secrets, and no provider configured: you pick one in the browser. Each agent
+  sets its own `OPENCLAW_GATEWAY_TOKEN`, readable inside the guest. See
+  [openclaw](../docs/agents/openclaw.md) and
+  [fleet/openclaw.toml](../fleet/openclaw.toml).
+- `openclaw-marketing`, `openclaw-coding`: the same image and seeding shaped for
+  a team behind org SSO, with a narrow per-purpose egress list and a separate
+  provider key each, so spend separates by purpose. Skeletons: the domain lists
+  are placeholders. See [set up a team](../docs/enterprise/team.md) for the
+  shape and why each field is set,
+  [browser access](../docs/enterprise/cloudflare-access.md) for the worked
+  setup, and [fleet/openclaw-team.toml](../fleet/openclaw-team.toml).
+- `clawbits-openclaw`: the same gateway on the Clawbits image, which bakes the
+  clawbits plugins in. `[volumes]` mounts `state` and `workspace` separately and
+  never `/home/node/.openclaw`: a volume at the parent hides those plugins and
+  the agent degrades to stock OpenClaw. The image ships no `openclaw.json`, so
+  the role owns it. The clawbits account is four `${CLAWBITS_*}` references that
+  OpenClaw expands at read time, injected per agent with `agent create --env`,
+  so the guest holds the key; left blank, the agent runs detached, which is a
+  valid mode. `endpoint` beside them is a literal because schema validation runs
+  before expansion and rejects a `${...}` in a uri field.

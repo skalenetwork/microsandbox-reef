@@ -1,4 +1,4 @@
-# Cloudflare Access
+# Browser access with Cloudflare
 
 Put a shared agent behind the org's SSO. No inbound port, no public IP:
 `cloudflared` runs on the reef host and dials out, Access authenticates every
@@ -10,6 +10,10 @@ as a header, and is the only thing that can reach the agent's port. oauth2-proxy
 Tailscale, or an ingress you already run all satisfy that; only `userHeader`
 changes. Cloudflare is written up here because it needs no inbound port and no
 public IP, which suits a host under someone's desk as well as a rack.
+
+This is steps 5 to 8 of [set up a team](/docs/enterprise/team). It assumes the
+agents already exist, on a [prepared host](/docs/setup/host), with both provider
+secrets resolving.
 
 ```mermaid
 flowchart TD
@@ -192,10 +196,19 @@ curl -s -H 'X-Forwarded-For: 203.0.113.10' \
 There is no unauthenticated health endpoint on a trusted-proxy gateway, so a bare
 `/readyz` returning 403 `proxy_attribution_required` is correct, not a fault.
 
+Two failures look like a working setup:
+
+- **The page loads and the Control UI never connects.** `allowedOrigins` must
+  name the public hostname, scheme included, no port for 443. It comes from
+  `OPENCLAW_PUBLIC_HOST` on the fleet entry. A wrong value is not a startup
+  error: the gateway seeds loopback origins, the page loads, and the websocket
+  closes with `origin not allowed`.
+- **`allowedOrigins` is right and it still never connects.** Run the tunnel with
+  `--protocol http2`. `cloudflared` defaults to QUIC, which has been reported to
+  drop the WebSocket upgrade header.
+
 ## Notes
 
-- **No `OPENCLAW_GATEWAY_TOKEN`.** trusted-proxy and token auth are mutually
-  exclusive, and `--bind lan` accepts no token under trusted-proxy.
 - **`requiredHeaders` is deliberately absent.** `cf-access-jwt-assertion` there,
   next to the Access email as `userHeader`, is the exact pair that switches
   OpenClaw onto a Cloudflare Access identity lookup reaching
@@ -204,20 +217,15 @@ There is no unauthenticated health endpoint on a trusted-proxy gateway, so a bar
   profile from the email alone, with no egress and no IdP coupling. OpenClaw only
   checks a required header is present, never that it is valid, which is what
   `originRequest.access` is for.
-- **`allowedOrigins` must name the public hostname**, scheme included, no port for
-  443. It comes from `OPENCLAW_PUBLIC_HOST` on the fleet entry. A wrong value is
-  not a startup error: the gateway seeds loopback origins, the page loads, and the
-  Control UI websocket closes with `origin not allowed`.
-- **If the UI loads but never connects**, run the tunnel with `--protocol http2`.
-  `cloudflared` defaults to QUIC, which has been reported to drop the WebSocket
-  upgrade header.
 - **Browser only.** Access covers every route on the hostname, so the CLI, TUI and
   paired nodes are blocked at the upgrade. `gateway.remote.edgeAuth` sends an
   Access service token, which gets past Access, but a service token carries no
   email and trusted-proxy then refuses it. Terminals are
-  [remote access](/docs/enterprise/access).
+  [terminal access](/docs/enterprise/terminals).
 - **Scopes are separate.** Who may open the agent is the Access policy; what they
-  may do inside is [who can do what](/docs/enterprise/operators).
-- **Everyone on the agent shares its state**: one session list, one workspace, one
-  credential pool, one cookie jar. See
-  [enterprise OpenClaw](/docs/enterprise/openclaw) for when to split.
+  may do inside is [scopes](/docs/enterprise/scopes).
+- **Everyone on the agent shares its state.** See
+  [set up a team](/docs/enterprise/team) for when to split.
+
+Next: [scopes inside an agent](/docs/enterprise/scopes), what a person can do
+once Access has let them in.

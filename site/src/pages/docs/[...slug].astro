@@ -12,10 +12,11 @@ type Props = InferGetStaticPropsType<typeof getStaticPaths>;
 
 const path = `/docs/${Astro.params.slug}`;
 const { Content } = Astro.props.doc;
-const title = docs.find((doc) => doc.path === path)!.title;
+const doc = docs.find((doc) => doc.path === path);
+if (!doc) throw new Error(`${path}: add it to ORDER in src/content.ts`);
 ---
 
-<Layout title={`${title} - reef`} path={path}>
+<Layout title={`${doc.title} - reef`} path={path} summary={doc.summary}>
   <article>
     <Content />
   </article>

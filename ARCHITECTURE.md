@@ -11,7 +11,7 @@ team declares agent **roles** as reviewable TOML files; developers create
 own [microsandbox](https://github.com/superradcompany/microsandbox) microVM
 with deny-by-default egress and secrets it can spend but never read.
 
-The bet: what an org actually needs from an agent host is not orchestration —
+The bet: what an org actually needs from an agent host is not orchestration:
 it is **containment it can review**. A role file is the whole blast radius:
 the egress list is what the agent can reach, and each secret names the one
 host it may be spent against. A reviewer reads one screen and signs off once;
@@ -57,7 +57,7 @@ Invariants:
   port, whatever its egress list says. DNS is the one exception, because the
   guest's resolver is the sandbox gateway.
 - Drift is explicit: `generation != applied_generation` is visible in
-  `agent list`, and every spec write is a compare-and-swap on `generation` —
+  `agent list`, and every spec write is a compare-and-swap on `generation`:
   a lost race is a 409-style error, never a merge.
 - A role's `[files]` seed the rootfs before start: the image is the base, the
   role's copy wins, and a path a volume would mount over is a parse error.
@@ -84,8 +84,8 @@ problems at once), stores it content-addressed by digest, and marks it active.
 `plan(Facts) -> &[Action]` decides Create/Modify/Start/Stop/Remove from three
 inputs (desired state, what drifted, observed VM), and the executor applies
 each action through the six-method `Vmm` trait. `msb.rs` is the only module
-that names a microsandbox type — the blast door for a pre-1.0 dependency
-pinned at `=0.6.16` (upgrades are a deliberate task gated on the real-VM smoke
+that names a microsandbox type: the blast door for a pre-1.0 dependency
+pinned exactly (upgrades are a deliberate task gated on the real-VM smoke
 test, never a routine bump).
 
 Console: `ui.rs` is a client of the `--json` rows the CLI prints, nothing more.
@@ -99,14 +99,14 @@ second path and the palette stays named ANSI for the terminal's own theme to
 shade.
 
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
-status and an append-only event log. Observed VM state is never cached — it is
+status and an append-only event log. Observed VM state is never cached: it is
 re-read from the runtime on every command. microsandbox's own state under
 `~/.microsandbox` is treated as the runtime's property; reef never parses its
 files itself, reaching it only through the SDK, and doctor only checks the
 directory's mode.
 
 Secrets: roles hold `reef://store/name` references (a pasted literal is a
-parse error). Values resolve host-side at VM create from `secrets.toml` —
+parse error). Values resolve host-side at VM create from `secrets.toml`:
 an inline 0600 table, or a `[resolvers]` command template (`op read …`,
 `bao kv get …`, `aws secretsmanager …`) whose stdout is the value. The
 resolver seam is how reef plugs into whatever store the org already runs;
@@ -116,15 +116,15 @@ reef holds no credential for the credential store.
 
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
-  exception, and it holds only the six methods the reconciler drives —
+  exception, and it holds only the six methods the reconciler drives;
   operator commands (`ssh`, `exec`, `listening`, `forward`) live on the
   adapter itself.
 - Data structures first; illegal states unrepresentable (`Failed` cannot lack
   a reason; invalid names do not construct).
-- No inline comments — the code carries its meaning; clap doc-comments are
+- No inline comments: the code carries its meaning; clap doc-comments are
   help text and stay. No dead code, no field nothing reads, no config nothing
   honors, no doc sentence the code does not back.
-- Every feature lands complete — type, plan, store, CLI, test — or not at all.
+- Every feature lands complete (type, plan, store, CLI, test) or not at all.
   Nothing additional gets built without the owner's explicit go-ahead.
 - Verify on real hardware: `cargo test -p reef -- --ignored` boots an actual
   microVM and runs the whole journey.

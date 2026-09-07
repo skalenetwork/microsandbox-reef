@@ -6,7 +6,10 @@ to place before it boots: you pick a model provider in the browser.
 
 `egress = ["*"]` turns off reef's deny-by-default egress, because an agent that
 browses the web has to reach the web. For purpose-built agents with real egress
-lists and org SSO, see [enterprise OpenClaw](/docs/enterprise/openclaw).
+lists and org SSO, see [set up a team](/docs/enterprise/team).
+
+This page assumes a [prepared host](/docs/setup/host): reef and msb installed,
+KVM working.
 
 ## Run
 
@@ -39,12 +42,22 @@ credential for, so the first message fails until you do this.
 
 - **The provider key lives inside the guest.** reef's "spend it but never read
   it" guarantee applies to `[secrets]`, which this role does not use. Use the
-  [enterprise roles](/docs/enterprise/openclaw) when the key must stay out of
+  [enterprise roles](/docs/enterprise/team) when the key must stay out of
   the VM.
+- **It boots with no provider because `gateway.mode` is `"local"`.** Any other
+  mode wants a configured model at startup, which is why this role can ship
+  without a `[secrets]` entry and hand the choice to the browser.
 - **The guest verifies TLS properly.** With no `[secrets]`, microsandbox does
-  not intercept, so Chromium validates real certificates. Adding a secret turns
-  interception on for port 443 across the VM, and the role then needs
-  `browser.extraArgs: ["--ignore-certificate-errors"]`.
+  not intercept, so Chromium validates real certificates. Declaring any secret
+  turns interception on for port 443 across the whole VM, and the role then
+  needs both `browser.extraArgs: ["--ignore-certificate-errors"]` for Chromium
+  and `NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"` for the gateway's own outbound
+  TLS, which otherwise rejects the interception certificate and refuses to
+  start. The [enterprise roles](/docs/enterprise/team) carry both; this one
+  carries neither.
+- **The volume is `/home/node/.openclaw` alone**, so the mount does not hide the
+  browsers the image ships beside it. `XDG_CACHE_HOME` moves the gateway's cache
+  into that volume, because `/home/node/.cache` is root-owned.
 - **The config is seeded once, then the agent owns it.** `[files]` writes
   `/etc/openclaw/defaults.json` into the rootfs and the `start` script copies it
   to the volume only when the copy is absent, so a role edit reaches neither
@@ -59,10 +72,14 @@ credential for, so the first message fails until you do this.
   the Doctor check to run, so an agent that is up no longer proves the migration
   finished.
 - **Session tools reach every session on the agent.** 2026.8.2 widened the
-  default from `tree` to `agent`, so the role pins `tools.sessions.visibility`
+  default for unsandboxed sessions from `tree` to `agent`, and reef leaves
+  OpenClaw's own sandbox off, so the role pins `tools.sessions.visibility`
   instead of inheriting it. Set `tree` or `self` to narrow it.
 - **The token is the whole boundary.** It gates the WebSocket RPC but not the
   control UI's static assets, and through the operator terminal it gets a shell
   as `node` - the access `reef agent ssh` already gives. Put the published port
   behind org ingress rather than a LAN; for certificate-gated remote terminals
-  see [remote access](/docs/enterprise/access).
+  see [terminal access](/docs/enterprise/terminals).
+
+Next: [Hermes](/docs/agents/hermes), one agent per person with a real egress
+list and a key the VM never reads.

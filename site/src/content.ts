@@ -28,14 +28,29 @@ const DATE = /blog\/(\d{4}-\d\d-\d\d)-/;
 export const route = (file: string) =>
   file.replace("../../", "").replace("install.sh", "install").replace(DATE, "blog/");
 
-export const docs = Object.entries(files)
-  .filter(([file]) => file.includes("/docs/"))
-  .sort(([a], [b]) => a.localeCompare(b))
-  .map(([file, body]) => ({
-    path: `/${route(file).replace(".md", "")}`,
-    section: route(file).split("/")[1].replace(/^./, (c) => c.toUpperCase()),
-    title: body.split("\n")[0].slice(2),
-  }));
+const ORDER = [
+  "setup/host",
+  "agents/openclaw",
+  "agents/hermes",
+  "enterprise/team",
+  "enterprise/cloudflare-access",
+  "enterprise/scopes",
+  "enterprise/terminals",
+];
+
+const plain = (markdown: string) => markdown.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+
+export const docs = ORDER.map((name) => {
+  const [heading, summary] = files[`../../docs/${name}.md`]?.split("\n\n") ?? [];
+  if (!heading?.startsWith("# ") || !summary)
+    throw new Error(`docs/${name}.md: expected "# Title", a blank line, then a summary paragraph`);
+  return {
+    path: `/docs/${name}`,
+    section: name.split("/")[0]!.replace(/^./, (c) => c.toUpperCase()),
+    title: heading.slice(2),
+    summary: plain(summary.trim().replace(/\n/g, " ")),
+  };
+});
 
 const rendered = import.meta.glob<MarkdownInstance<Record<string, unknown>>>("../../blog/*.md", { eager: true });
 

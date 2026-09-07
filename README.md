@@ -24,29 +24,13 @@ curl -fsSL https://reef.clawbits.ai/install | sh
 ```
 
 Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the
-directory, `REEF_VERSION=0.4.0` pins a version. Linux x86_64/aarch64 and
+directory, `REEF_VERSION=0.10.0` pins a version. Linux x86_64/aarch64 and
 Apple Silicon macOS; the Linux builds are glibc and need 2.39 or newer.
 
-reef drives microsandbox rather than shipping it, so a host that never builds
-reef from source needs the `msb` bundle installed once. The installer takes the
-newest release, which is not always the one reef pins, and a mismatch surfaces
-at the first `agent create` as a launch-config error rather than at install
-time. Read the pin for the release you installed and compare:
-
-```sh
-curl -fsSL https://install.microsandbox.dev | sh
-curl -fsSL "https://raw.githubusercontent.com/skalenetwork/microsandbox-reef/v$(reef --version | cut -d' ' -f2)/crates/reef/Cargo.toml" | grep microsandbox
-msb --version
-```
-
-`msb self downgrade <version> -y` rolls msb back when the installer ran ahead.
-Then `msb doctor` checks the host can run microVMs at all: CPU virtualization,
-the KVM device, and whether this account can open it. Note that it enables
-virtualization lazily on Linux before 6.13, so a passing `msb doctor` is not
-proof that a VM will start.
-
-The full host checklist, including the glibc floor, the KVM traps and running
-alongside another reef, is
+reef drives microsandbox rather than shipping it, so a host needs the `msb`
+bundle installed once, at the version this release pins; `MSB_PATH` points at it
+when it lives somewhere microsandbox would not look. Checking that pin, the
+glibc floor, the KVM traps and running alongside another reef is
 [prepare a host](https://reef.clawbits.ai/docs/setup/host).
 
 `reef update` replaces the binary in place with the latest release. Commands
@@ -111,7 +95,9 @@ reef agent get bob-hermes
 ```
 
 Two agents, each with its dashboard on the `ports` line of `agent get` - log
-in as `ana` or `bob`, password `password`.
+in as `ana` or `bob`, password `password`. That fleet file is a demo: its
+hashes and session secrets are in public git, so replace both before it reaches
+anyone.
 
 ## What reef adds to microsandbox
 
@@ -128,7 +114,7 @@ outlive the VMs, and one console across hosts.
 
 | Command | |
 | --- | --- |
-| `reef doctor` | Can this host run agents? |
+| `reef doctor` | The msb it resolved, the state dir, and what looks wrong |
 | `reef role apply roles/*.toml` | Validate and import, from CI or by hand |
 | `reef role list` | Roles and their active versions |
 | `reef role get code-reviewer` | One role's active definition and the agents on it |
@@ -163,15 +149,18 @@ nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
 `events` prints the log oldest-first; `--after ID` returns only what is newer,
 so a collector can poll it without re-reading. `agent get` prints the VM's
 `sandbox` name - the handle for the runtime's own tools, such as
-`msb logs <sandbox>` for captured guest output.
+`msb logs <sandbox>` for captured guest output. A role with `init` boots through
+it, so its output is a runtime diagnostic instead: `--source system`.
 
 ### Forwarding
 
 `agent forward` with no ports reads the guest's `/proc/net/tcp` and lists the
 ports it is listening on that are reachable from the guest's loopback, so every
-port it names is one you can actually forward. It binds host loopback only and
-tunnels through the guest agent channel - it reaches services on the guest's
-own loopback and publishes nothing at the VM boundary. Like `exec`, it is
+port it names is one you can actually forward. Each port is `GUEST` or
+`LOCAL:GUEST`, `LOCAL 0` picks a free one, and it takes as many as you pass. It
+binds host loopback only and tunnels through the guest agent channel - it
+reaches services on the guest's own loopback and publishes nothing at the VM
+boundary. Like `exec`, it is
 operator access: the role's egress list stays the agent's entire network policy.
 
 ### Terminal access
@@ -187,7 +176,7 @@ the caller only if a certificate principal matches the agent's `owner` (set
 with `--owner` at create, or per agent in a fleet file; default `$USER`),
 records a `served` event, and hands the session to `msb ssh serve --stdio`.
 The full pattern - certificates, sshd config, client config - is
-[enterprise terminal access](https://reef.clawbits.ai/docs/enterprise/access).
+[terminal access](https://reef.clawbits.ai/docs/enterprise/terminals).
 
 ### Console
 
@@ -210,7 +199,7 @@ agents work as they do for `ssh` itself. Connect to a new host once in a
 terminal first: the console never answers prompts. `--reef CMD` names the
 command that runs reef on the hosts when it is not `~/.local/bin/reef`, such
 as `--reef 'sudo -n -u reef -H /home/reef/.local/bin/reef'` on a host set up
-for [remote access](https://reef.clawbits.ai/docs/enterprise/access). The table
+for [terminal access](https://reef.clawbits.ai/docs/enterprise/terminals). The table
 refreshes every five seconds and after each action; `ControlMaster auto`,
 `ControlPath ~/.ssh/cm-%C` and `ControlPersist 600` on the host's block keep
 one connection open between polls. The detail view prints the `ssh -L` and `agent ssh` lines that reach an
@@ -240,6 +229,9 @@ egress = ["api.anthropic.com", "github.com"]
 [secrets]
 ANTHROPIC_API_KEY = { ref = "reef://platform/anthropic", host = "api.anthropic.com" }
 ```
+
+`[resources]` also takes `disk-gib` and `max-pids`, both optional, both at
+least 1.
 
 ### Init
 
@@ -279,7 +271,9 @@ VM. Write the small override layer an app already reads, not a copy of its
 config: the whole table is capped at 64 KiB. A path inside a `[volumes]` dest
 is a parse error: the volume mounts over it at start. Content is part of the
 role, stored verbatim in `reef.db` and never substituted - credentials go in
-`[secrets]`.
+`[secrets]`. reef never expands `${VAR}` in it either: a seeded config can name
+`REEF_AGENT` or `REEF_PORT_*` only when the app resolves environment references
+itself, and otherwise the literal reaches the guest.
 
 A file is root-owned and world-readable unless it names its own mode:
 
@@ -304,7 +298,8 @@ The guest is told its own name as `REEF_AGENT` and its published ports as
 `REEF_PORT_<NAME>` (`control-ui` becomes `REEF_PORT_CONTROL_UI`) - between
 them, its own URL, which reef picks and the guest cannot otherwise know. The
 `REEF_` prefix is reserved: role `[env]` and `--env` reject it, so the
-namespace is always reef's.
+namespace is always reef's. `MSB_` belongs to the runtime and is rejected the
+same way, in role `[env]`, role `[secrets]` and a fleet entry's `env`.
 
 ### Volumes
 
@@ -323,7 +318,8 @@ it. Everything outside a declared path lives in the rootfs and is replaced
 whenever the role changes - that is what an image upgrade *is*. reef cannot
 persist state an image neither declares nor rebuilds on its own: check where
 your image keeps state (`msb image inspect <image>` shows its OCI config) and
-declare those paths.
+declare those paths. A volume also hides whatever the image ships at its mount
+point, so mount the narrowest path that holds the state you need.
 
 ### Egress and secrets
 
@@ -392,7 +388,9 @@ survive removal.
 - Secrets are plaintext at rest in two places: `secrets.toml` (0600-guarded)
   and microsandbox's sandbox config under `~/.microsandbox` until the VM is
   recreated - editing `secrets.toml` alone does not refresh a running agent.
-  `reef doctor` warns when `~/.microsandbox` is readable by other users.
+  Rotating one is `agent rm` then `fleet apply`: volumes survive removal, and
+  nothing short of a role change recreates a VM. `reef doctor` warns when
+  `~/.microsandbox` is readable by other users.
 - Published host ports are unique per state dir only: a second `--state` on
   this host, or an unrelated process squatting `19000-19999`, can collide -
   and microsandbox reports a failed port bind only in its own logs.
@@ -404,7 +402,8 @@ survive removal.
 - One host per state dir, no auth on the CLI: it runs where the state lives,
   and `reef ui` reaches it over your own ssh (the HTTP API comes later and will
   not ship without auth).
-- `microsandbox` is pinned exactly (`=0.6.16`, beta upstream); upgrades are a
+- `microsandbox` is pinned exactly (beta upstream, the version in
+  `crates/reef/Cargo.toml`); upgrades are a
   deliberate task, never a routine bump. reef migrates `~/.microsandbox` to
   that schema on first run, and an older `msb` refuses the store afterwards -
   upgrade `msb` alongside reef, or roll back with `msb self downgrade`.

@@ -6,7 +6,7 @@ export const GET: APIRoute = () => {
     .map(route)
     .filter((path) => path.endsWith(".toml"))
     .map((path) => `- [${path}](${url(path)})`);
-  const guides = docs.map((doc) => `- [${doc.title}](${url(`${doc.path}.md`)})`);
+  const guides = docs.map((doc) => `- [${doc.title}](${url(`${doc.path}.md`)}): ${doc.summary}`);
   const articles = posts.map((post) => `- [${post.title}](${url(`${post.path}.md`)}): ${post.date}. ${post.summary}`);
   const blog = posts.length ? `\n## Blog\n\n${articles.join("\n")}\n` : "";
   return new Response(`# reef

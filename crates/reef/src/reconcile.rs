@@ -107,7 +107,10 @@ async fn run<V: Vmm>(
 }
 
 fn port_env(name: &PortName) -> String {
-    format!("REEF_PORT_{}", name.as_str().to_uppercase().replace('-', "_"))
+    format!(
+        "REEF_PORT_{}",
+        name.as_str().to_uppercase().replace('-', "_")
+    )
 }
 
 fn merged_env<'a>(role: &'a Role, agent: &'a Agent) -> BTreeMap<&'a EnvKey, &'a String> {

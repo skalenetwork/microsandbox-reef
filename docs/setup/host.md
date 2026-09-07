@@ -47,12 +47,17 @@ Roll back with `msb self downgrade <version> -y` when the installer ran ahead. A
 mismatch does not fail at install time. It fails at the first `agent create`
 with a launch-config error that names neither version.
 
+reef resolves `msb` the way microsandbox does, and `MSB_PATH` overrides that
+when the bundle is somewhere else. Without one, every command fails with
+`msb not found: set MSB_PATH or install microsandbox`.
+
 `msb` needs `libcap-ng0`, and on aarch64 so does `reef` itself.
 
 ## Virtualization
 
 `/dev/kvm` has to exist, and the account that runs reef has to be in the group
-that owns it. Two things make this less obvious than it looks.
+that owns it. On Linux `reef doctor` refuses to go further without it:
+`/dev/kvm is missing: this host cannot run microVMs`. Two things make this less obvious than it looks.
 
 **A passing `msb doctor` is not proof.** Before Linux 6.13, KVM enables
 virtualization lazily at the first VM creation rather than at module load. The
@@ -90,7 +95,7 @@ it resolved.
 
 Run reef as its own Unix account that owns the state and the sandboxes. Give it
 a **real login shell**: sshd's `ForceCommand` runs through it, so `nologin`
-breaks [remote access](/docs/enterprise/access) in a way that is annoying to
+breaks [terminal access](/docs/enterprise/terminals) in a way that is annoying to
 diagnose later.
 
 ```sh
@@ -101,7 +106,7 @@ sudo -i -u reef
 
 `sudo -i -u reef` starts a new session, so the group applies immediately with no
 logout. Administrators reach the CLI through sudo rather than by logging in as
-that account; see [remote access](/docs/enterprise/access).
+that account; see [terminal access](/docs/enterprise/terminals).
 
 ## Sharing a host
 
@@ -134,5 +139,7 @@ msb doctor && reef doctor
 ```
 
 `msb doctor` ends with `Host setup is ready.` and every KVM row passing, and
-`reef doctor` prints the pinned msb version. Then boot something small before
-anything real: `reef role apply roles/echo.toml`.
+`reef doctor` prints the msb it resolved, its path and the state directory. Then
+boot something small before anything real: `reef role apply roles/echo.toml`.
+
+Next: [OpenClaw](/docs/agents/openclaw), one gateway in a microVM.

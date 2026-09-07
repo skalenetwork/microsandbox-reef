@@ -6,6 +6,9 @@ apiece, a private dashboard, and nothing reachable on the network but
 `openrouter.ai`. The role pins v0.21.0 by digest; copy it into your own repo
 before you rely on it.
 
+This page assumes a [prepared host](/docs/setup/host): reef and msb installed,
+KVM working.
+
 ## Secret
 
 The role spends one OpenRouter key. Put it in
@@ -101,4 +104,8 @@ agent in place; only a role change recreates the VM.
   and that file lives on the agent's volume rather than in the role.
   `HERMES_DASHBOARD_PUBLIC_URL` is the env form of `dashboard.public_url`.
 - **`reef agent ssh ana-hermes` is a local shell in the VM.** For remote,
-  certificate-gated terminals, see [remote access](/docs/enterprise/access).
+  certificate-gated terminals, see
+  [terminal access](/docs/enterprise/terminals).
+
+Next: [set up a team](/docs/enterprise/team), for agents a team shares behind
+the org's SSO.

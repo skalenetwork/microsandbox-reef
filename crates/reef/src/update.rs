@@ -49,7 +49,7 @@ impl Notice {
         if let Some(latest) = fetched.or(self.known)
             && latest > current()
         {
-            eprintln!("reef {latest} available — run: reef update");
+            eprintln!("reef {latest} available, run: reef update");
         }
     }
 }

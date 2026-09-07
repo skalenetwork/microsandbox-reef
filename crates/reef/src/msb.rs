@@ -35,7 +35,7 @@ impl Msb {
             .canonicalize()
             .unwrap_or_else(|_| state_dir.to_owned());
         let hash = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
-        let state_id = hash.iter().take(4).map(|b| format!("{b:02x}")).collect();
+        let state_id = format!("{hash:x}")[..8].to_owned();
         Self { state_id }
     }
 

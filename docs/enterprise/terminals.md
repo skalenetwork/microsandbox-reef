@@ -1,9 +1,13 @@
-# Remote access
+# Terminal access
 
 Give each person a terminal into the agents they own, through the org's
 existing SSH identity. reef adds no accounts, keys, or auth of its own: the
 org's certificate authority says who you are, OpenSSH enforces what runs, and
 `reef agent serve` decides which agents that identity may open.
+
+This assumes a [prepared host](/docs/setup/host), and in particular that the
+reef account has a real login shell: sshd's `ForceCommand` runs through it, so
+`nologin` breaks everything below.
 
 ## How it works
 
@@ -64,11 +68,21 @@ reef agent create --role hermes --name hermes-ana --owner ana
 or with `owner = "ana"` on the agent's fleet entry; omitted, the creating
 user is recorded.
 
-The session inside the tunnel authenticates against microsandbox's own
-authorized keys; add each person's public key once with
-`msb ssh authorize --file ~/.ssh/id_ed25519.pub`. sshd's auth log records each
-authentication with the certificate's key id and principal, and every admitted
-session is a `served` event in `reef events`.
+sshd's auth log records each authentication with the certificate's key id and
+principal, and every admitted session is a `served` event in `reef events`.
+
+## Enroll each person
+
+The session inside the tunnel authenticates a second time, against
+microsandbox's own authorized keys. Add each person's public key once, as the
+reef account:
+
+```sh
+msb ssh authorize --file ~/.ssh/id_ed25519.pub
+```
+
+Everything above this is one-time host setup. This is per person, alongside the
+certificate their CA issues them.
 
 ## Administrators
 

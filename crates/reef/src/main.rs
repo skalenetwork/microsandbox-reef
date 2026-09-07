@@ -325,9 +325,7 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                     stale,
                 });
             }
-            if json {
-                println!("{}", serde_json::to_string_pretty(&roles)?);
-            } else {
+            emit(json, &roles, || {
                 for role in &roles {
                     println!(
                         "{:24} {} {}",
@@ -336,8 +334,7 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                         role.image
                     );
                 }
-            }
-            Ok(())
+            })
         }
         RoleCommand::Get { name, json } => {
             let (digest, role) = ctx
@@ -357,14 +354,11 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                 agents: names(current),
                 stale: names(stale),
             };
-            if json {
-                println!("{}", serde_json::to_string_pretty(&detail)?);
-            } else {
+            emit(json, &detail, || {
                 for (label, value) in detail.rows() {
                     row(label, value);
                 }
-            }
-            Ok(())
+            })
         }
     }
 }
@@ -437,9 +431,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     ports,
                 });
             }
-            if json {
-                println!("{}", serde_json::to_string_pretty(&agents)?);
-            } else {
+            emit(json, &agents, || {
                 println!(
                     "{name:24} {role:16} {owner:10} {desired:8} {state:8} {vm:8} SYNC",
                     name = "NAME",
@@ -461,8 +453,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                         if agent.synced { "yes" } else { "drift" },
                     );
                 }
-            }
-            Ok(())
+            })
         }
         AgentCommand::Get { name, wait, json } => {
             let mut agent = require_agent(&ctx, &name)?;
@@ -524,13 +515,11 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 ports,
                 env: agent.spec.env,
             };
-            if json {
-                println!("{}", serde_json::to_string_pretty(&detail)?);
-            } else {
+            emit(json, &detail, || {
                 for (label, value) in detail.rows() {
                     row(label, value);
                 }
-            }
+            })?;
             if wait && detail.reason.is_some() {
                 std::process::exit(1);
             }
@@ -620,17 +609,14 @@ fn events_command(
     json: bool,
 ) -> Result<()> {
     let events = ctx.store.events(agent.as_ref(), after)?;
-    if json {
-        println!("{}", serde_json::to_string_pretty(&events)?);
-    } else {
+    emit(json, &events, || {
         for event in &events {
             println!(
                 "{:6} {} {:24} {:8} {}",
                 event.id, event.at, event.agent, event.kind, event.detail
             );
         }
-    }
-    Ok(())
+    })
 }
 
 async fn set_desired(ctx: &Ctx, name: &AgentName, desired: Desired) -> Result<()> {
@@ -652,8 +638,7 @@ fn require_agent(ctx: &Ctx, name: &AgentName) -> Result<Agent> {
 
 fn digest_role(role: &Role) -> (Digest, String) {
     let definition = serde_json::to_string(role).expect("roles serialize");
-    let hash = Sha256::digest(definition.as_bytes());
-    let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+    let hex = format!("{:x}", Sha256::digest(definition.as_bytes()));
     (hex.parse().expect("sha256 hex is a digest"), definition)
 }
 
@@ -683,6 +668,15 @@ fn print_names() {
 
 fn row(label: &str, value: impl std::fmt::Display) {
     println!("{label:10} {value}");
+}
+
+fn emit<T: serde::Serialize>(json: bool, value: &T, plain: impl FnOnce()) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(value)?);
+    } else {
+        plain();
+    }
+    Ok(())
 }
 
 fn user() -> String {

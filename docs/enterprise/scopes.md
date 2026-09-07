@@ -1,14 +1,14 @@
-# Who can do what
+# Scopes inside an agent
 
 The Access policy on an agent's hostname decides who gets in. What they can do
 once inside is OpenClaw's, and it is three settings that compose rather than one.
-This page is what the [enterprise roles](/docs/enterprise/openclaw) ship, and how
-to give one named person more.
+This page is what the [enterprise roles](/docs/enterprise/team) ship, and how to
+give one named person more.
 
 ```text
 Give this to your agent:
 
-Read https://reef.clawbits.ai/docs/enterprise/operators.md before changing any
+Read https://reef.clawbits.ai/docs/enterprise/scopes.md before changing any
 scope on a running agent. Tell me which of the three settings you are changing
 and why. Never put operator.admin in deviceAutoApprove. Write config as the node
 user, never as root.
@@ -99,15 +99,15 @@ baseline until you name them individually.
 
 ## What is still shared
 
-Scopes decide what a session may call, not what it can see. On one agent there is
-one session list, one workspace, one credential pool and one browser cookie jar,
-whatever anyone's scopes are. When people should not share those, give them
-separate agents rather than separate scopes. See
-[enterprise OpenClaw](/docs/enterprise/openclaw).
+Scopes decide what a session may call, not what it can see: one agent is one
+session list, one workspace, one credential pool and one cookie jar whatever
+anyone's scopes are. When people should not share those, give them separate
+agents rather than separate scopes. See
+[set up a team](/docs/enterprise/team).
 
 ## The other axis
 
-Scopes govern the browser. A terminal inside the VM is
-[remote access](/docs/enterprise/access): an SSH certificate whose principal
-matches the agent's `owner`, which is a different identity, a different audit
-trail, and unaffected by anything on this page.
+Scopes govern the browser. A terminal inside the VM is a different identity, a
+different audit trail, and unaffected by anything on this page.
+
+Next: [terminal access](/docs/enterprise/terminals).

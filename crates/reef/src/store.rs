@@ -4,6 +4,7 @@ use reef_core::{
     Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, ImageRef, Lifecycle,
     PortName, Role, RoleName,
 };
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, Type, ValueRef};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -105,7 +106,7 @@ impl Store {
                  JOIN role_versions v ON v.digest = r.active_digest
                  WHERE r.name = ?1",
                 [name.as_str()],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                |row| Ok((text(row, 0)?, row.get(1)?)),
             )
             .optional()?
             .map(decode_role)
@@ -132,32 +133,16 @@ impl Store {
              FROM roles r JOIN role_versions v ON v.digest = r.active_digest
              ORDER BY r.name",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?;
-        rows.map(|row| {
-            let (name, digest, image) = row?;
-            Ok((parsed(name)?, parsed(digest)?, parsed(image)?))
-        })
-        .collect()
+        let rows = stmt.query_map([], |row| Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn agents_on_role(&self, role: &RoleName) -> Result<Vec<(AgentName, Digest)>> {
         let mut stmt = self
             .db
             .prepare("SELECT name, role_digest FROM agents WHERE role = ?1 ORDER BY name")?;
-        let rows = stmt.query_map([role.as_str()], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
-        rows.map(|row| {
-            let (name, digest) = row?;
-            Ok((parsed(name)?, parsed(digest)?))
-        })
-        .collect()
+        let rows = stmt.query_map([role.as_str()], |row| Ok((text(row, 0)?, text(row, 1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn insert_agent(&self, agent: &Agent) -> Result<()> {
@@ -181,7 +166,7 @@ impl Store {
                 agent.status.lifecycle.label(),
                 error_of(&agent.status.lifecycle),
                 agent.status.applied_generation,
-                agent.status.applied_digest.as_ref().map(|d| d.as_str()),
+                agent.status.applied_digest.as_ref().map(Digest::as_str),
                 serde_json::to_string(&agent.status.applied_env)?,
             ],
         )?;
@@ -192,7 +177,8 @@ impl Store {
     }
 
     pub fn get_agent(&self, name: &AgentName) -> Result<Option<Agent>> {
-        self.db
+        Ok(self
+            .db
             .query_row(
                 "SELECT name, generation, fleet, owner, role, role_digest, desired,
                         env, lifecycle, last_error, applied_generation, applied_digest, applied_env
@@ -200,9 +186,7 @@ impl Store {
                 [name.as_str()],
                 agent_row,
             )
-            .optional()?
-            .map(decode_agent)
-            .transpose()
+            .optional()?)
     }
 
     pub fn list_agents(&self) -> Result<Vec<Agent>> {
@@ -212,8 +196,7 @@ impl Store {
              FROM agents ORDER BY name",
         )?;
         let rows = stmt.query_map([], agent_row)?;
-        rows.map(|raw| decode_agent(raw?))
-            .collect::<Result<Vec<_>>>()
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn set_desired(&self, name: &AgentName, desired: Desired, expected: u64) -> Result<()> {
@@ -257,8 +240,8 @@ impl Store {
         let mut stmt = self
             .db
             .prepare("SELECT name FROM agents WHERE fleet ORDER BY name")?;
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-        rows.map(|name| parsed(name?)).collect()
+        let rows = stmt.query_map([], |row| text(row, 0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     fn cas_set(&self, name: &AgentName, column: &str, value: &str, expected: u64) -> Result<()> {
@@ -286,7 +269,7 @@ impl Store {
                 status.lifecycle.label(),
                 error_of(&status.lifecycle),
                 status.applied_generation,
-                status.applied_digest.as_ref().map(|d| d.as_str()),
+                status.applied_digest.as_ref().map(Digest::as_str),
                 serde_json::to_string(&status.applied_env)?,
                 name.as_str(),
             ],
@@ -319,14 +302,8 @@ impl Store {
         let mut stmt = self
             .db
             .prepare("SELECT name, port FROM agent_ports WHERE agent = ?1")?;
-        let rows = stmt.query_map([agent.as_str()], |row| {
-            Ok((row.get::<_, String>(0)?, row.get(1)?))
-        })?;
-        rows.map(|row| {
-            let (name, port) = row?;
-            Ok((parsed(name)?, port))
-        })
-        .collect()
+        let rows = stmt.query_map([agent.as_str()], |row| Ok((text(row, 0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn used_ports(&self) -> Result<BTreeSet<u16>> {
@@ -364,112 +341,79 @@ impl Store {
              ORDER BY id",
         )?;
         let rows = stmt.query_map(params![agent.map(AgentName::as_str), after], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-            ))
-        })?;
-        rows.map(|row| {
-            let (id, agent, at, kind, detail): (i64, String, i64, String, String) = row?;
             Ok(Event {
-                id,
-                agent: parsed(agent)?,
-                at,
-                kind,
-                detail,
+                id: row.get(0)?,
+                agent: text(row, 1)?,
+                at: row.get(2)?,
+                kind: row.get(3)?,
+                detail: row.get(4)?,
             })
-        })
-        .collect()
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 }
 
-type RawAgent = (
-    String,
-    u64,
-    bool,
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-    Option<String>,
-    u64,
-    Option<String>,
-    String,
-);
+struct Text<T>(T);
 
-fn agent_row(row: &Row<'_>) -> rusqlite::Result<RawAgent> {
-    Ok((
-        row.get(0)?,
-        row.get(1)?,
-        row.get(2)?,
-        row.get(3)?,
-        row.get(4)?,
-        row.get(5)?,
-        row.get(6)?,
-        row.get(7)?,
-        row.get(8)?,
-        row.get(9)?,
-        row.get(10)?,
-        row.get(11)?,
-        row.get(12)?,
-    ))
+impl<T: std::str::FromStr<Err = String>> FromSql for Text<T> {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        value
+            .as_str()?
+            .parse()
+            .map(Self)
+            .map_err(|e: String| FromSqlError::Other(e.into()))
+    }
 }
 
-fn decode_agent(raw: RawAgent) -> Result<Agent> {
-    let (
-        name,
-        generation,
-        fleet,
-        owner,
-        role,
-        role_digest,
-        desired,
-        env,
-        lifecycle,
-        last_error,
-        applied_generation,
-        applied_digest,
-        applied_env,
-    ) = raw;
-    let lifecycle = match (lifecycle.as_str(), last_error) {
+fn text<T: std::str::FromStr<Err = String>>(row: &Row<'_>, column: usize) -> rusqlite::Result<T> {
+    row.get::<_, Text<T>>(column).map(|Text(value)| value)
+}
+
+fn json<T: serde::de::DeserializeOwned>(row: &Row<'_>, column: usize) -> rusqlite::Result<T> {
+    let raw: String = row.get(column)?;
+    serde_json::from_str(&raw)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(column, Type::Text, Box::new(e)))
+}
+
+fn agent_row(row: &Row<'_>) -> rusqlite::Result<Agent> {
+    let lifecycle = match (row.get_ref(8)?.as_str()?, row.get::<_, Option<String>>(9)?) {
         ("pending", _) => Lifecycle::Pending,
         ("running", _) => Lifecycle::Running,
         ("stopped", _) => Lifecycle::Stopped,
         ("failed", Some(reason)) => Lifecycle::Failed { reason },
-        (other, _) => bail!("corrupt lifecycle row for {name}: {other:?}"),
+        (other, _) => {
+            let msg = format!("corrupt lifecycle {other:?}");
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                8,
+                Type::Text,
+                msg.into(),
+            ));
+        }
     };
     Ok(Agent {
-        name: parsed(name)?,
-        generation,
-        fleet,
+        name: text(row, 0)?,
+        generation: row.get(1)?,
+        fleet: row.get(2)?,
         spec: AgentSpec {
-            owner,
-            role: parsed(role)?,
-            role_digest: parsed(role_digest)?,
-            desired: parsed(desired)?,
-            env: serde_json::from_str(&env)?,
+            owner: row.get(3)?,
+            role: text(row, 4)?,
+            role_digest: text(row, 5)?,
+            desired: text(row, 6)?,
+            env: json(row, 7)?,
         },
         status: AgentStatus {
             lifecycle,
-            applied_generation,
-            applied_digest: applied_digest.map(parsed).transpose()?,
-            applied_env: serde_json::from_str(&applied_env)?,
+            applied_generation: row.get(10)?,
+            applied_digest: row
+                .get::<_, Option<Text<Digest>>>(11)?
+                .map(|Text(digest)| digest),
+            applied_env: json(row, 12)?,
         },
     })
 }
 
-fn parsed<T: std::str::FromStr<Err = String>>(text: String) -> Result<T> {
-    text.parse().map_err(anyhow::Error::msg)
-}
-
-fn decode_role((digest, definition): (String, String)) -> Result<(Digest, Role)> {
-    let digest: Digest = parsed(digest)?;
-    let role: Role = serde_json::from_str(&definition)
+fn decode_role((digest, definition): (Digest, String)) -> Result<(Digest, Role)> {
+    let role = serde_json::from_str(&definition)
         .with_context(|| format!("corrupt role definition {digest}"))?;
     Ok((digest, role))
 }
