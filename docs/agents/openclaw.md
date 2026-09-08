@@ -44,9 +44,6 @@ credential for, so the first message fails until you do this.
   it" guarantee applies to `[secrets]`, which this role does not use. Use the
   [enterprise roles](/docs/enterprise/team) when the key must stay out of
   the VM.
-- **It boots with no provider because `gateway.mode` is `"local"`.** Any other
-  mode wants a configured model at startup, which is why this role can ship
-  without a `[secrets]` entry and hand the choice to the browser.
 - **The guest verifies TLS properly.** With no `[secrets]`, microsandbox does
   not intercept, so Chromium validates real certificates. Declaring any secret
   turns interception on for port 443 across the whole VM, and the role then
@@ -57,7 +54,7 @@ credential for, so the first message fails until you do this.
   carries neither.
 - **The volume is `/home/node/.openclaw` alone**, so the mount does not hide the
   browsers the image ships beside it. `XDG_CACHE_HOME` moves the gateway's cache
-  into that volume, because `/home/node/.cache` is root-owned.
+  into that volume so it survives a rebuild.
 - **The config is seeded once, then the agent owns it.** `[files]` writes
   `/etc/openclaw/defaults.json` into the rootfs and the `start` script copies it
   to the volume only when the copy is absent, so a role edit reaches neither
@@ -65,16 +62,22 @@ credential for, so the first message fails until you do this.
   `reef agent update openclaw`,
   `reef agent exec openclaw -- rm /home/node/.openclaw/openclaw.json`, then
   `reef agent stop openclaw` and `reef agent start openclaw`.
-- **An image bump migrates the state volume.** The volume outlives the image, so
-  a new digest boots against the old `/home/node/.openclaw`. On 2026.8.2 an
-  advisory migration warning exited startup, which stops the VM and is impossible
-  to miss. 2026.9.1 starts degraded instead and logs one aggregate warning naming
-  the Doctor check to run, so an agent that is up no longer proves the migration
-  finished.
-- **Session tools reach every session on the agent.** 2026.8.2 widened the
-  default for unsandboxed sessions from `tree` to `agent`, and reef leaves
+- **An image bump migrates the state volume, one way.** The volume outlives the
+  image, so a new digest boots against the old `/home/node/.openclaw`. This
+  digest moves the shared state database from schema 15 to 16 on the first
+  writable open, and 2026.9.1 refuses to open a schema 16 database at all, so
+  re-pinning the old digest does not roll an agent back. Discarding the volume
+  with `msb volume rm` is the only way back.
+- **A degraded start still counts as up.** An advisory migration warning does not
+  stop startup: the gateway starts degraded and logs one aggregate warning
+  carrying the repair command `openclaw doctor --fix`, so an agent that is
+  running does not prove the migration finished. Run the check after a bump.
+- **Session tools reach every session on the agent.** The default for
+  unsandboxed sessions is `all`, every session on the gateway, and reef leaves
   OpenClaw's own sandbox off, so the role pins `tools.sessions.visibility`
-  instead of inheriting it. Set `tree` or `self` to narrow it.
+  instead of inheriting it. That also closes the cross-agent access
+  `tools.agentToAgent` enables by default, so the role needs no second key. Set
+  `tree` or `self` to narrow it further.
 - **The token is the whole boundary.** It gates the WebSocket RPC but not the
   control UI's static assets, and through the operator terminal it gets a shell
   as `node` - the access `reef agent ssh` already gives. Put the published port

@@ -73,18 +73,21 @@ owner = "marketing"
 roles ship, a shared gateway pools nearly everything: one session list, one
 workspace, one credential pool, one browser cookie jar. Each person still gets a
 durable identity from the email Access supplies, which is what names them in the
-session log and on the sessions they create. 2026.9.1 hangs two more things off
-that identity: a personal skill library, invisible to the others until shared,
-and a personal GitHub connection beside the system account. Neither is a trust
-boundary. Library ownership governs discovery and management, not tool access,
-and the personal connection stops another member using it, not anyone holding
-the gateway's OS account. Upstream is explicit that one gateway is one trusted
-operator domain. When the people are not in one trust domain, give each their
-own agent instead; they cost one role file between them.
+session log and on the sessions they create. Three more things hang off that
+identity: a personal skill library, invisible to the others until shared, a
+personal GitHub connection beside the system account, and a personal model
+account. None is a trust boundary. Library ownership governs discovery and
+management, not tool access, and a personal connection stops another member
+using it, not anyone holding the gateway's OS account. A personal model account
+still has to reach its provider through the role's egress list. Upstream is
+explicit that one gateway is one trusted operator domain. When the people are
+not in one trust domain, give each their own agent instead; they cost one role
+file between them.
 
-Both roles pin `tools.sessions.visibility = "agent"`, the default since
-2026.8.2: any session on the agent reads any other. `tree` or `self` narrows
-it, but neither separates the shared workspace or credential pool.
+Both roles pin `tools.sessions.visibility = "agent"`, narrowing a default that
+is now `all`, every session on the gateway: any session on the agent reads any
+other. `tree` or `self` narrows it further, but neither separates the shared
+workspace or credential pool.
 
 ## Egress and spend
 

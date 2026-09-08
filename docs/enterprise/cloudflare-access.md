@@ -217,10 +217,12 @@ Two failures look like a working setup:
   profile from the email alone, with no egress and no IdP coupling. OpenClaw only
   checks a required header is present, never that it is valid, which is what
   `originRequest.access` is for.
-- **Browser only.** Access covers every route on the hostname, so the CLI, TUI and
-  paired nodes are blocked at the upgrade. `gateway.remote.edgeAuth` sends an
-  Access service token, which gets past Access, but a service token carries no
-  email and trusted-proxy then refuses it. Terminals are
+- **Identity is the gate, not the client.** Access covers every route on the
+  hostname, and anything that completes the sign-in gets in: the Control UI, the
+  macOS app, and `openclaw tui` with `gateway.remote.edgeAuth`. All arrive as the
+  same Access email and land in the same `deviceAutoApprove` scopes. Node-role
+  connections are not eligible for that auto-approval, and they stay out anyway
+  because this application has no Service Auth policy. Terminals are
   [terminal access](/docs/enterprise/terminals).
 - **Scopes are separate.** Who may open the agent is the Access policy; what they
   may do inside is [scopes](/docs/enterprise/scopes).

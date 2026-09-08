@@ -18,14 +18,14 @@ user, never as root.
 
 | setting | grants to | lives in |
 | --- | --- | --- |
-| `gateway.auth.trustedProxy.deviceAutoApprove.scopes` | every browser that passes SSO | the role, seeded once |
+| `gateway.auth.trustedProxy.deviceAutoApprove.scopes` | every operator device that passes SSO | the role, seeded once |
 | `gateway.auth.identityScopes` | one named email | config, editable live |
 | `gateway.roles` | a ceiling every session is filtered through | config plus runtime state |
 
 They are not alternatives. The device grant is capped by `deviceAutoApprove` when
-a browser first pairs, `identityScopes` is unioned on top at every Control UI
-connection, and the `gateway.roles` ceiling, if configured, filters the result
-last.
+an operator device first pairs, `identityScopes` is unioned on top at every
+Control UI connection, and the `gateway.roles` ceiling, if configured, filters
+the result last.
 
 ## What the roles ship
 
@@ -45,7 +45,7 @@ its own pairing.
 `operator.admin` is deliberately absent. It is the one scope that
 short-circuits every check, and it alone unlocks the operator terminal, config
 mutation, the secret store, and session deletion. In `deviceAutoApprove` it would
-go to every browser that passed SSO rather than to a person.
+go to every operator device that passed SSO rather than to a person.
 
 Note that `deviceAutoApprove.scopes` is validated as plain strings, not against
 the scope list, so a misspelled scope boots cleanly and silently narrows what
@@ -107,7 +107,7 @@ agents rather than separate scopes. See
 
 ## The other axis
 
-Scopes govern the browser. A terminal inside the VM is a different identity, a
-different audit trail, and unaffected by anything on this page.
+Scopes govern the operator device. A terminal inside the VM is a different
+identity, a different audit trail, and unaffected by anything on this page.
 
 Next: [terminal access](/docs/enterprise/terminals).
