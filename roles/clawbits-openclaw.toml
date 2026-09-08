@@ -1,8 +1,8 @@
 version = 1
 
 name  = "clawbits-openclaw"
-image = "ghcr.io/skalenetwork/clawbits-openclaw@sha256:1d44c0f0786666cf212042002c0099cb087172538f5ab72f172f8156ac8d05b9"
-init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
+image = "ghcr.io/skalenetwork/clawbits-openclaw@sha256:098fe77e09056af85fa8d4aa9e6c44653dde49efd1082c66346cfbf85b2d3fac"
+init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
 
 [resources]
 vcpus = 4
@@ -14,71 +14,14 @@ HOME = "/home/node"
 XDG_CACHE_HOME = "/home/node/.openclaw/cache"
 OPENCLAW_NO_AUTO_UPDATE = "1"
 NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
+CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [files]
-"/etc/openclaw/start" = { mode = 0o755, content = '''
-#!/bin/sh
-set -e
-oc() { /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs "$@"; }
-acct=channels.clawbits.accounts.default
-ep="${CLAWBITS_ENDPOINT:-https://app.clawbits.ai}"
-mirror=/home/node/.openclaw/state/clawbits-identity
-
-apply_identity() {
-  oc config set "$acct.orgId" "$(sed -n 1p "$mirror")"
-  oc config set "$acct.agentId" "$(sed -n 2p "$mirror")"
-  oc config set "$acct.apiKey" "$(sed -n 3p "$mirror")"
-  oc config set "$acct.channelId" "$(sed -n 4p "$mirror")"
-}
-
-install -d -o node -g node /home/node/.openclaw/state
-cat /etc/openclaw/defaults.json | oc config patch --stdin
-oc config set channels.clawbits.endpoint "$ep"
-
-if oc config get "$acct.channelId" >/dev/null 2>&1; then
-  :
-elif [ -s "$mirror" ]; then
-  apply_identity
-elif [ -n "${CLAWBITS_ORG_ID:-}" ] && [ -n "${CLAWBITS_SIGNUP_TOKEN:-}" ]; then
-  oc config set channels.clawbits.orgId "$CLAWBITS_ORG_ID"
-  if oc clawbits signup --json --endpoint "$ep" --org-id "$CLAWBITS_ORG_ID" \
-       --signup-token "$CLAWBITS_SIGNUP_TOKEN" > /tmp/signup.jsonl; then
-    /usr/sbin/runuser -u node -- /usr/local/bin/node -e '
-const fs = require("fs");
-const e = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
-  .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-  .find((x) => x && x.agent_id && x.api_key && x.channel_id);
-if (e) {
-  fs.writeFileSync(process.argv[2], [e.org_id, e.agent_id, e.api_key, e.channel_id].join("\n"), { mode: 0o600 });
-}' /tmp/signup.jsonl "$mirror"
-    if [ -s "$mirror" ]; then
-      apply_identity
-    else
-      echo "clawbits: signup returned no channel; starting without one" >&2
-    fi
-  else
-    echo "clawbits: signup failed; starting without a channel" >&2
-  fi
-  rm -f /tmp/signup.jsonl
-fi
-
-oc config set "$acct.endpoint" "$ep"
-oc config file | { read -r f; /usr/sbin/runuser -u node -- /usr/local/bin/node -e '
-const fs = require("fs");
-const d = (((JSON.parse(fs.readFileSync(process.argv[1], "utf8")).channels || {}).clawbits || {}).accounts || {}).default || {};
-if (d.orgId && d.agentId && d.apiKey && d.channelId) {
-  fs.writeFileSync(process.argv[2], [d.orgId, d.agentId, d.apiKey, d.channelId].join("\n"), { mode: 0o600 });
-}' "$f" "$mirror"; }
-
-exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway \
-  --bind lan --auth token
-''' }
 "/etc/openclaw/defaults.json" = '''
 {
   "agents": { "defaults": { "model": { "primary": "openrouter/auto" } } },
   "browser": { "extraArgs": ["--ignore-certificate-errors"] },
   "gateway": {
-    "mode": "local",
     "controlUi": {
       "allowedOrigins": [
         "http://${REEF_AGENT}.localhost:${REEF_PORT_GATEWAY}",
@@ -87,27 +30,7 @@ exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway 
     }
   },
   "tools": {
-    "sessions": { "visibility": "agent" },
-    "web": { "search": { "enabled": false } },
-    "alsoAllow": [
-      "browser",
-      "clawbits_channels_list",
-      "clawbits_channel_members",
-      "clawbits_email_inbox",
-      "clawbits_email_get",
-      "clawbits_agent_info",
-      "clawbits_email_send",
-      "clawbits_agent_description_update"
-    ]
-  },
-  "plugins": {
-    "entries": {
-      "clawbits": { "enabled": true, "hooks": { "allowConversationAccess": true } },
-      "clawbits-tools": { "enabled": true, "hooks": { "allowConversationAccess": true } }
-    }
-  },
-  "channels": {
-    "clawbits": { "serviceOwner": "tools" }
+    "sessions": { "visibility": "agent" }
   }
 }
 '''
