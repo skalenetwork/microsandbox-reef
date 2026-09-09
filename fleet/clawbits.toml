@@ -1,0 +1,11 @@
+version = 1
+
+[agents.cb]
+role = "clawbits-openclaw"
+
+[agents.alice-clawbits.env]
+OPENCLAW_GATEWAY_TOKEN = ""
+CLAWBITS_ORG_ID = ""
+CLAWBITS_SIGNUP_TOKEN = ""
+
+CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
