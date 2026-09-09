@@ -172,8 +172,13 @@ enum AgentCommand {
     Start { name: AgentName },
     /// Set desired state to stopped and reconcile
     Stop { name: AgentName },
-    /// Destroy the VM and the record; volumes survive
-    Rm { name: AgentName },
+    /// Destroy the VMs and the records; volumes survive unless --volumes
+    Rm {
+        names: Vec<AgentName>,
+        /// Also delete each agent's volumes and everything in them
+        #[arg(long)]
+        volumes: bool,
+    },
 }
 
 #[derive(Clone)]
@@ -603,12 +608,28 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
         }
         AgentCommand::Start { name } => set_desired(&ctx, &name, Desired::Running).await,
         AgentCommand::Stop { name } => set_desired(&ctx, &name, Desired::Stopped).await,
-        AgentCommand::Rm { name } => {
-            let agent = require_agent(&ctx, &name)?;
-            ctx.vmm.remove(&reconcile::sandbox_name(&name)).await?;
-            ctx.store.delete_agent(&name)?;
-            ctx.store.record(&name, "deleted", &agent.spec.owner)?;
-            println!("{name} removed");
+        AgentCommand::Rm { names, volumes } => {
+            if names.is_empty() {
+                bail!("no agents given");
+            }
+            let agents: Vec<Agent> = names
+                .iter()
+                .map(|name| require_agent(&ctx, name))
+                .collect::<Result<_>>()?;
+            for agent in &agents {
+                let name = &agent.name;
+                ctx.vmm.remove(&reconcile::sandbox_name(name)).await?;
+                if volumes {
+                    for entry in ctx.store.role_volumes(&agent.spec.role)? {
+                        let volume = reconcile::volume_name(name, &entry);
+                        ctx.vmm.remove_volume(&volume).await?;
+                        ctx.store.record(name, "volume-deleted", &volume)?;
+                    }
+                }
+                ctx.store.delete_agent(name)?;
+                ctx.store.record(name, "deleted", &agent.spec.owner)?;
+                println!("{name} removed");
+            }
             Ok(())
         }
     }

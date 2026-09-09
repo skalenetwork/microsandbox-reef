@@ -8,7 +8,7 @@ use microsandbox::sandbox::{
 };
 use microsandbox::size::SizeExt;
 use microsandbox::{
-    AgentClient, ExecEvent, MicrosandboxError, NetworkAction, NetworkPolicy, Sandbox,
+    AgentClient, ExecEvent, MicrosandboxError, NetworkAction, NetworkPolicy, Sandbox, Volume,
 };
 use reef_core::{Domain, EnvKey, VmStatus};
 use sha2::{Digest, Sha256};
@@ -146,6 +146,13 @@ impl Vmm for Msb {
         }
         handle.destroy().await?;
         Ok(())
+    }
+
+    async fn remove_volume(&self, name: &str) -> Result<()> {
+        match Volume::remove(name).await {
+            Ok(()) | Err(MicrosandboxError::VolumeNotFound(_)) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

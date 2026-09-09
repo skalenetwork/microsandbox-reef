@@ -31,11 +31,15 @@ impl Reef {
 
 impl Drop for Reef {
     fn drop(&mut self) {
-        let _ = self.run(&["agent", "rm", &self.agent]);
+        let _ = self.run(&["agent", "rm", "--volumes", &self.agent]);
         let _ = Command::new("msb")
-            .args(["volume", "rm", &format!("reef-vol-{}-data", self.agent)])
+            .args(["volume", "rm", &volume(&self.agent)])
             .output();
     }
+}
+
+fn volume(agent: &str) -> String {
+    format!("reef-vol-{agent}-data")
 }
 
 fn web_port(json: &str) -> u16 {
@@ -286,8 +290,17 @@ fn full_agent_journey() {
         "published port {web} did not reach the guest: {published}"
     );
 
-    let removed = reef.ok(&["agent", "rm", &reef.agent]);
+    let removed = reef.ok(&["agent", "rm", "--volumes", &reef.agent]);
     assert!(removed.contains("removed"), "{removed}");
+    let left = Command::new("msb")
+        .args(["volume", "list"])
+        .output()
+        .expect("msb runs");
+    let left = String::from_utf8_lossy(&left.stdout).into_owned();
+    assert!(
+        !left.contains(&volume(&reef.agent)),
+        "--volumes left the volume behind:\n{left}"
+    );
 
     let broken_role = reef.state.join("broken.toml");
     std::fs::write(

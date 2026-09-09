@@ -261,6 +261,10 @@ mod tests {
             self.vms.lock().unwrap().remove(name);
             Ok(())
         }
+
+        async fn remove_volume(&self, _name: &str) -> Result<()> {
+            Ok(())
+        }
     }
 
     const ROLE: &str = r#"

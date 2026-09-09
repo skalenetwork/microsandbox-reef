@@ -2,7 +2,7 @@ use crate::rows::Event;
 use anyhow::{Context, Result, bail};
 use reef_core::{
     Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, ImageRef, Lifecycle,
-    PortName, Role, RoleName,
+    PortName, Role, RoleName, VolumeName,
 };
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, Type, ValueRef};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -152,6 +152,16 @@ impl Store {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn role_volumes(&self, role: &RoleName) -> Result<BTreeSet<VolumeName>> {
+        let mut stmt = self.db.prepare(
+            "SELECT DISTINCT entry.key
+             FROM role_versions v, json_each(v.definition, '$.volumes') entry
+             WHERE v.role = ?1",
+        )?;
+        let rows = stmt.query_map([role.as_str()], |row| text(row, 0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn agents_on_role(&self, role: &RoleName) -> Result<Vec<(AgentName, Digest)>> {
@@ -513,6 +523,37 @@ network = { egress = ["example.com"] }
         let (active, loaded) = store.active_role(&role.name).unwrap().unwrap();
         assert_eq!(active, digest());
         assert_eq!(loaded, role);
+    }
+
+    #[test]
+    fn role_volumes_span_every_version_of_the_role() {
+        let store = Store::open_temp();
+        let import = |entry: &str, digest: &str| {
+            let volumes = match entry {
+                "" => String::new(),
+                entry => {
+                    format!("[volumes]\n{entry} = {{ dest = \"/opt/{entry}\", size-mib = 8 }}\n")
+                }
+            };
+            let role = parse_role(&format!("{ROLE}{volumes}")).unwrap();
+            let json = serde_json::to_string(&role).unwrap();
+            store
+                .import_role(&role, &digest.repeat(64).parse().unwrap(), &json)
+                .unwrap();
+            role.name
+        };
+        let name = import("", "a");
+        assert!(store.role_volumes(&name).unwrap().is_empty());
+
+        import("data", "b");
+        import("state", "c");
+        let entries: Vec<String> = store
+            .role_volumes(&name)
+            .unwrap()
+            .iter()
+            .map(VolumeName::to_string)
+            .collect();
+        assert_eq!(entries, ["data", "state"]);
     }
 
     #[test]

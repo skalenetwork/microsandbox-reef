@@ -31,4 +31,5 @@ pub trait Vmm {
     async fn start(&self, name: &str) -> Result<()>;
     async fn stop(&self, name: &str) -> Result<()>;
     async fn remove(&self, name: &str) -> Result<()>;
+    async fn remove_volume(&self, name: &str) -> Result<()>;
 }

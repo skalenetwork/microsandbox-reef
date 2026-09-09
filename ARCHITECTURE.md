@@ -50,7 +50,9 @@ Invariants:
   VM read on every command says what is up, and a command that prints a state
   reports `failed` when the two disagree.
 - A volume declared by a role survives everything the VM does not: stop/start,
-  the recreate a role change forces, and `agent rm`.
+  the recreate a role change forces, and `agent rm`. `agent rm --volumes` is
+  the one command that deletes one, and the names it deletes come from reef's
+  own record of the role's versions, never from a scan of what msb holds.
 - A secret value never enters the guest (placeholder + host-side TLS
   substitution, bound to one host) and never enters reef's database, events,
   or errors (`Secret` has no `Serialize`; `Debug` redacts).

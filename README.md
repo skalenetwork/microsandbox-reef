@@ -129,7 +129,8 @@ outlive the VMs, and one console across hosts.
 | `reef agent update reviewer-1` | Re-pin to the role's active version and recreate the VM |
 | `reef agent stop reviewer-1` | Desired state stopped |
 | `reef agent start reviewer-1` | Desired state running |
-| `reef agent rm reviewer-1` | VM destroyed, volumes kept |
+| `reef agent rm reviewer-1 reviewer-2` | VMs destroyed, volumes kept |
+| `reef agent rm reviewer-1 --volumes` | VM destroyed, the agent's volumes deleted with it |
 | `reef fleet apply fleet/*.toml` | Converge the declared fleet |
 | `reef events --agent reviewer-1` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
@@ -317,13 +318,16 @@ data = { dest = "/opt/data", size-mib = 10240 }
 ```
 
 A volume survives stop/start, a role change (which recreates the VM), and
-`agent rm`; `agent get` prints its name so `msb volume rm <name>` can delete
-it. Everything outside a declared path lives in the rootfs and is replaced
-whenever the role changes - that is what an image upgrade *is*. reef cannot
-persist state an image neither declares nor rebuilds on its own: check where
-your image keeps state (`msb image inspect <image>` shows its OCI config) and
-declare those paths. A volume also hides whatever the image ships at its mount
-point, so mount the narrowest path that holds the state you need.
+`agent rm`. Only `agent rm --volumes` deletes one, and it deletes every entry
+any version of the agent's role declares, so a renamed entry leaves nothing
+behind. `agent get` prints a volume's name, so `msb volume rm <name>` can
+delete it without removing the agent. Everything outside a declared path lives
+in the rootfs and is replaced whenever the role changes - that is what an image
+upgrade *is*. reef cannot persist state an image neither declares nor rebuilds
+on its own: check where your image keeps state (`msb image inspect <image>`
+shows its OCI config) and declare those paths. A volume also hides whatever the
+image ships at its mount point, so mount the narrowest path that holds the
+state you need.
 
 ### Egress and secrets
 
