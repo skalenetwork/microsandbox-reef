@@ -1,0 +1,23 @@
+version = 1
+
+# Copy to fleet/skale-monitor.toml (kept out of git) and fill in the two
+# secrets below.
+#
+# The agent name drives the sandbox name (reef-skale-mainnet) and the volume
+# names, and the sync scripts in sla-server-centralized take
+# REEF_AGENT=reef-<name>, so changing it means changing those commands too.
+[agents.skale-mainnet]
+# Local fork of clawbits-openclaw: same image, deepseek pinned as the model,
+# 2 vCPU / 3072 MiB. Use "clawbits-openclaw" to run upstream unmodified.
+role = "skale-monitor"
+
+[agents.skale-mainnet.env]
+# openssl rand -hex 32. A shared secret, not an identity: it gates the
+# gateway's WebSocket RPC on the published port.
+OPENCLAW_GATEWAY_TOKEN = "REPLACE-openssl-rand-hex-32"
+CLAWBITS_ORG_ID        = "org-e4f9fe3c-82d1-463e-a264-b2874428bf35"
+# Single-use AND short-lived - one expired within the hour while we debugged
+# something unrelated. Mint it in the Clawbits "Add agent" prompt immediately
+# before `reef fleet apply`, never in advance.
+CLAWBITS_SIGNUP_TOKEN  = "human-REPLACE-BEFORE-APPLY"
+CLAWBITS_ENDPOINT      = "https://app.clawbits.ai"
