@@ -54,6 +54,13 @@ CREATE TABLE agent_ports (
 );
 ";
 
+#[derive(Default)]
+pub struct EventFilter {
+    pub agent: Option<AgentName>,
+    pub after: Option<i64>,
+    pub limit: Option<u32>,
+}
+
 pub struct Store {
     db: Connection,
 }
@@ -361,13 +368,18 @@ impl Store {
         Ok(())
     }
 
-    pub fn events(&self, agent: Option<&AgentName>, after: Option<i64>) -> Result<Vec<Event>> {
+    pub fn events(&self, filter: &EventFilter) -> Result<Vec<Event>> {
         let mut stmt = self.db.prepare(
             "SELECT id, agent, at, kind, detail FROM events
              WHERE (?1 IS NULL OR agent = ?1) AND (?2 IS NULL OR id > ?2)
-             ORDER BY id",
+             ORDER BY id DESC LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![agent.map(AgentName::as_str), after], |row| {
+        let params = params![
+            filter.agent.as_ref().map(AgentName::as_str),
+            filter.after,
+            filter.limit.map_or(-1, i64::from),
+        ];
+        let rows = stmt.query_map(params, |row| {
             Ok(Event {
                 id: row.get(0)?,
                 agent: text(row, 1)?,
@@ -376,7 +388,9 @@ impl Store {
                 detail: row.get(4)?,
             })
         })?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        let mut events = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        events.reverse();
+        Ok(events)
     }
 }
 
@@ -666,16 +680,35 @@ network = { egress = ["example.com"] }
         store
             .record(&agent.name, "create", "sandbox reef-worker-1")
             .unwrap();
-        let events = store.events(Some(&agent.name), None).unwrap();
+        let events = store
+            .events(&EventFilter {
+                agent: Some(agent.name.clone()),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(events.len(), 1);
 
         store.record(&agent.name, "remove", "").unwrap();
-        let after = store.events(None, Some(events[0].id)).unwrap();
+        let after = store
+            .events(&EventFilter {
+                after: Some(events[0].id),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(after.len(), 1);
         assert_eq!(after[0].kind, "remove");
 
+        let newest = store
+            .events(&EventFilter {
+                limit: Some(1),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(newest.len(), 1, "limit keeps the newest");
+        assert_eq!(newest[0].kind, "remove");
+
         store.delete_agent(&agent.name).unwrap();
         assert!(store.get_agent(&agent.name).unwrap().is_none());
-        assert_eq!(store.events(None, None).unwrap().len(), 2);
+        assert_eq!(store.events(&EventFilter::default()).unwrap().len(), 2);
     }
 }

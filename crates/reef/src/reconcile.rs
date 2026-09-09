@@ -188,6 +188,7 @@ fn vm_config<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::EventFilter;
     use anyhow::bail;
     use reef_core::{AgentSpec, Desired, Digest, Drift, EnvKey, VmStatus, parse_role};
     use std::collections::HashMap;
@@ -385,7 +386,10 @@ network = { egress = ["example.com"] }
 
     fn kinds(store: &Store, name: &AgentName) -> Vec<String> {
         store
-            .events(Some(name), None)
+            .events(&EventFilter {
+                agent: Some(name.clone()),
+                ..Default::default()
+            })
             .unwrap()
             .into_iter()
             .map(|event| event.kind)

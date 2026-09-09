@@ -2,23 +2,27 @@ mod host;
 
 pub use host::Alias;
 
-use crate::rows::{AgentDetail, AgentRow, RoleDetail, RoleRow};
+use crate::rows::{AgentDetail, AgentRow, Event, RoleDetail, RoleRow};
 use anyhow::{Context, Result};
 use host::{Failure, Host};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::crossterm::cursor::MoveTo;
+use ratatui::crossterm::event::{self, Event as Input, KeyCode, KeyModifiers};
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::{Clear, ClearType};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Padding, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use reef_core::{AgentName, RoleName, State, VmStatus};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const POLL: Duration = Duration::from_secs(5);
+const TAIL: &str = "12";
 const SELECTED: Style = Style::new().add_modifier(Modifier::REVERSED);
 
 #[derive(Clone, Copy)]
@@ -76,6 +80,20 @@ pub fn hosts(aliases: Vec<Alias>, reef: String, state: PathBuf) -> Result<Vec<Ho
 
 pub fn run(hosts: Vec<Host>) -> Result<()> {
     let (tx, rx) = mpsc::channel();
+    let hosts = hosts
+        .into_iter()
+        .enumerate()
+        .map(|(index, host)| {
+            let (wake, wakes) = mpsc::channel();
+            poll(index, host.clone(), tx.clone(), wakes);
+            HostState {
+                host,
+                agents: None,
+                roles: None,
+                wake,
+            }
+        })
+        .collect();
     let mut app = App::new(hosts, tx);
     let mut terminal = ratatui::try_init()?;
     let outcome = app.drive(&mut terminal, &rx);
@@ -93,7 +111,7 @@ struct Spec {
     columns: &'static [&'static str],
     list: &'static [&'static str],
     empty: &'static str,
-    keys: &'static str,
+    other: &'static str,
 }
 
 impl View {
@@ -103,56 +121,42 @@ impl View {
                 columns: &[
                     "host", "name", "role", "owner", "desired", "state", "vm", "sync", "ports",
                 ],
-                list: &["agent", "list", "--json"],
+                list: &["agent", "list"],
                 empty: "no agents",
-                keys: "j/k move  enter detail  s start  x stop  u update  d remove  tab roles  q quit",
+                other: "roles",
             },
             Self::Roles => Spec {
                 columns: &["host", "name", "version", "image", "agents", "stale"],
-                list: &["role", "list", "--json"],
+                list: &["role", "list"],
                 empty: "no roles",
-                keys: "j/k move  enter detail  tab agents  q quit",
+                other: "agents",
             },
         }
     }
 }
 
 #[derive(Clone, Copy)]
-enum Verb {
-    Start,
-    Stop,
-    Update,
-    Remove,
+struct Verb {
+    key: char,
+    label: &'static str,
+    arg: &'static str,
+    progress: &'static str,
+    asks: bool,
 }
 
-impl Verb {
-    fn arg(self) -> &'static str {
-        match self {
-            Self::Start => "start",
-            Self::Stop => "stop",
-            Self::Update => "update",
-            Self::Remove => "rm",
-        }
-    }
-
-    fn progress(self) -> &'static str {
-        match self {
-            Self::Start => "starting",
-            Self::Stop => "stopping",
-            Self::Update => "updating",
-            Self::Remove => "removing",
-        }
-    }
-}
+#[rustfmt::skip] const START:  Verb = Verb { key: 's', label: "start",  arg: "start",  progress: "starting", asks: false };
+#[rustfmt::skip] const STOP:   Verb = Verb { key: 'x', label: "stop",   arg: "stop",   progress: "stopping", asks: false };
+#[rustfmt::skip] const UPDATE: Verb = Verb { key: 'u', label: "update", arg: "update", progress: "updating", asks: true };
+#[rustfmt::skip] const REMOVE: Verb = Verb { key: 'd', label: "remove", arg: "rm",     progress: "removing", asks: true };
 
 enum Msg {
     Agents(usize, Result<Vec<AgentRow>, Failure>),
     Roles(usize, Result<Vec<RoleRow>, Failure>),
     Detail(Row, Result<Detail, Failure>),
-    Done(usize, AgentName, Result<(), Failure>),
+    Done(Row, Result<(), Failure>),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Row {
     Agent(usize, AgentName),
     Role(usize, RoleName),
@@ -171,10 +175,28 @@ impl Row {
             Self::Role(_, name) => name.as_str(),
         }
     }
+
+    fn noun(&self) -> &'static str {
+        match self {
+            Self::Agent(..) => "agent",
+            Self::Role(..) => "role",
+        }
+    }
+
+    fn is_agent(&self) -> bool {
+        matches!(self, Self::Agent(..))
+    }
+
+    fn verbs(&self) -> &'static [Verb] {
+        match self {
+            Self::Agent(..) => &[START, STOP, UPDATE, REMOVE],
+            Self::Role(..) => &[REMOVE],
+        }
+    }
 }
 
 enum Detail {
-    Agent(Box<AgentDetail>),
+    Agent(Box<AgentDetail>, Result<Vec<Event>, Failure>),
     Role(Box<RoleDetail>),
 }
 
@@ -182,7 +204,6 @@ struct HostState {
     host: Host,
     agents: Option<Result<Vec<AgentRow>, Failure>>,
     roles: Option<Result<Vec<RoleRow>, Failure>>,
-    busy: BTreeMap<AgentName, Verb>,
     wake: Sender<View>,
 }
 
@@ -192,8 +213,8 @@ enum Screen {
         row: Row,
         detail: Option<Result<Detail, Failure>>,
         scroll: u16,
+        polled: Instant,
     },
-    Confirm(Verb, usize, AgentName),
 }
 
 enum Item<'a> {
@@ -217,6 +238,9 @@ struct App {
     view: View,
     selected: usize,
     screen: Screen,
+    busy: BTreeMap<Row, Verb>,
+    confirm: Option<(Verb, Row)>,
+    shell: Option<Row>,
     flash: Option<String>,
     quit: bool,
     color: bool,
@@ -224,27 +248,15 @@ struct App {
 }
 
 impl App {
-    fn new(hosts: Vec<Host>, tx: Sender<Msg>) -> Self {
-        let hosts = hosts
-            .into_iter()
-            .enumerate()
-            .map(|(index, host)| {
-                let (wake, wakes) = mpsc::channel();
-                poll(index, host.clone(), tx.clone(), wakes);
-                HostState {
-                    host,
-                    agents: None,
-                    roles: None,
-                    busy: BTreeMap::new(),
-                    wake,
-                }
-            })
-            .collect();
+    fn new(hosts: Vec<HostState>, tx: Sender<Msg>) -> Self {
         Self {
             hosts,
             view: View::Agents,
             selected: 0,
             screen: Screen::Table,
+            busy: BTreeMap::new(),
+            confirm: None,
+            shell: None,
             flash: None,
             quit: false,
             color: color(),
@@ -256,7 +268,7 @@ impl App {
         while !self.quit {
             terminal.draw(|frame| self.draw(frame))?;
             if event::poll(Duration::from_millis(50))?
-                && let Event::Key(key) = event::read()?
+                && let Input::Key(key) = event::read()?
                 && key.is_press()
             {
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
@@ -268,7 +280,22 @@ impl App {
             for msg in rx.try_iter() {
                 self.apply(msg);
             }
+            self.refresh();
+            if let Some(row) = self.shell.take() {
+                self.hand_over(terminal, &row)?;
+            }
         }
+        Ok(())
+    }
+
+    fn hand_over(&mut self, terminal: &mut DefaultTerminal, row: &Row) -> Result<()> {
+        let mut shell = self.hosts[row.host()].host.shell(row.name());
+        ratatui::restore();
+        execute!(std::io::stdout(), Clear(ClearType::All), MoveTo(0, 0)).ok();
+        let status = shell.status();
+        *terminal = ratatui::try_init()?;
+        terminal.clear()?;
+        self.flash = status.err().map(|e| format!("{}: {e}", row.name()));
         Ok(())
     }
 
@@ -288,49 +315,47 @@ impl App {
         self.items().get(self.selected)?.row()
     }
 
-    fn selected_agent(&self) -> Option<(usize, AgentName)> {
-        match self.selected_row()? {
-            Row::Agent(index, name) => Some((index, name)),
-            Row::Role(..) => None,
-        }
-    }
-
     fn position(&self, row: &Row) -> Option<usize> {
         self.items()
             .iter()
             .position(|item| item.row().as_ref() == Some(row))
     }
 
+    fn target(&self) -> Option<Row> {
+        match &self.screen {
+            Screen::Detail { row, .. } => Some(row.clone()),
+            Screen::Table => self.selected_row(),
+        }
+    }
+
     fn key(&mut self, code: KeyCode) {
         self.flash = None;
-        match &mut self.screen {
-            Screen::Confirm(verb, index, name) => {
-                let (verb, target) = (*verb, (*index, name.clone()));
-                self.screen = Screen::Table;
-                if code == KeyCode::Char('y') {
-                    self.act(verb, target);
-                }
+        if let Some((verb, row)) = self.confirm.take() {
+            if code == KeyCode::Char('y') {
+                self.act(verb, row);
             }
-            Screen::Detail { scroll, .. } => match code {
-                KeyCode::Esc => self.screen = Screen::Table,
-                KeyCode::Char('q') => self.quit = true,
-                KeyCode::Up | KeyCode::Char('k') => *scroll = scroll.saturating_sub(1),
-                KeyCode::Down | KeyCode::Char('j') => *scroll = scroll.saturating_add(1),
-                _ => {}
-            },
-            Screen::Table => match code {
-                KeyCode::Char('q') => self.quit = true,
-                KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
-                KeyCode::Down | KeyCode::Char('j') => self.selected = self.clamp(self.selected + 1),
-                KeyCode::Enter => self.open(),
-                KeyCode::Tab => self.switch(),
-                KeyCode::Char('s') => self.act_selected(Verb::Start),
-                KeyCode::Char('x') => self.act_selected(Verb::Stop),
-                KeyCode::Char('u') => self.confirm(Verb::Update),
-                KeyCode::Char('d') => self.confirm(Verb::Remove),
-                _ => {}
-            },
+            return;
         }
+        let table = matches!(self.screen, Screen::Table);
+        match code {
+            KeyCode::Char('q') => self.quit = true,
+            KeyCode::Esc => self.screen = Screen::Table,
+            KeyCode::Up | KeyCode::Char('k') => self.step(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.step(1),
+            KeyCode::Enter if table => self.open(),
+            KeyCode::Tab if table => self.switch(),
+            KeyCode::Char('t') => self.shell = self.target().filter(Row::is_agent),
+            KeyCode::Char(key) => self.press(key),
+            _ => {}
+        }
+    }
+
+    fn step(&mut self, delta: i16) {
+        if let Screen::Detail { scroll, .. } = &mut self.screen {
+            *scroll = scroll.saturating_add_signed(delta);
+            return;
+        }
+        self.selected = self.clamp(self.selected.saturating_add_signed(delta.into()));
     }
 
     fn clamp(&self, index: usize) -> usize {
@@ -354,15 +379,16 @@ impl App {
             .unwrap_or_else(|| self.clamp(self.selected));
     }
 
-    fn confirm(&mut self, verb: Verb) {
-        if let Some((index, name)) = self.selected_agent() {
-            self.screen = Screen::Confirm(verb, index, name);
-        }
-    }
-
-    fn act_selected(&mut self, verb: Verb) {
-        if let Some(target) = self.selected_agent() {
-            self.act(verb, target);
+    fn press(&mut self, key: char) {
+        let Some(row) = self.target() else {
+            return;
+        };
+        let Some(verb) = row.verbs().iter().copied().find(|verb| verb.key == key) else {
+            return;
+        };
+        match verb.asks {
+            true => self.confirm = Some((verb, row)),
+            false => self.act(verb, row),
         }
     }
 
@@ -370,39 +396,54 @@ impl App {
         let Some(row) = self.selected_row() else {
             return;
         };
-        let host = self.hosts[row.host()].host.clone();
-        let tx = self.tx.clone();
-        let target = row.clone();
-        thread::spawn(move || {
-            let detail = match &target {
-                Row::Agent(_, name) => host
-                    .fetch(&["agent", "get", name.as_str(), "--json"])
-                    .map(|it| Detail::Agent(Box::new(it))),
-                Row::Role(_, name) => host
-                    .fetch(&["role", "get", name.as_str(), "--json"])
-                    .map(|it| Detail::Role(Box::new(it))),
-            };
-            tx.send(Msg::Detail(target, detail)).ok();
-        });
+        self.fetch(row.clone());
         self.screen = Screen::Detail {
             row,
             detail: None,
             scroll: 0,
+            polled: Instant::now(),
         };
     }
 
-    fn act(&mut self, verb: Verb, (index, name): (usize, AgentName)) {
-        let state = &mut self.hosts[index];
-        if state.busy.contains_key(&name) {
-            self.flash = Some(format!("{name} is busy"));
-            return;
-        }
-        state.busy.insert(name.clone(), verb);
-        let host = state.host.clone();
+    fn fetch(&self, row: Row) {
+        let host = self.hosts[row.host()].host.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let outcome = host.run(&["agent", verb.arg(), name.as_str()]);
-            tx.send(Msg::Done(index, name, outcome)).ok();
+            let detail = match &row {
+                Row::Agent(_, name) => host.fetch(&["agent", "get", name.as_str()]).map(|it| {
+                    let events = host.fetch(&["events", "--agent", name.as_str(), "--limit", TAIL]);
+                    Detail::Agent(Box::new(it), events)
+                }),
+                Row::Role(_, name) => host
+                    .fetch(&["role", "get", name.as_str()])
+                    .map(|it| Detail::Role(Box::new(it))),
+            };
+            tx.send(Msg::Detail(row, detail)).ok();
+        });
+    }
+
+    fn refresh(&mut self) {
+        let row = match &mut self.screen {
+            Screen::Detail { row, polled, .. } if polled.elapsed() >= POLL => {
+                *polled = Instant::now();
+                row.clone()
+            }
+            _ => return,
+        };
+        self.fetch(row);
+    }
+
+    fn act(&mut self, verb: Verb, row: Row) {
+        if self.busy.contains_key(&row) {
+            self.flash = Some(format!("{} is busy", row.name()));
+            return;
+        }
+        self.busy.insert(row.clone(), verb);
+        let host = self.hosts[row.host()].host.clone();
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let outcome = host.run(&[row.noun(), verb.arg, row.name()]);
+            tx.send(Msg::Done(row, outcome)).ok();
         });
     }
 
@@ -425,13 +466,11 @@ impl App {
                     *detail = Some(fetched);
                 }
             }
-            Msg::Done(index, name, outcome) => {
-                let view = self.view;
-                let host = &mut self.hosts[index];
-                host.busy.remove(&name);
-                host.wake.send(view).ok();
+            Msg::Done(row, outcome) => {
+                self.busy.remove(&row);
+                self.hosts[row.host()].wake.send(self.view).ok();
                 if let Err(failure) = outcome {
-                    self.flash = Some(format!("{name}: {failure}"));
+                    self.flash = Some(format!("{}: {failure}", row.name()));
                 }
             }
         }
@@ -446,8 +485,19 @@ impl App {
                 row,
                 detail,
                 scroll,
-            } => frame.render_widget(self.detail(row, detail.as_ref()).scroll((*scroll, 0)), body),
-            _ => frame.render_widget(self.table(body), body),
+                ..
+            } => {
+                let [left, right] =
+                    Layout::horizontal([Constraint::Min(0), Constraint::Percentage(42)])
+                        .areas(body);
+                let split = row.is_agent();
+                let area = if split { left } else { body };
+                frame.render_widget(self.detail(row, detail.as_ref()).scroll((*scroll, 0)), area);
+                if split {
+                    frame.render_widget(self.events(detail.as_ref()), right);
+                }
+            }
+            Screen::Table => frame.render_widget(self.table(body), body),
         }
         frame.render_widget(self.footer(), footer);
     }
@@ -515,11 +565,12 @@ impl App {
     }
 
     fn cells(&self, item: &Item) -> Vec<(String, Tone)> {
+        let busy = item.row().and_then(|row| self.busy.get(&row)).copied();
         match item {
             Item::Agent(index, agent) => {
                 let host = &self.hosts[*index];
-                let (state, tone) = match host.busy.get(&agent.name) {
-                    Some(verb) => (verb.progress(), Tone::Warn),
+                let (state, tone) = match busy {
+                    Some(verb) => (verb.progress, Tone::Warn),
                     None => (agent.state.label(), Tone::state(agent.state)),
                 };
                 let role = if agent.role_current {
@@ -551,43 +602,52 @@ impl App {
                     (ports.join(" "), Tone::Plain),
                 ]
             }
-            Item::Role(index, role) => vec![
-                (self.hosts[*index].host.label().to_owned(), Tone::Muted),
-                (role.name.to_string(), Tone::Plain),
-                (role.digest.short().to_owned(), Tone::Muted),
-                (role.image.to_string(), Tone::Plain),
-                (role.agents.to_string(), Tone::Plain),
-                (
-                    role.stale.to_string(),
-                    if role.stale > 0 {
-                        Tone::Warn
-                    } else {
-                        Tone::Muted
-                    },
-                ),
-            ],
+            Item::Role(index, role) => {
+                let name = match busy {
+                    Some(verb) => (format!("{} {}", role.name, verb.progress), Tone::Warn),
+                    None => (role.name.to_string(), Tone::Plain),
+                };
+                vec![
+                    (self.hosts[*index].host.label().to_owned(), Tone::Muted),
+                    name,
+                    (role.digest.short().to_owned(), Tone::Muted),
+                    (role.image.to_string(), Tone::Plain),
+                    (role.agents.to_string(), Tone::Plain),
+                    (
+                        role.stale.to_string(),
+                        if role.stale > 0 {
+                            Tone::Warn
+                        } else {
+                            Tone::Muted
+                        },
+                    ),
+                ]
+            }
             Item::Host(..) => Vec::new(),
         }
     }
 
+    fn heading(&self, title: String) -> Vec<Line<'static>> {
+        let rule = "─".repeat(title.chars().count());
+        vec![
+            Line::styled(title, self.style(Tone::Plain)),
+            Line::styled(rule, self.style(Tone::Muted)),
+        ]
+    }
+
     fn detail(&self, row: &Row, detail: Option<&Result<Detail, Failure>>) -> Paragraph<'static> {
         let host = &self.hosts[row.host()].host;
-        let lines = match detail {
-            None => vec![
-                self.field("name", row.name().to_owned(), Tone::Plain),
-                self.field("state", "loading".to_owned(), Tone::Muted),
-            ],
-            Some(Err(failure)) => vec![
-                self.field("name", row.name().to_owned(), Tone::Plain),
-                self.field("error", failure.to_string(), Tone::Bad),
-            ],
+        let mut lines = self.heading(format!("{} {}", row.noun(), row.name()));
+        lines.extend(match detail {
+            None => vec![self.field("state", "loading".to_owned(), Tone::Muted)],
+            Some(Err(failure)) => vec![self.field("error", failure.to_string(), Tone::Bad)],
             Some(Ok(Detail::Role(role))) => role
                 .rows()
                 .into_iter()
                 .map(|(label, value)| self.field(label, value, Tone::Plain))
                 .collect(),
-            Some(Ok(Detail::Agent(agent))) => {
-                let mut lines: Vec<Line<'static>> = agent
+            Some(Ok(Detail::Agent(agent, _))) => {
+                let mut fields: Vec<Line<'static>> = agent
                     .rows()
                     .into_iter()
                     .map(|(label, value)| {
@@ -599,35 +659,102 @@ impl App {
                         self.field(label, value, tone)
                     })
                     .collect();
-                lines.extend(
+                fields.extend(
                     agent
                         .ports
                         .values()
                         .filter_map(|port| host.forward(*port))
                         .map(|forward| self.field("forward", forward, Tone::Muted)),
                 );
-                lines.push(self.field("terminal", host.terminal(&agent.name), Tone::Muted));
-                lines
+                fields
             }
-        };
+        });
         Paragraph::new(lines).wrap(Wrap { trim: false })
     }
 
+    fn events(&self, detail: Option<&Result<Detail, Failure>>) -> Paragraph<'static> {
+        let now = now();
+        let mut lines = self.heading("events".to_owned());
+        lines.extend(match detail {
+            Some(Ok(Detail::Agent(_, Err(failure)))) => {
+                vec![Line::styled(failure.to_string(), self.style(Tone::Bad))]
+            }
+            Some(Ok(Detail::Agent(_, Ok(events)))) if events.is_empty() => {
+                vec![Line::styled("none yet", self.style(Tone::Muted))]
+            }
+            Some(Ok(Detail::Agent(_, Ok(events)))) => events
+                .iter()
+                .rev()
+                .map(|event| {
+                    Line::from(vec![
+                        Span::styled(pad(&event.kind, 8), self.style(Tone::Plain)),
+                        Span::styled(
+                            format!("{:>4}  ", ago(now, event.at)),
+                            self.style(Tone::Muted),
+                        ),
+                        Span::styled(event.detail.clone(), self.style(Tone::Muted)),
+                    ])
+                })
+                .collect(),
+            _ => Vec::new(),
+        });
+        Paragraph::new(lines).block(
+            Block::new()
+                .borders(Borders::LEFT)
+                .border_style(self.style(Tone::Muted))
+                .padding(Padding::left(2)),
+        )
+    }
+
     fn footer(&self) -> Line<'static> {
+        if let Some((verb, row)) = &self.confirm {
+            return Line::from(format!(
+                "{} {} on {}? y/n",
+                verb.arg,
+                row.name(),
+                self.hosts[row.host()].host.label()
+            ));
+        }
         if let Some(flash) = &self.flash {
             return Line::styled(flash.clone(), self.style(Tone::Bad));
         }
+        Line::styled(self.keys(), self.style(Tone::Muted))
+    }
+
+    fn keys(&self) -> String {
+        let row = self.target();
+        let hints = row
+            .iter()
+            .flat_map(|row| row.verbs())
+            .map(|verb| format!("{} {}  ", verb.key, verb.label))
+            .collect::<String>();
+        let terminal = match row.as_ref().is_some_and(Row::is_agent) {
+            true => "t terminal  ",
+            false => "",
+        };
         match &self.screen {
-            Screen::Table => Line::styled(self.view.spec().keys, self.style(Tone::Muted)),
-            Screen::Detail { .. } => {
-                Line::styled("j/k scroll  esc back  q quit", self.style(Tone::Muted))
-            }
-            Screen::Confirm(verb, index, name) => Line::from(format!(
-                "{} {name} on {}? y/n",
-                verb.arg(),
-                self.hosts[*index].host.label()
-            )),
+            Screen::Table => format!(
+                "j/k move  enter detail  {hints}{terminal}tab {}  q quit",
+                self.view.spec().other
+            ),
+            Screen::Detail { .. } => format!("j/k scroll  esc back  {hints}{terminal}q quit"),
         }
+    }
+}
+
+fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs() as i64)
+}
+
+fn ago(now: i64, at: i64) -> String {
+    let seconds = now.saturating_sub(at).max(0);
+    match seconds {
+        0..60 => format!("{seconds}s"),
+        60..3600 => format!("{}m", seconds / 60),
+        3600..86400 => format!("{}h", seconds / 3600),
+        _ => format!("{}d", seconds / 86400),
     }
 }
 
@@ -718,23 +845,14 @@ mod tests {
             host,
             agents,
             roles: None,
-            busy: BTreeMap::new(),
             wake: mpsc::channel().0,
         }
     }
 
     fn app(hosts: Vec<HostState>) -> App {
-        let (tx, _) = mpsc::channel();
-        App {
-            hosts,
-            view: View::Agents,
-            selected: 0,
-            screen: Screen::Table,
-            flash: None,
-            quit: false,
-            color: true,
-            tx,
-        }
+        let mut app = App::new(hosts, mpsc::channel().0);
+        app.color = true;
+        app
     }
 
     fn ssh(alias: &str) -> Host {
@@ -770,18 +888,17 @@ mod tests {
                 Some(Err(Failure::Unreachable("ssh: connect refused".to_owned()))),
             ),
         ]);
-        app.hosts[0]
-            .busy
-            .insert("echo-2".parse().unwrap(), Verb::Update);
+        app.busy
+            .insert(Row::Agent(0, "echo-2".parse().unwrap()), UPDATE);
         assert_eq!(
-            screen(&app, 100, 6),
+            screen(&app, 110, 6),
             [
-                " host      name     role         owner   desired   state      vm        sync    ports               ",
-                " prod-eu   echo-1   echo         ana     running   running    running   yes     ui=19007            ",
-                " prod-eu   echo-2   echo stale   ana     running   updating   -         drift                       ",
-                " prod-us   unreachable: ssh: connect refused                                                        ",
-                "                                                                                                    ",
-                " j/k move  enter detail  s start  x stop  u update  d remove  tab roles  q quit                     ",
+                " host      name     role         owner   desired   state      vm        sync    ports                         ",
+                " prod-eu   echo-1   echo         ana     running   running    running   yes     ui=19007                      ",
+                " prod-eu   echo-2   echo stale   ana     running   updating   -         drift                                 ",
+                " prod-us   unreachable: ssh: connect refused                                                                  ",
+                "                                                                                                              ",
+                " j/k move  enter detail  s start  x stop  u update  d remove  t terminal  tab roles  q quit                   ",
             ]
         );
     }
@@ -798,13 +915,13 @@ mod tests {
                 " echo      000000000000   alpine   4        1                   ",
                 " builder   000000000000   alpine   2        0                   ",
                 "                                                                ",
-                " j/k move  enter detail  tab agents  q quit                     ",
+                " j/k move  enter detail  d remove  tab agents  q quit           ",
             ]
         );
     }
 
     #[test]
-    fn one_host_hides_the_host_column() {
+    fn one_host_hides_the_host_column_and_offers_no_verbs() {
         let local = Host::Local {
             exe: "/opt/reef".into(),
             state: "/var/reef".into(),
@@ -815,8 +932,36 @@ mod tests {
             [
                 " name   role   owner   desired   state  ",
                 " connecting                             ",
-                " j/k move  enter detail  s start  x sto ",
+                " j/k move  enter detail  tab roles  q q ",
             ]
+        );
+    }
+
+    #[test]
+    fn verbs_and_terminal_reach_the_detail_screen() {
+        let rows = vec![agent("echo-1", State::Running, true, &[])];
+        let mut app = app(vec![state(ssh("prod-eu"), Some(Ok(rows)))]);
+        app.screen = Screen::Detail {
+            row: Row::Agent(0, "echo-1".parse().unwrap()),
+            detail: None,
+            scroll: 0,
+            polled: Instant::now(),
+        };
+
+        app.key(KeyCode::Char('u'));
+        let (verb, row) = app.confirm.clone().expect("update asks from the detail");
+        assert_eq!((verb.arg, row.name()), ("update", "echo-1"));
+
+        app.key(KeyCode::Char('n'));
+        assert!(app.confirm.is_none(), "any other key cancels");
+
+        app.key(KeyCode::Char('t'));
+        assert_eq!(app.shell.as_ref().map(Row::name), Some("echo-1"));
+
+        app.key(KeyCode::Char('j'));
+        assert!(
+            matches!(app.screen, Screen::Detail { scroll: 1, .. }),
+            "j still scrolls the detail"
         );
     }
 
@@ -827,7 +972,6 @@ mod tests {
             host: ssh("prod-eu"),
             agents: None,
             roles: None,
-            busy: BTreeMap::new(),
             wake,
         }]);
         app.key(KeyCode::Tab);
@@ -848,14 +992,14 @@ mod tests {
             state(ssh("prod-us"), Some(Ok(rows()))),
         ]);
         app.selected = 2;
-        assert_eq!(app.selected_agent().unwrap().1.as_str(), "echo-2");
+        assert_eq!(app.selected_row().unwrap().name(), "echo-2");
         app.apply(Msg::Agents(0, Ok(rows())));
         assert_eq!(app.selected, 3);
-        assert_eq!(app.selected_agent().unwrap().1.as_str(), "echo-2");
+        assert_eq!(app.selected_row().unwrap().name(), "echo-2");
     }
 
     #[test]
-    fn detail_prints_the_commands_to_type() {
+    fn detail_shows_the_fields_and_the_event_tail() {
         let mut app = app(vec![state(ssh("prod-eu"), Some(Ok(vec![])))]);
         let detail = AgentDetail {
             name: "echo-1".parse().unwrap(),
@@ -885,20 +1029,29 @@ mod tests {
             ports: BTreeMap::from([("ui".parse().unwrap(), 19007)]),
             env: BTreeMap::new(),
         };
+        let events = vec![Event {
+            id: 4,
+            agent: "echo-1".parse().unwrap(),
+            at: now() - 180,
+            kind: "create".to_owned(),
+            detail: "sandbox reef-echo-1".to_owned(),
+        }];
         app.screen = Screen::Detail {
             row: Row::Agent(0, "echo-1".parse().unwrap()),
-            detail: Some(Ok(Detail::Agent(Box::new(detail)))),
-            scroll: 10,
+            detail: Some(Ok(Detail::Agent(Box::new(detail), Ok(events)))),
+            scroll: 0,
+            polled: Instant::now(),
         };
         assert_eq!(
-            screen(&app, 60, 6),
+            screen(&app, 104, 7),
             [
-                " ports        ui=http://echo-1.localhost:19007              ",
-                " synced       yes                                           ",
-                " forward      ssh -N -L 19007:127.0.0.1:19007 -- prod-eu    ",
-                " terminal     ssh -t -- prod-eu reef agent ssh echo-1       ",
-                "                                                            ",
-                " j/k scroll  esc back  q quit                               ",
+                " agent echo-1                                               │  events                                   ",
+                " ────────────                                               │  ──────                                   ",
+                " name         echo-1                                        │  create       3m  sandbox reef-echo-1     ",
+                " role         echo@000000000000                             │                                           ",
+                " image        alpine                                        │                                           ",
+                " owner        ana                                           │                                           ",
+                " j/k scroll  esc back  s start  x stop  u update  d remove  t terminal  q quit                          ",
             ]
         );
     }

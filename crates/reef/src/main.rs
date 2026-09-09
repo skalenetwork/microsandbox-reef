@@ -20,7 +20,7 @@ use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use store::Store;
+use store::{EventFilter, Store};
 use vmm::Vmm;
 
 #[derive(Parser)]
@@ -63,6 +63,9 @@ enum Command {
         /// Only events after this id
         #[arg(long, value_name = "ID")]
         after: Option<i64>,
+        /// Keep only the newest N
+        #[arg(long, value_name = "N")]
+        limit: Option<u32>,
         /// Print JSON
         #[arg(long)]
         json: bool,
@@ -263,9 +266,20 @@ async fn main() -> Result<()> {
         Command::Role { command } => role_command(Ctx::open(&dir)?, command),
         Command::Agent { command } => agent_command(Ctx::open(&dir)?, command).await,
         Command::Fleet { command } => fleet_command(Ctx::open(&dir)?, command).await,
-        Command::Events { agent, after, json } => {
-            events_command(Ctx::open(&dir)?, agent, after, json)
-        }
+        Command::Events {
+            agent,
+            after,
+            limit,
+            json,
+        } => events_command(
+            Ctx::open(&dir)?,
+            EventFilter {
+                agent,
+                after,
+                limit,
+            },
+            json,
+        ),
         Command::Doctor => {
             msb::doctor()?;
             print_names();
@@ -635,13 +649,8 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
     }
 }
 
-fn events_command(
-    ctx: Ctx,
-    agent: Option<AgentName>,
-    after: Option<i64>,
-    json: bool,
-) -> Result<()> {
-    let events = ctx.store.events(agent.as_ref(), after)?;
+fn events_command(ctx: Ctx, filter: EventFilter, json: bool) -> Result<()> {
+    let events = ctx.store.events(&filter)?;
     emit(json, &events, || {
         for event in &events {
             println!(

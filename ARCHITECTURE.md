@@ -99,13 +99,15 @@ test, never a routine bump).
 
 Console: `ui.rs` is a client of the `--json` rows the CLI prints, nothing more.
 It fetches them by running this binary locally or `ssh ALIAS <reef> agent list
---json` remotely, polls every five seconds, and runs the same `agent start`,
-`stop`, `update` and `rm` commands an operator would type. It never opens the
-store and names no runtime type; a host knows only its own agents, and the
-console merges independent hosts on the laptop. Cells carry a `Tone`, not a
-`Style`: the render pass resolves it against one bool, so `NO_COLOR` needs no
-second path and the palette stays named ANSI for the terminal's own theme to
-shade.
+--json` remotely, polls every five seconds, and runs the same commands an
+operator would type: `agent start`, `stop`, `update` and `rm`, `role rm`, and
+`agent ssh`, which takes the terminal until it exits. Which verbs a row
+accepts is the row's own answer, so the footer and the key dispatch read one
+table. It never opens the store and names no runtime type; a host knows only
+its own agents, and the console merges independent hosts on the laptop. Cells
+carry a `Tone`, not a `Style`: the render pass resolves it against one bool, so
+`NO_COLOR` needs no second path and the palette stays named ANSI for the
+terminal's own theme to shade.
 
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
 status and an append-only event log. Observed VM state is never cached: it is

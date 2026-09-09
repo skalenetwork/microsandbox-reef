@@ -212,7 +212,7 @@ fn egress(domains: &[Domain]) -> String {
         .join(" ")
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Event {
     pub id: i64,
     pub agent: AgentName,
@@ -248,6 +248,17 @@ egress = ["example.com"]
     #[test]
     fn json_rows_are_a_stable_contract() {
         let digest = "0".repeat(64);
+        round_trips(
+            &Event {
+                id: 7,
+                agent: "echo-1".parse().unwrap(),
+                at: 1757000000,
+                kind: "create".to_owned(),
+                detail: "sandbox reef-echo-1".to_owned(),
+            },
+            r#"{"id":7,"agent":"echo-1","at":1757000000,"kind":"create","detail":"sandbox reef-echo-1"}"#,
+        );
+
         round_trips(
             &RoleRow {
                 name: "echo".parse().unwrap(),
@@ -291,18 +302,6 @@ egress = ["example.com"]
             &format!(
                 r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","role_current":false,"image":"alpine","owner":"dmytro","desired":"running","state":"running","vm":null,"synced":true,"ports":{{"ui":19007}}}}"#
             ),
-        );
-
-        let event = Event {
-            id: 7,
-            agent: "echo-1".parse().unwrap(),
-            at: 1,
-            kind: "created".to_owned(),
-            detail: "dmytro".to_owned(),
-        };
-        assert_eq!(
-            serde_json::to_string(&event).unwrap(),
-            r#"{"id":7,"agent":"echo-1","at":1,"kind":"created","detail":"dmytro"}"#
         );
 
         let detail = AgentDetail {

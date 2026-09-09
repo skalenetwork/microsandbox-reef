@@ -132,7 +132,7 @@ outlive the VMs, and one console across hosts.
 | `reef agent rm reviewer-1 reviewer-2` | VMs destroyed, volumes kept |
 | `reef agent rm reviewer-1 --volumes` | VM destroyed, the agent's volumes deleted with it |
 | `reef fleet apply fleet/*.toml` | Converge the declared fleet |
-| `reef events --agent reviewer-1` | The event log, oldest first |
+| `reef events --agent reviewer-1 --limit 20` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
 
 `role list`, `role get`, `agent list`, `agent get`, and `events` take
@@ -185,15 +185,18 @@ The full pattern - certificates, sshd config, client config - is
 ### Console
 
 `reef ui` is a full-screen view of every agent on this host: state, VM, drift
-and ports in one table, Enter for what `agent get` prints, and `s`, `x`, `u`,
-`d` to start, stop, update and remove the selected agent (update and remove
-ask first). Tab switches to the roles table - active version, image, and how
-many agents run each role and how many are stale - where Enter prints what
-`role get` prints. Roles are read-only there; `role apply` and `role rm` stay
-CLI commands. It is a client of the `--json` commands above and never opens
-the state directory itself: locally it runs this binary, and given ssh host
-aliases it runs `ssh ALIAS ~/.local/bin/reef ...` on each and merges the
-tables:
+and ports in one table, and `s`, `x`, `u`, `d` to start, stop, update and
+remove the selected agent (update and remove ask first). `t` hands the
+terminal to `agent ssh` until you exit. Enter opens what `agent get` prints,
+with that agent's recent events newest-first in a pane beside it, and keeps
+both refreshing. The same verbs work there, on the agent you opened. Tab
+switches to the roles table - active version, image, and how many agents run
+each role and how many are stale - where Enter prints what `role get` prints
+and `d` removes a role. The footer offers only the verbs the row accepts;
+`role apply` stays a CLI command, since it takes files. It is a client of the
+`--json` commands above and never opens the state directory itself: locally it
+runs this binary, and given ssh host aliases it runs
+`ssh ALIAS ~/.local/bin/reef ...` on each and merges the tables:
 
 ```sh
 reef ui prod-eu prod-us

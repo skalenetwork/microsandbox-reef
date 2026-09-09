@@ -1,4 +1,3 @@
-use reef_core::AgentName;
 use serde::de::DeserializeOwned;
 use std::io::Read;
 use std::os::unix::process::ExitStatusExt;
@@ -8,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SSH_OPTIONS: [&str; 9] = [
+const SSH_OPTIONS: [&str; 8] = [
     "-o",
     "BatchMode=yes",
     "-o",
@@ -17,7 +16,6 @@ const SSH_OPTIONS: [&str; 9] = [
     "ServerAliveInterval=5",
     "-o",
     "ServerAliveCountMax=3",
-    "-T",
 ];
 
 #[derive(Clone)]
@@ -77,7 +75,7 @@ impl Host {
     }
 
     pub fn fetch<T: DeserializeOwned>(&self, args: &[&str]) -> Result<T, Failure> {
-        let output = self.output(args)?;
+        let output = self.output(&[args, &["--json"]].concat())?;
         serde_json::from_slice(&output).map_err(|_| Failure::Skew)
     }
 
@@ -85,13 +83,8 @@ impl Host {
         self.output(args).map(drop)
     }
 
-    pub fn terminal(&self, name: &AgentName) -> String {
-        match self {
-            Self::Local { .. } => format!("reef agent ssh {name}"),
-            Self::Ssh { alias, reef } => {
-                format!("ssh -t -- {} {reef} agent ssh {name}", alias.as_str())
-            }
-        }
+    pub fn shell(&self, name: &str) -> Command {
+        self.command(&["agent", "ssh", name], true)
     }
 
     pub fn forward(&self, port: u16) -> Option<String> {
@@ -106,7 +99,7 @@ impl Host {
 
     fn output(&self, args: &[&str]) -> Result<Vec<u8>, Failure> {
         let mut child = self
-            .command(args)
+            .command(args, false)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -118,7 +111,7 @@ impl Host {
         classify(status, &stderr).map(|()| stdout.join().unwrap_or_default())
     }
 
-    fn command(&self, args: &[&str]) -> Command {
+    fn command(&self, args: &[&str], tty: bool) -> Command {
         match self {
             Self::Local { exe, state } => {
                 let mut command = Command::new(exe);
@@ -129,6 +122,7 @@ impl Host {
                 let mut command = Command::new("ssh");
                 command
                     .args(SSH_OPTIONS)
+                    .arg(if tty { "-t" } else { "-T" })
                     .arg("--")
                     .arg(alias.as_str())
                     .arg(format!("{reef} {}", args.join(" ")));
@@ -196,7 +190,7 @@ mod tests {
     use super::*;
 
     fn argv(host: &Host) -> Vec<String> {
-        let command = host.command(&["agent", "list", "--json"]);
+        let command = host.command(&["agent", "list", "--json"], false);
         std::iter::once(command.get_program())
             .chain(command.get_args())
             .map(|arg| arg.to_string_lossy().into_owned())
