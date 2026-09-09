@@ -3,12 +3,12 @@ git_only = true
 publish = false
 git_release_enable = false
 git_tag_enable = false
+git_tag_name = "v{{ version }}"
 changelog_update = false
 
 [[package]]
 name = "reef"
 git_tag_enable = true
-git_tag_name = "v{{ version }}"
 git_release_enable = true
 changelog_update = true
 changelog_path = "CHANGELOG.md"
@@ -32,10 +32,9 @@ body = """
 {% endfor %}
 """
 commit_parsers = [
-  { message = "^feat", group = "Added" },
-  { message = "^fix", group = "Fixed" },
-  { message = "^perf", group = "Performance" },
-  { message = "^refactor", group = "Changed" },
-  { message = "^(chore|ci|build|docs|test|style)", skip = true },
+  { message = "^feat[(!:]", group = "Added" },
+  { message = "^fix[(!:]", group = "Fixed" },
+  { message = "^perf[(!:]", group = "Performance" },
+  { message = "^refactor[(!:]", group = "Changed" },
   { message = ".*", skip = true },
 ]
