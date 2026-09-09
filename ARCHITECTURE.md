@@ -42,6 +42,13 @@ Invariants:
 - Stop/start never destroys a VM. Only a role change recreates one; an env
   change is applied to the existing VM and takes effect on a restart, so the
   rootfs survives it.
+- A recreate boots the new VM once, and only when the agent is meant to run: a
+  role change on a stopped agent is the removal alone, and the create waits for
+  the next `start`, so a guest's first boot is never cut off part-way through
+  writing its own state.
+- A stored `running` is never trusted alone. The record says what reef did; the
+  VM read on every command says what is up, and a command that prints a state
+  reports `failed` when the two disagree.
 - A volume declared by a role survives everything the VM does not: stop/start,
   the recreate a role change forces, and `agent rm`.
 - A secret value never enters the guest (placeholder + host-side TLS
@@ -100,7 +107,9 @@ shade.
 
 State: reef's SQLite (`reef.db`, WAL) holds desired state plus last-applied
 status and an append-only event log. Observed VM state is never cached: it is
-re-read from the runtime on every command. microsandbox's own state under
+re-read from the runtime on every command. Role versions are immutable and
+content-addressed; `role rm` refuses while any agent is on the role, so a
+pinned agent's blast radius stays readable. microsandbox's own state under
 `~/.microsandbox` is treated as the runtime's property; reef never parses its
 files itself, reaching it only through the SDK, and doctor only checks the
 directory's mode.

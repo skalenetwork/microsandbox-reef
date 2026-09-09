@@ -21,6 +21,8 @@ OPENCLAW_NO_AUTO_UPDATE = "1"
 set -e
 cfg=/home/node/.openclaw/openclaw.json
 [ -e "$cfg" ] || install -o node -g node -m 0600 /etc/openclaw/defaults.json "$cfg"
+/usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs config set \
+  mcp.apps.sandboxOrigin "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
 exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway \
   --bind lan --auth token
 ''' }
@@ -41,6 +43,7 @@ exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway 
 
 [expose]
 gateway = 18789
+mcp-sandbox = 18790
 
 [volumes]
 state = { dest = "/home/node/.openclaw", size-mib = 10240 }

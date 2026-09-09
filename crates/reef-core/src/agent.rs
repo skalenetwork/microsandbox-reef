@@ -1,5 +1,5 @@
 use crate::name::{AgentName, Digest, EnvKey, RoleName};
-use crate::plan::Drift;
+use crate::plan::{Drift, VmStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -130,6 +130,12 @@ impl Agent {
         self.generation == self.status.applied_generation
     }
 
+    pub fn crashed(&self, vm: Option<VmStatus>) -> bool {
+        self.spec.desired == Desired::Running
+            && self.status.lifecycle == Lifecycle::Running
+            && vm != Some(VmStatus::Running)
+    }
+
     pub fn settled(&self) -> bool {
         self.reconciled()
             && match self.spec.desired {
@@ -162,6 +168,16 @@ mod tests {
                 applied_env: BTreeMap::new(),
             },
         }
+    }
+
+    #[test]
+    fn a_record_that_claims_running_is_crashed_without_a_running_vm() {
+        let up = agent(Desired::Running, Lifecycle::Running, 2);
+        assert!(!up.crashed(Some(VmStatus::Running)));
+        assert!(up.crashed(Some(VmStatus::Stopped)));
+        assert!(up.crashed(None));
+        assert!(!agent(Desired::Stopped, Lifecycle::Running, 2).crashed(None));
+        assert!(!agent(Desired::Running, Lifecycle::Pending, 2).crashed(None));
     }
 
     #[test]

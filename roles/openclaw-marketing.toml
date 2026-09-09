@@ -22,6 +22,10 @@ NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
 set -e
 cfg=/home/node/.openclaw/openclaw.json
 [ -e "$cfg" ] || install -o node -g node -m 0600 /etc/openclaw/defaults.json "$cfg"
+if [ -n "$OPENCLAW_SANDBOX_HOST" ]; then
+  /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs config set \
+    mcp.apps.sandboxOrigin "https://$OPENCLAW_SANDBOX_HOST"
+fi
 exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway \
   --bind lan
 ''' }
@@ -53,6 +57,7 @@ exec /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs gateway 
 
 [expose]
 gateway = 18789
+mcp-sandbox = 18790
 
 [volumes]
 state = { dest = "/home/node/.openclaw", size-mib = 10240 }

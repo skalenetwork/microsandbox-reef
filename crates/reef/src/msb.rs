@@ -411,6 +411,12 @@ fn is_already_exists(error: &MicrosandboxError) -> bool {
     matches!(error, MicrosandboxError::SandboxAlreadyExists(_))
 }
 
+pub fn vm_not_running(sandbox: &str) -> String {
+    format!(
+        "the VM is not running; read what the guest printed with `msb logs {sandbox} --source all`"
+    )
+}
+
 pub fn msb_path() -> Result<PathBuf> {
     microsandbox::config::resolve_msb_path()
         .context("msb not found: set MSB_PATH or install microsandbox (https://microsandbox.dev)")

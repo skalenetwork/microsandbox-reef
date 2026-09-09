@@ -2,7 +2,7 @@ version = 1
 
 name  = "clawbits-openclaw"
 image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.3-pl0.17.21"
-init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
+init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
 vcpus = 4
@@ -17,6 +17,19 @@ NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
 CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [files]
+"/etc/openclaw/start" = { mode = 0o755, content = '''
+#!/bin/sh
+set -e
+if [ "$(id -u)" = 0 ]; then
+  install -d -o node -g node /home/node/.openclaw
+  oc() { /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs "$@"; }
+else
+  oc() { /usr/local/bin/node /app/openclaw.mjs "$@"; }
+fi
+oc config set mcp.apps.sandboxOrigin \
+  "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
+exec /usr/local/bin/clawbits-start
+''' }
 "/etc/openclaw/defaults.json" = '''
 {
   "agents": { "defaults": { "model": { "primary": "openrouter/auto" } } },
@@ -37,6 +50,7 @@ CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [expose]
 gateway = 18789
+mcp-sandbox = 18790
 
 [volumes]
 state = { dest = "/home/node/.openclaw/state", size-mib = 4096 }

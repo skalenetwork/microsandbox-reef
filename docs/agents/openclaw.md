@@ -78,6 +78,18 @@ credential for, so the first message fails until you do this.
   instead of inheriting it. That also closes the cross-agent access
   `tools.agentToAgent` enables by default, so the role needs no second key. Set
   `tree` or `self` to narrow it further.
+- **Widgets come from a second published port.** MCP app and dashboard widget
+  frames are served by a sandbox listener on the gateway port plus one, never by
+  the gateway itself, so the role publishes `mcp-sandbox = 18790` beside
+  `gateway`. The listener binds lazily, on the first widget. Without a
+  `mcp.apps.sandboxOrigin` the control UI aims the frame at the guest's own
+  18790, which nothing on the host answers, and the frame fails to connect. That
+  key is URL-validated before `${VAR}` expansion, so the start script sets it
+  from `REEF_AGENT` and `REEF_PORT_MCP_SANDBOX` at boot rather than
+  `defaults.json` carrying a template. The
+  [Cloudflare Access roles](/docs/enterprise/team) publish the same port but name
+  a public hostname there instead, because the browser reaching them is not on
+  the reef host.
 - **The token is the whole boundary.** It gates the WebSocket RPC but not the
   control UI's static assets, and through the operator terminal it gets a shell
   as `node` - the access `reef agent ssh` already gives. Put the published port

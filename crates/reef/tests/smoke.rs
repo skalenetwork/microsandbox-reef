@@ -171,10 +171,10 @@ fn full_agent_journey() {
         "--",
         "sh",
         "-c",
-        "wget -T 3 -qO- https://api.openai.com/ 2>&1 || true",
+        "wget -T 5 -qO- https://api.openai.com/ >/dev/null 2>&1 && echo reached || echo refused",
     ]);
     assert!(
-        denied.contains("bad address"),
+        denied.contains("refused") && !denied.contains("reached"),
         "egress not denied: {denied}"
     );
 

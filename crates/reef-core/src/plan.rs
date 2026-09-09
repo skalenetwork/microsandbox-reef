@@ -61,9 +61,10 @@ pub fn plan(facts: Facts) -> &'static [Action] {
         (Desired::Running, Some(VmStatus::Stopped), Drift::Env) => &[Modify, Start],
         (Desired::Running, Some(VmStatus::Stopped), Drift::None) => &[Start],
         (Desired::Running, Some(VmStatus::Running), Drift::None) => &[],
+        (Desired::Stopped, Some(_), Drift::Role) => &[Remove],
         (Desired::Stopped, Some(VmStatus::Running), Drift::Env) => &[Stop, Modify],
         (Desired::Stopped, Some(VmStatus::Stopped), Drift::Env) => &[Modify],
-        (Desired::Stopped, Some(VmStatus::Running), _) => &[Stop],
+        (Desired::Stopped, Some(VmStatus::Running), Drift::None) => &[Stop],
         (Desired::Stopped, _, _) => &[],
     }
 }
@@ -98,10 +99,10 @@ mod tests {
             (facts(stopped, None, Drift::Role), &[]),
             (facts(stopped, up, Drift::None), &[Stop]),
             (facts(stopped, up, Drift::Env), &[Stop, Modify]),
-            (facts(stopped, up, Drift::Role), &[Stop]),
+            (facts(stopped, up, Drift::Role), &[Remove]),
             (facts(stopped, down, Drift::None), &[]),
             (facts(stopped, down, Drift::Env), &[Modify]),
-            (facts(stopped, down, Drift::Role), &[]),
+            (facts(stopped, down, Drift::Role), &[Remove]),
         ];
         for (input, expected) in cases {
             assert_eq!(plan(*input), *expected, "{input:?}");

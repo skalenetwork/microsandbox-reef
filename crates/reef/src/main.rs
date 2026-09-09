@@ -115,6 +115,8 @@ enum RoleCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Remove roles and every version of them; refuses while agents are on one
+    Rm { names: Vec<RoleName> },
 }
 
 #[derive(Subcommand)]
@@ -360,6 +362,16 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                 }
             })
         }
+        RoleCommand::Rm { names } => {
+            if names.is_empty() {
+                bail!("no roles given");
+            }
+            ctx.store.delete_roles(&names)?;
+            for name in &names {
+                println!("{name} removed");
+            }
+            Ok(())
+        }
     }
 }
 
@@ -407,11 +419,10 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .collect();
             let mut agents = Vec::new();
             for agent in ctx.store.list_agents()? {
-                let vm = ctx
-                    .vmm
-                    .status(&reconcile::sandbox_name(&agent.name))
-                    .await?;
+                let sandbox = reconcile::sandbox_name(&agent.name);
+                let vm = ctx.vmm.status(&sandbox).await?;
                 let synced = agent.reconciled();
+                let state = observed(&agent, vm, &sandbox).state();
                 let ports = ctx.store.ports(&agent.name)?;
                 let image = ctx.store.role_version(&agent.spec.role_digest)?.image;
                 let role_current = active
@@ -425,7 +436,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     image,
                     owner: agent.spec.owner,
                     desired: agent.spec.desired,
-                    state: agent.status.lifecycle.state(),
+                    state,
                     vm,
                     synced,
                     ports,
@@ -467,8 +478,9 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             }
             let sandbox = reconcile::sandbox_name(&agent.name);
             let vm = ctx.vmm.status(&sandbox).await?;
-            let state = agent.status.lifecycle.state();
-            let reason = match agent.status.lifecycle {
+            let lifecycle = observed(&agent, vm, &sandbox);
+            let state = lifecycle.state();
+            let reason = match lifecycle {
                 Lifecycle::Failed { reason } => Some(reason),
                 _ => None,
             };
@@ -640,6 +652,15 @@ fn digest_role(role: &Role) -> (Digest, String) {
     let definition = serde_json::to_string(role).expect("roles serialize");
     let hex = format!("{:x}", Sha256::digest(definition.as_bytes()));
     (hex.parse().expect("sha256 hex is a digest"), definition)
+}
+
+fn observed(agent: &Agent, vm: Option<VmStatus>, sandbox: &str) -> Lifecycle {
+    match agent.crashed(vm) {
+        true => Lifecycle::Failed {
+            reason: msb::vm_not_running(sandbox),
+        },
+        false => agent.status.lifecycle.clone(),
+    }
 }
 
 fn print_urls(store: &Store, agent: &Agent) -> Result<()> {

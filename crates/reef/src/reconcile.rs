@@ -99,7 +99,11 @@ async fn run<V: Vmm>(
             }
             Action::Start => vmm.start(sandbox).await?,
             Action::Stop => vmm.stop(sandbox).await?,
-            Action::Remove => vmm.remove(sandbox).await?,
+            Action::Remove => {
+                vmm.remove(sandbox).await?;
+                agent.status.applied_digest = None;
+                agent.status.applied_env.clear();
+            }
         }
         store.record(&agent.name, step.label(), sandbox)?;
     }
@@ -289,12 +293,7 @@ network = { egress = ["example.com"] }
 
         let again = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(again, agent);
-        let kinds: Vec<String> = store
-            .events(Some(&name), None)
-            .unwrap()
-            .into_iter()
-            .map(|event| event.kind)
-            .collect();
+        let kinds = kinds(&store, &name);
         assert_eq!(kinds.len(), 1, "second pass must be a no-op: {kinds:?}");
     }
 
@@ -313,13 +312,7 @@ network = { egress = ["example.com"] }
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert!(agent.drift() == Drift::None && agent.reconciled());
         assert_eq!(agent.status.applied_generation, 3);
-        let kinds: Vec<String> = store
-            .events(Some(&name), None)
-            .unwrap()
-            .into_iter()
-            .map(|event| event.kind)
-            .collect();
-        assert_eq!(kinds, ["create", "stop", "start"]);
+        assert_eq!(kinds(&store, &name), ["create", "stop", "start"]);
     }
 
     #[tokio::test]
@@ -338,13 +331,33 @@ network = { egress = ["example.com"] }
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(agent.status.applied_digest, Some(next));
         assert!(agent.drift() == Drift::None && agent.reconciled());
-        let kinds: Vec<String> = store
-            .events(Some(&name), None)
-            .unwrap()
-            .into_iter()
-            .map(|event| event.kind)
-            .collect();
-        assert_eq!(kinds, ["create", "remove", "create"]);
+        assert_eq!(kinds(&store, &name), ["create", "remove", "create"]);
+    }
+
+    #[tokio::test]
+    async fn a_role_change_on_a_stopped_agent_drops_the_stale_vm() {
+        let (store, secrets, _digest, name) = setup();
+        let vmm = FakeVmm::default();
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        store.set_desired(&name, Desired::Stopped, 1).unwrap();
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+
+        let next = import(
+            &store,
+            &ROLE.replace("memory-mib = 256", "memory-mib = 320"),
+            "c",
+        );
+        store.set_role_digest(&name, &next, 2).unwrap();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert_eq!(agent.status.lifecycle, Lifecycle::Stopped);
+        assert_eq!(agent.status.applied_digest, None, "no VM carries a role");
+        assert!(vmm.status(&sandbox_name(&name)).await.unwrap().is_none());
+
+        store.set_desired(&name, Desired::Running, 3).unwrap();
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert_eq!(agent.status.applied_digest, Some(next));
+        assert!(agent.drift() == Drift::None && agent.reconciled());
+        assert_eq!(kinds(&store, &name), ["create", "stop", "remove", "create"]);
     }
 
     #[tokio::test]
@@ -364,6 +377,15 @@ network = { egress = ["example.com"] }
         let vmm = FakeVmm::default();
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert!(matches!(agent.status.lifecycle, Lifecycle::Running));
+    }
+
+    fn kinds(store: &Store, name: &AgentName) -> Vec<String> {
+        store
+            .events(Some(name), None)
+            .unwrap()
+            .into_iter()
+            .map(|event| event.kind)
+            .collect()
     }
 
     fn import(store: &Store, text: &str, digest: &str) -> Digest {
@@ -535,14 +557,8 @@ network = { egress = ["example.com"] }
         reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(*vmm.removed_env.lock().unwrap(), ["FOO".to_owned()]);
 
-        let kinds: Vec<String> = store
-            .events(Some(&name), None)
-            .unwrap()
-            .into_iter()
-            .map(|event| event.kind)
-            .collect();
         assert_eq!(
-            kinds,
+            kinds(&store, &name),
             [
                 "create", "stop", "modify", "start", "stop", "modify", "start"
             ]

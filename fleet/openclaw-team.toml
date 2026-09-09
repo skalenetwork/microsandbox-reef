@@ -3,9 +3,9 @@ version = 1
 [agents.marketing]
 role = "openclaw-marketing"
 owner = "marketing"
-env = { OPENCLAW_PUBLIC_HOST = "marketing.example.com" }
+env = { OPENCLAW_PUBLIC_HOST = "marketing.example.com", OPENCLAW_SANDBOX_HOST = "marketing-widgets.example.com" }
 
 [agents.coding]
 role = "openclaw-coding"
 owner = "engineering"
-env = { OPENCLAW_PUBLIC_HOST = "coding.example.com" }
+env = { OPENCLAW_PUBLIC_HOST = "coding.example.com", OPENCLAW_SANDBOX_HOST = "coding-widgets.example.com" }

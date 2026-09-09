@@ -137,6 +137,23 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    pub fn delete_roles(&self, names: &[RoleName]) -> Result<()> {
+        let tx = self.db.unchecked_transaction()?;
+        for name in names {
+            let agents = self.agents_on_role(name)?;
+            if !agents.is_empty() {
+                let on: Vec<_> = agents.iter().map(|(agent, _)| agent.as_str()).collect();
+                bail!("role {name} still has agents: {}", on.join(", "));
+            }
+            if tx.execute("DELETE FROM roles WHERE name = ?1", [name.as_str()])? == 0 {
+                bail!("no such role: {name}");
+            }
+            tx.execute("DELETE FROM role_versions WHERE role = ?1", [name.as_str()])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn agents_on_role(&self, role: &RoleName) -> Result<Vec<(AgentName, Digest)>> {
         let mut stmt = self
             .db
@@ -496,6 +513,39 @@ network = { egress = ["example.com"] }
         let (active, loaded) = store.active_role(&role.name).unwrap().unwrap();
         assert_eq!(active, digest());
         assert_eq!(loaded, role);
+    }
+
+    #[test]
+    fn roles_are_removable_only_without_agents() {
+        let store = Store::open_temp();
+        let role = parse_role(ROLE).unwrap();
+        let json = serde_json::to_string(&role).unwrap();
+        store.import_role(&role, &digest(), &json).unwrap();
+
+        let agent = Agent::new(
+            "worker-1".parse().unwrap(),
+            false,
+            AgentSpec {
+                owner: "dmytro".to_owned(),
+                role: role.name.clone(),
+                role_digest: digest(),
+                desired: Desired::Running,
+                env: BTreeMap::new(),
+            },
+        );
+        store.insert_agent(&agent).unwrap();
+        let err = store
+            .delete_roles(std::slice::from_ref(&role.name))
+            .unwrap_err();
+        assert!(err.to_string().contains("worker-1"), "{err}");
+
+        store.delete_agent(&agent.name).unwrap();
+        store
+            .delete_roles(std::slice::from_ref(&role.name))
+            .unwrap();
+        assert!(store.list_roles().unwrap().is_empty());
+        assert!(store.role_version(&digest()).is_err());
+        assert!(store.delete_roles(&[role.name]).is_err());
     }
 
     #[test]

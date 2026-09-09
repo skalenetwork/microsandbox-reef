@@ -118,6 +118,7 @@ outlive the VMs, and one console across hosts.
 | `reef role apply roles/*.toml` | Validate and import, from CI or by hand |
 | `reef role list` | Roles and their active versions |
 | `reef role get code-reviewer` | One role's active definition and the agents on it |
+| `reef role rm scratch old-test` | Drop roles and every version of them |
 | `reef agent create --role code-reviewer --name reviewer-1` | Create an agent and reconcile it |
 | `reef agent list` | Every agent with its observed VM state |
 | `reef agent get reviewer-1 --wait` | One agent in detail; `--wait` blocks until settled |
@@ -125,7 +126,7 @@ outlive the VMs, and one console across hosts.
 | `reef agent ssh reviewer-1` | Interactive terminal in the VM |
 | `reef agent forward reviewer-1` | No ports: list what the VM is listening on |
 | `reef agent forward reviewer-1 9119` | Tunnel `reviewer-1.localhost:9119` into the VM until Ctrl-C |
-| `reef agent update reviewer-1` | Re-pin to the role's active version |
+| `reef agent update reviewer-1` | Re-pin to the role's active version and recreate the VM |
 | `reef agent stop reviewer-1` | Desired state stopped |
 | `reef agent start reviewer-1` | Desired state running |
 | `reef agent rm reviewer-1` | VM destroyed, volumes kept |
@@ -144,7 +145,9 @@ behind by a `role apply` is visible without comparing digests by hand.
 
 `agent get --wait` polls until the agent settles - reconciled and in its
 desired state - or reports failed, which exits nonzero. It has no timeout and
-nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`.
+nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`. A record
+that claims `running` is checked against the VM every command reads, so a guest
+that boots and then dies reports `failed` with the command that shows why.
 
 `events` prints the log oldest-first; `--after ID` returns only what is newer,
 so a collector can poll it without re-reading. `agent get` prints the VM's
@@ -185,10 +188,11 @@ and ports in one table, Enter for what `agent get` prints, and `s`, `x`, `u`,
 `d` to start, stop, update and remove the selected agent (update and remove
 ask first). Tab switches to the roles table - active version, image, and how
 many agents run each role and how many are stale - where Enter prints what
-`role get` prints. Roles are read-only there; `role apply` stays a CLI
-command, since it takes files. It is a client of the `--json` commands above and never opens the
-state directory itself: locally it runs this binary, and given ssh host aliases
-it runs `ssh ALIAS ~/.local/bin/reef ...` on each and merges the tables:
+`role get` prints. Roles are read-only there; `role apply` and `role rm` stay
+CLI commands. It is a client of the `--json` commands above and never opens
+the state directory itself: locally it runs this binary, and given ssh host
+aliases it runs `ssh ALIAS ~/.local/bin/reef ...` on each and merges the
+tables:
 
 ```sh
 reef ui prod-eu prod-us

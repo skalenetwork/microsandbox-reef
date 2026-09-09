@@ -74,7 +74,9 @@ config read, so changing it is `reef fleet apply` rather than a re-seed.
 
 **1. The agents.** Put your hostnames in
 [`fleet/openclaw-team.toml`](../../fleet/openclaw-team.toml) and your own domains
-in the two role files. Keep hostnames **one level deep**
+in the two role files. Each agent takes two: `OPENCLAW_PUBLIC_HOST` for the
+Control UI and `OPENCLAW_SANDBOX_HOST` for its widget frames. Keep hostnames
+**one level deep**
 (`marketing.example.com`, not `marketing.agents.example.com`): Universal SSL
 covers the apex and first-level subdomains only, and anything deeper fails TLS at
 the edge before Access is reached unless the zone has Total TLS or an advanced
@@ -90,10 +92,11 @@ Use `fleet apply`, not `agent create`: a hand-made agent is not fleet-managed, a
 a later `fleet apply` of the same name reports it and exits nonzero rather than
 adopting it.
 
-Note each `ports` line. That port is allocated at create and kept for the agent's
-life, which is what makes it safe to name in the tunnel config. `agent rm` and
-`fleet apply --prune` release it and a re-created agent takes the lowest free
-port, so re-read `agent get` after either.
+Note each `ports` line: `gateway` and `mcp-sandbox`, two per agent. Both are
+allocated at create and kept for the agent's life, which is what makes them safe
+to name in the tunnel config. `agent rm` and `fleet apply --prune` release them
+and a re-created agent takes the lowest free ports, so re-read `agent get` after
+either.
 
 **2. Access applications, before any DNS.** An Access application can name a
 hostname that does not resolve yet, and doing it in this order leaves no window
@@ -125,15 +128,21 @@ ingress:
     service: http://127.0.0.1:19042
     originRequest:
       access: { required: true, teamName: <team>, audTag: [<marketing aud>] }
+  - hostname: marketing-widgets.example.com
+    service: http://127.0.0.1:19044
   - hostname: coding.example.com
     service: http://127.0.0.1:19043
     originRequest:
       access: { required: true, teamName: <team>, audTag: [<coding aud>] }
+  - hostname: coding-widgets.example.com
+    service: http://127.0.0.1:19045
   - service: http_status:404
 ```
 
 `cloudflared` requires the last rule to match everything. Validate before running
-anything: `cloudflared --config <file> tunnel ingress validate`.
+anything: `cloudflared --config <file> tunnel ingress validate`. The two widget
+rules carry no `access` block here because that policy is a decision this file
+does not make for you: see the Notes.
 
 Run it as its own unprivileged account, whose only reason to exist is being the
 one thing that can reach those ports. `cloudflared service install` writes a unit
@@ -209,6 +218,15 @@ Two failures look like a working setup:
 
 ## Notes
 
+- **The widget hostname is yours to decide.** MCP app and dashboard widget
+  frames come from a sandbox listener on the gateway port plus one, so each role
+  publishes `mcp-sandbox = 18790` and names `OPENCLAW_SANDBOX_HOST` in
+  `mcp.apps.sandboxOrigin`. Route that hostname to that agent's second published
+  port or the frames fail to connect while the rest of the Control UI works.
+  What this file does not decide for you is its Access policy: the origin
+  OpenClaw wants there serves no authenticated content, which is the opposite of
+  every other rule here. Leave `OPENCLAW_SANDBOX_HOST` unset and the role skips
+  the key and boots without widgets.
 - **`requiredHeaders` is deliberately absent.** `cf-access-jwt-assertion` there,
   next to the Access email as `userHeader`, is the exact pair that switches
   OpenClaw onto a Cloudflare Access identity lookup reaching
