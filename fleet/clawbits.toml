@@ -3,7 +3,7 @@ version = 1
 [agents.cb]
 role = "clawbits-openclaw"
 
-[agents.alice-clawbits.env]
+[agents.cb.env]
 OPENCLAW_GATEWAY_TOKEN = ""
 CLAWBITS_ORG_ID = ""
 CLAWBITS_SIGNUP_TOKEN = ""
