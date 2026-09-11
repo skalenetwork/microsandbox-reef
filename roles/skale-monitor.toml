@@ -1,21 +1,22 @@
 version = 1
 
-# Fork of roles/clawbits-openclaw.toml, re-derived 2026-09-08 from the current
-# upstream file. Three changes:
+# Fork of roles/clawbits-openclaw.toml, regenerated from it. Three changes only:
 #   - name, so both can live in reef.db side by side
-#   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144. Measured on this host:
-#     the cap is a ceiling, not a reservation (905 MiB actually resident), and
-#     2 vCPU is what every agent here has run on. 2048 MiB is NOT enough -
+#   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144. Measured here: the cap
+#     is a ceiling, not a reservation (905 MiB actually resident), and 2 vCPU is
+#     what every agent on this host has run on. 2048 MiB is NOT enough -
 #     OpenClaw's pressure threshold is ~27% of guest RAM and the guest hangs.
 #   - agents.defaults.model.primary, pinned to deepseek instead of
 #     openrouter/auto. Verified: the start script re-applies defaults.json
 #     through `config patch` on every boot, so a model set by hand is gone after
 #     the next restart - it has to be changed here.
-# Upstream moves fast (the start script and most of defaults.json migrated into
-# the image on 2026-09-08); diff against the original before reusing this.
+#
+# Upstream changes often and structurally (the start script has moved into the
+# image and back out again, and an mcp-sandbox port appeared). Regenerate rather
+# than hand-edit - see the command in .claude/handoff-clawbits-msb.md.
 name  = "skale-monitor"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.3-pl0.17.21"
-init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.3-pl0.17.24-ge5abfaa"
+init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
 vcpus = 2
@@ -30,6 +31,19 @@ NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
 CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [files]
+"/etc/openclaw/start" = { mode = 0o755, content = '''
+#!/bin/sh
+set -e
+if [ "$(id -u)" = 0 ]; then
+  install -d -o node -g node /home/node/.openclaw
+  oc() { /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs "$@"; }
+else
+  oc() { /usr/local/bin/node /app/openclaw.mjs "$@"; }
+fi
+oc config set mcp.apps.sandboxOrigin \
+  "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
+exec /usr/local/bin/clawbits-start
+''' }
 "/etc/openclaw/defaults.json" = '''
 {
   "agents": { "defaults": { "model": { "primary": "openrouter/deepseek/deepseek-v4-pro-0813" } } },
@@ -50,6 +64,7 @@ CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [expose]
 gateway = 18789
+mcp-sandbox = 18790
 
 [volumes]
 state = { dest = "/home/node/.openclaw/state", size-mib = 4096 }
