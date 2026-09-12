@@ -1,0 +1,29 @@
+version = 1
+
+# Copy to fleet/log-hunter.toml (keep that one out of git - it holds two
+# secrets) and fill them in.
+#
+# The agent name drives the sandbox name (reef-log-hunter) and the volume names
+# (reef-vol-log-hunter-state, -workspace), and the sync scripts in
+# sla-server-centralized take REEF_AGENT=reef-<name>.
+[agents.log-hunter]
+# roles/log-hunter.toml is byte-identical to roles/skale-monitor.toml apart from
+# the name. Point this at "skale-monitor" and delete the duplicate role unless
+# the two are going to diverge - one fork is one file to regenerate when
+# upstream changes, two is two.
+role = "log-hunter"
+
+[agents.log-hunter.env]
+# Required: the role starts the gateway with --bind lan --auth token, which
+# will not come up without one. openssl rand -hex 32. A shared secret, not an
+# identity.
+OPENCLAW_GATEWAY_TOKEN = "REPLACE-openssl-rand-hex-32"
+CLAWBITS_ORG_ID        = "org-e4f9fe3c-82d1-463e-a264-b2874428bf35"
+# Single-use AND short-lived - one expired within the hour while we debugged
+# something unrelated. Mint it in the Clawbits "Add agent" prompt immediately
+# before `reef fleet apply`, never in advance. Once the agent is enrolled the
+# identity lives in the state volume and this line can be dropped, which also
+# keeps it out of `agent get` and the console.
+CLAWBITS_SIGNUP_TOKEN  = "human-REPLACE-BEFORE-APPLY"
+
+# CLAWBITS_ENDPOINT is already set in the role's [env]; no need to repeat it.
