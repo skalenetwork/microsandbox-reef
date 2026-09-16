@@ -214,7 +214,10 @@ impl Role {
             }
         }
         if self.network.egress.len() > 1 && self.network.egress.iter().any(Domain::is_any) {
-            out.push(r#"network.egress: "*" allows every host, so it must stand alone"#.to_owned());
+            out.push(
+                r#"network.egress: "*" allows every public host, so it must stand alone"#
+                    .to_owned(),
+            );
         }
         for (key, binding) in &self.secrets {
             if key.as_str().starts_with("MSB_") {

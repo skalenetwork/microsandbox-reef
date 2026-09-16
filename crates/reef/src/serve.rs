@@ -1,4 +1,5 @@
 use crate::store::Store;
+use crate::vmm::Vmm;
 use crate::{msb, reconcile};
 use anyhow::{Context, Result, bail};
 use reef_core::AgentName;
@@ -6,7 +7,7 @@ use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 
-pub fn run(store: &Store) -> Result<()> {
+pub async fn run(store: &Store, vmm: &impl Vmm) -> Result<()> {
     let name = requested()?;
     let auth = std::env::var("SSH_USER_AUTH")
         .context("SSH_USER_AUTH is not set; sshd needs `ExposeAuthInfo yes`")?;
@@ -18,9 +19,14 @@ pub fn run(store: &Store) -> Result<()> {
     if !principals.contains(&agent.spec.owner) {
         bail!("access denied: this certificate cannot open {name}");
     }
+    let sandbox = reconcile::sandbox_name(&name);
+    if !agent.spec.desired.live(vmm.status(&sandbox).await?) {
+        store.record(&name, "refused", &agent.spec.owner)?;
+        bail!("{name} is not running; it has to be started on its host first");
+    }
     store.record(&name, "served", &agent.spec.owner)?;
     let error = Command::new(msb::msb_path()?)
-        .args(["ssh", "serve", "--stdio", &reconcile::sandbox_name(&name)])
+        .args(["ssh", "serve", "--stdio", &sandbox])
         .exec();
     Err(error).context("cannot run msb ssh serve")
 }

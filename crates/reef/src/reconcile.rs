@@ -76,19 +76,25 @@ async fn run<V: Vmm>(
         }
         false => None,
     };
+    let mut config = None;
+    if steps.contains(&Action::Create) {
+        let role = role.as_ref().expect("plan pairs Create with a role");
+        let ports = allocate_ports(
+            role.expose.keys(),
+            &store.ports(&agent.name)?,
+            &store.used_ports()?,
+        )
+        .map_err(anyhow::Error::msg)?;
+        let prepared = vm_config(secrets, agent, role, sandbox, &ports)?;
+        vmm.prepare(&prepared).await?;
+        store.set_ports(&agent.name, &ports)?;
+        config = Some(prepared);
+    }
     for step in steps {
         match step {
             Action::Create => {
-                let role = role.as_ref().expect("plan pairs Create with a role");
-                let ports = allocate_ports(
-                    role.expose.keys(),
-                    &store.ports(&agent.name)?,
-                    &store.used_ports()?,
-                )
-                .map_err(anyhow::Error::msg)?;
-                store.set_ports(&agent.name, &ports)?;
-                let config = vm_config(secrets, agent, role, sandbox, &ports)?;
-                vmm.create(config).await?;
+                vmm.create(config.take().expect("prepared before the steps"))
+                    .await?;
                 agent.status.applied_digest = Some(agent.spec.role_digest.clone());
                 agent.status.applied_env = agent.spec.env.clone();
             }
@@ -138,7 +144,7 @@ fn env_patch<'a>(role: &'a Role, agent: &'a Agent) -> BTreeMap<&'a EnvKey, Optio
 
 fn vm_config<'a>(
     secrets: &Secrets,
-    agent: &'a Agent,
+    agent: &Agent,
     role: &'a Role,
     sandbox: &str,
     ports: &BTreeMap<PortName, u16>,
@@ -200,12 +206,20 @@ mod tests {
         seen_env: Mutex<Vec<(String, String)>>,
         seen_volumes: Mutex<Vec<(String, String, u32)>>,
         removed_env: Mutex<Vec<String>>,
+        fail_prepare: bool,
         fail_create: bool,
     }
 
     impl Vmm for FakeVmm {
         async fn status(&self, name: &str) -> Result<Option<VmStatus>> {
             Ok(self.vms.lock().unwrap().get(name).copied())
+        }
+
+        async fn prepare(&self, _config: &VmConfig<'_>) -> Result<()> {
+            if self.fail_prepare {
+                bail!("image not found");
+            }
+            Ok(())
         }
 
         async fn create(&self, config: VmConfig<'_>) -> Result<()> {
@@ -363,6 +377,47 @@ network = { egress = ["example.com"] }
         assert_eq!(agent.status.applied_digest, Some(next));
         assert!(agent.drift() == Drift::None && agent.reconciled());
         assert_eq!(kinds(&store, &name), ["create", "stop", "remove", "create"]);
+    }
+
+    #[tokio::test]
+    async fn a_role_change_that_cannot_build_keeps_the_old_vm() {
+        let (store, secrets, _digest, name) = setup();
+        let vmm = FakeVmm::default();
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+
+        let unresolvable = import(
+            &store,
+            &ROLE.replace(
+                "network =",
+                "secrets = { KEY = { ref = \"reef://demo/missing\", host = \"example.com\" } }\nnetwork =",
+            ),
+            "c",
+        );
+        store.set_role_digest(&name, &unresolvable, 1).unwrap();
+        assert!(reconcile(&store, &secrets, &vmm, &name).await.is_err());
+
+        let unbuildable = FakeVmm {
+            vms: Mutex::new(vmm.vms.lock().unwrap().clone()),
+            fail_prepare: true,
+            ..FakeVmm::default()
+        };
+        let bigger = import(
+            &store,
+            &ROLE.replace("memory-mib = 256", "memory-mib = 320"),
+            "d",
+        );
+        store.set_role_digest(&name, &bigger, 2).unwrap();
+        assert!(
+            reconcile(&store, &secrets, &unbuildable, &name)
+                .await
+                .is_err()
+        );
+
+        assert_eq!(
+            unbuildable.status(&sandbox_name(&name)).await.unwrap(),
+            Some(VmStatus::Running)
+        );
+        assert_eq!(kinds(&store, &name), ["create", "failed", "failed"]);
     }
 
     #[tokio::test]

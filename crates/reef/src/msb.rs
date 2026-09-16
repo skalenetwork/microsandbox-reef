@@ -9,7 +9,7 @@ use microsandbox::sandbox::{
 use microsandbox::setup::{InstallOptions, resolve_runtime_version};
 use microsandbox::size::SizeExt;
 use microsandbox::{
-    AgentClient, ExecEvent, MicrosandboxError, NetworkAction, NetworkPolicy, Sandbox, Volume,
+    AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox, Volume,
 };
 use reef_core::{Domain, EnvKey, VmStatus};
 use sha2::{Digest, Sha256};
@@ -24,7 +24,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 const STATE_LABEL: &str = "reef.state";
 const PROC_NET_LIMIT: u64 = 256 * 1024;
 const LISTEN: &str = "0A";
-const DNS_PORT: u16 = 53;
 const STOP_GRACE: Duration = Duration::from_secs(10);
 const MAX_TCP_CONNECTIONS: usize = 1024;
 
@@ -71,6 +70,34 @@ impl Vmm for Msb {
             Err(e) if is_not_found(&e) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    async fn prepare(&self, config: &VmConfig<'_>) -> Result<()> {
+        for mount in &config.volumes {
+            match Volume::get(&mount.name).await {
+                Ok(volume) if volume.quota_mib() != Some(mount.quota_mib) => bail!(
+                    "volume {} exists with a different size than the role's {} MiB; \
+                     msb cannot resize a volume, so declare a new volume entry",
+                    mount.name,
+                    mount.quota_mib
+                ),
+                Ok(_) | Err(MicrosandboxError::VolumeNotFound(_)) => {}
+                Err(e) => return Err(e.into()),
+            }
+        }
+        let image = config.role.image.as_str();
+        let pulled = std::process::Command::new(msb_path()?)
+            .env("MSB_BACKEND", "local")
+            .args(["pull", "-q", image])
+            .output()
+            .context("cannot run msb")?;
+        if !pulled.status.success() {
+            bail!(
+                "cannot pull {image}: {}",
+                String::from_utf8_lossy(&pulled.stderr).trim()
+            );
+        }
+        Ok(())
     }
 
     async fn create(&self, config: VmConfig<'_>) -> Result<()> {
@@ -437,26 +464,19 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
 }
 
 fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
-    let builder = NetworkPolicy::builder().default_ingress(NetworkAction::Allow);
-    let builder = if domains.iter().any(Domain::is_any) {
-        builder
-            .default_egress(NetworkAction::Allow)
-            .egress(|rule| rule.tcp().udp().port(DNS_PORT).allow_host())
-    } else {
-        let mut exact = Vec::new();
-        let mut suffixes = Vec::new();
-        for domain in domains {
-            match domain.wildcard_suffix() {
-                Some(suffix) => suffixes.push(suffix),
-                None => exact.push(domain.as_str()),
-            }
+    if domains.iter().any(Domain::is_any) {
+        return Ok(NetworkPolicy::from_profiles([NetworkProfile::Public]));
+    }
+    let mut exact = Vec::new();
+    let mut suffixes = Vec::new();
+    for domain in domains {
+        match domain.wildcard_suffix() {
+            Some(suffix) => suffixes.push(suffix),
+            None => exact.push(domain.as_str()),
         }
-        builder
-            .default_egress(NetworkAction::Deny)
-            .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
-    };
-    builder
-        .egress(|rule| rule.deny_host().deny_loopback())
+    }
+    NetworkPolicy::builder()
+        .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
         .build()
         .context("network policy")
 }
@@ -571,16 +591,21 @@ mod tests {
     }
 
     #[test]
-    fn dns_answers_only_allowed_names_and_the_host_stays_denied() {
+    fn only_allowed_names_resolve_and_star_reaches_only_the_public_internet() {
+        use microsandbox::NetworkAction::{Allow, Deny};
         let rules = |egress: &[&str]| {
             let domains: Vec<Domain> = egress.iter().map(|d| d.parse().unwrap()).collect();
-            network_policy(&domains)
-                .unwrap()
+            let policy = network_policy(&domains).unwrap();
+            assert_eq!(
+                (policy.default_egress, policy.default_ingress),
+                (Deny, Allow)
+            );
+            policy
                 .rules
                 .iter()
                 .map(|rule| {
                     let destination = format!("{:?}", rule.destination);
-                    let kind = ["DomainSuffix", "Domain", "Host", "Loopback"]
+                    let kind = ["DomainSuffix", "Domain", "Host", "Public"]
                         .into_iter()
                         .find(|kind| destination.contains(kind))
                         .unwrap();
@@ -588,19 +613,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
-        use NetworkAction::{Allow, Deny};
-        assert_eq!(
-            rules(&["*"]),
-            [("Host", Allow), ("Host", Deny), ("Loopback", Deny)]
-        );
+        assert_eq!(rules(&["*"]), [("Host", Allow), ("Public", Allow)]);
         assert_eq!(
             rules(&["example.com", "*.acme.dev"]),
-            [
-                ("Domain", Allow),
-                ("DomainSuffix", Allow),
-                ("Host", Deny),
-                ("Loopback", Deny)
-            ]
+            [("Domain", Allow), ("DomainSuffix", Allow)]
         );
     }
 }

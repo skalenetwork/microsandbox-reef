@@ -59,7 +59,7 @@ printed, paste the token, pick a model provider in the browser.
 `role apply` says what the file costs:
 
 ```
-warn   openclaw disables egress filtering; its agents reach any host
+warn   openclaw opens egress to the whole public internet
 ```
 
 That is this role's `egress = ["*"]`, and it is deliberate: an agent that
@@ -177,7 +177,8 @@ operator access: the role's egress list stays the agent's entire network policy.
 ### Terminal access
 
 `agent ssh` drops you into an interactive shell in the VM over microsandbox's
-SSH bridge - local operator access like `exec`, no identity involved. Authorize
+SSH bridge - local operator access like `exec`, no identity involved. It
+refuses an agent that is not running; `agent start` it first. Authorize
 your key once with `msb ssh authorize --file ~/.ssh/id_ed25519.pub`.
 
 `agent serve` bridges one SSH session into an agent and is meant to run as an
@@ -185,7 +186,8 @@ sshd `ForceCommand`: it reads the client's CA-signed certificate from
 `SSH_USER_AUTH`, the requested agent name from `SSH_ORIGINAL_COMMAND`, admits
 the caller only if a certificate principal matches the agent's `owner` (set
 with `--owner` at create, or per agent in a fleet file; default `$USER`),
-records a `served` event, and hands the session to `msb ssh serve --stdio`.
+refuses an agent that is not running (a `refused` event), records a `served`
+event, and hands the session to `msb ssh serve --stdio`.
 The full pattern - certificates, sshd config, client config - is
 [terminal access](https://reef.clawbits.ai/docs/enterprise/terminals).
 
@@ -264,7 +266,9 @@ agent (kept in the record, surviving recreates; shown by `agent get`). Keys are
 `UPPER_SNAKE`. Changing an agent's env does not rebuild it: reef applies the
 change to the existing VM and restarts it, so anything written to the rootfs
 survives. Only a role change recreates the VM, and a recreate keeps only what
-`[volumes]` declares. Secrets never go in any env layer - values are visible
+`[volumes]` declares. For an agent meant to run, the old VM goes only once the
+new one's secrets resolve, its ports allocate, its volumes fit and its image
+pulls; otherwise the old VM is left as it was and the agent reports `failed`. Secrets never go in any env layer - values are visible
 verbatim in the guest; derived material like a password hash is fine.
 
 ### Files
@@ -345,9 +349,12 @@ state you need.
 is domains only (the allowlist is enforced at DNS). A wildcard `*.x` covers
 `x` and its subdomains, and a raw-IP connection is allowed only while a live
 DNS answer for an allowed domain pins that IP (pins last the record's TTL).
-The list covers the internet, never the host: an agent cannot reach the reef
-host's loopback or another agent's published port, and `"*"` does not change
-that.
+The list never covers the host's loopback: an agent cannot reach a service the
+reef host binds to loopback, another agent's published port included, and
+`"*"` does not change that. `"*"` opens public addresses only, the host's own
+public address among them: private (RFC 1918, CGNAT, ULA), link-local and cloud
+metadata addresses stay denied, and an upstream DNS answer in a private,
+loopback or link-local range comes back NXDOMAIN.
 Secrets bind to the one host they may be sent to; the VM only ever sees a
 placeholder - the real value is substituted host-side by microsandbox's proxy
 and never enters the guest.

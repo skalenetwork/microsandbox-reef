@@ -30,7 +30,7 @@ flowchart TD
    name arrives as data in `SSH_ORIGINAL_COMMAND`.
 4. serve compares the certificate's principals to the requested agent's
    `owner`, so a certificate opens the agents its holder owns and nothing
-   else.
+   else, and refuses one that is not running.
 5. `msb ssh serve --stdio` bridges the session into the microVM over the
    runtime's own channel. No sshd in the guest, no port at the VM boundary,
    and the role's egress list stays the agent's entire network policy.
@@ -57,8 +57,9 @@ for them.
 `reef-principals` lists one username per line: who may reach the account at
 all. `reef agent serve` is the whole authorization step: it reads the
 certificate sshd verified, admits the caller only if one of its principals
-matches the requested agent's `owner`, records a `served` event, and hands
-the session to `msb ssh serve --stdio`. Give each agent its person at create
+matches the requested agent's `owner`, refuses an agent that is not running
+with a `refused` event, records a `served` event, and hands the session to
+`msb ssh serve --stdio`. Give each agent its person at create
 time:
 
 ```sh
@@ -69,7 +70,8 @@ or with `owner = "ana"` on the agent's fleet entry; omitted, the creating
 user is recorded.
 
 sshd's auth log records each authentication with the certificate's key id and
-principal, and every admitted session is a `served` event in `reef events`.
+principal, and every session serve opens is a `served` event in `reef events`;
+one refused because the agent is not running is a `refused` event.
 
 ## Enroll each person
 

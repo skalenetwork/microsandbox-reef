@@ -17,6 +17,10 @@ impl Desired {
             Self::Stopped => "stopped",
         }
     }
+
+    pub fn live(self, vm: Option<VmStatus>) -> bool {
+        self == Self::Running && vm == Some(VmStatus::Running)
+    }
 }
 
 impl std::str::FromStr for Desired {
@@ -178,6 +182,15 @@ mod tests {
         assert!(up.crashed(None));
         assert!(!agent(Desired::Stopped, Lifecycle::Running, 2).crashed(None));
         assert!(!agent(Desired::Running, Lifecycle::Pending, 2).crashed(None));
+    }
+
+    #[test]
+    fn only_an_agent_meant_to_run_with_its_vm_up_is_live() {
+        assert!(Desired::Running.live(Some(VmStatus::Running)));
+        assert!(!Desired::Running.live(Some(VmStatus::Stopped)));
+        assert!(!Desired::Running.live(None));
+        assert!(!Desired::Stopped.live(Some(VmStatus::Running)));
+        assert!(!Desired::Stopped.live(None));
     }
 
     #[test]

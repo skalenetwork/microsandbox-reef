@@ -191,6 +191,7 @@ fn is_host(s: &str) -> bool {
 
 fn is_image(s: &str) -> bool {
     !s.is_empty()
+        && !s.starts_with(['.', '/'])
         && s.len() <= 400
         && s.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "._:/@+-".contains(c))
@@ -220,6 +221,16 @@ mod tests {
         assert!("reviewer-1".parse::<AgentName>().is_ok());
         for bad in ["", "-x", "x-", "X", "a b", "a_b", &"a".repeat(41)] {
             assert!(bad.parse::<AgentName>().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn images_are_registry_references() {
+        for good in ["alpine", "ghcr.io/acme/agent:1", "a/b@sha256:9f2c"] {
+            assert!(good.parse::<ImageRef>().is_ok(), "{good}");
+        }
+        for bad in ["", "/srv/rootfs", "./agent.raw", "Alpine"] {
+            assert!(bad.parse::<ImageRef>().is_err(), "{bad:?}");
         }
     }
 

@@ -26,6 +26,7 @@ pub struct VolumeMount {
 
 pub trait Vmm {
     async fn status(&self, name: &str) -> Result<Option<VmStatus>>;
+    async fn prepare(&self, config: &VmConfig<'_>) -> Result<()>;
     async fn create(&self, config: VmConfig<'_>) -> Result<()>;
     async fn modify(&self, name: &str, env: BTreeMap<&EnvKey, Option<&String>>) -> Result<()>;
     async fn start(&self, name: &str) -> Result<()>;

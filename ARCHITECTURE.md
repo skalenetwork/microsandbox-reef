@@ -46,6 +46,9 @@ Invariants:
   role change on a stopped agent is the removal alone, and the create waits for
   the next `start`, so a guest's first boot is never cut off part-way through
   writing its own state.
+- A recreate removes the old VM only after the new one's secrets resolve, its
+  ports allocate, its volumes fit and its image pulls; a role change that
+  fails one of those leaves the old VM in place and the agent `failed`.
 - A stored `running` is never trusted alone. The record says what reef did; the
   VM read on every command says what is up, and a command that prints a state
   reports `failed` when the two disagree.
@@ -57,14 +60,18 @@ Invariants:
   substitution, bound to one host) and never enters reef's database, events,
   or errors (`Secret` has no `Serialize`; `Debug` redacts).
 - Egress is deny-by-default, enforced at DNS; the role's domain list is the
-  entire policy for the internet. A role opts out with the single rule `"*"`,
-  which must stand alone and which `role apply` warns about; a secret's host
-  binding still holds, so an unrestricted role spends secrets without reading
-  them.
-- The reef host is never a destination. Every role denies the host and
-  loopback groups, so no agent reaches the host or another agent's published
-  port, whatever its egress list says. DNS is the one exception, because the
-  guest's resolver is the sandbox gateway.
+  entire policy for the internet. A role opens the whole public internet with
+  the single rule `"*"`, which must stand alone and which `role apply` warns
+  about; private (RFC 1918, CGNAT, ULA), link-local and cloud metadata
+  addresses stay denied, and a secret's host binding still holds, so an unrestricted role
+  spends secrets without reading them.
+- The host's loopback is never a destination. No role allows the gateway or
+  loopback groups, so no agent reaches a service the host binds to loopback,
+  another agent's published port included, whatever its egress list says. DNS
+  is the one exception, because the guest's resolver is the sandbox gateway. A
+  service on the host's public address is as reachable as any public host.
+- `agent serve` and `agent ssh` refuse an agent that is not meant to run or
+  whose VM is not up.
 - Drift is explicit: `generation != applied_generation` is visible in
   `agent list`, and every spec write is a compare-and-swap on `generation`:
   a lost race is a 409-style error, never a merge.

@@ -321,6 +321,14 @@ impl App {
             .position(|item| item.row().as_ref() == Some(row))
     }
 
+    fn live(&self, row: &Row) -> bool {
+        let Row::Agent(host, name) = row else {
+            return false;
+        };
+        matches!(&self.hosts[*host].agents, Some(Ok(agents))
+            if agents.iter().any(|agent| agent.name == *name && agent.desired.live(agent.vm)))
+    }
+
     fn target(&self) -> Option<Row> {
         match &self.screen {
             Screen::Detail { row, .. } => Some(row.clone()),
@@ -344,7 +352,7 @@ impl App {
             KeyCode::Down | KeyCode::Char('j') => self.step(1),
             KeyCode::Enter if table => self.open(),
             KeyCode::Tab if table => self.switch(),
-            KeyCode::Char('t') => self.shell = self.target().filter(Row::is_agent),
+            KeyCode::Char('t') => self.shell = self.target().filter(|row| self.live(row)),
             KeyCode::Char(key) => self.press(key),
             _ => {}
         }
@@ -728,7 +736,7 @@ impl App {
             .flat_map(|row| row.verbs())
             .map(|verb| format!("{} {}  ", verb.key, verb.label))
             .collect::<String>();
-        let terminal = match row.as_ref().is_some_and(Row::is_agent) {
+        let terminal = match row.as_ref().is_some_and(|row| self.live(row)) {
             true => "t terminal  ",
             false => "",
         };
@@ -966,6 +974,23 @@ mod tests {
     }
 
     #[test]
+    fn the_terminal_opens_only_on_a_live_agent() {
+        let rows = vec![
+            agent("down", State::Stopped, true, &[]),
+            agent("up", State::Running, true, &[]),
+        ];
+        let mut app = app(vec![state(ssh("prod-eu"), Some(Ok(rows)))]);
+        assert!(!app.keys().contains("t terminal"));
+        app.key(KeyCode::Char('t'));
+        assert!(app.shell.is_none(), "a stopped agent gets no terminal");
+
+        app.key(KeyCode::Char('j'));
+        assert!(app.keys().contains("t terminal"));
+        app.key(KeyCode::Char('t'));
+        assert_eq!(app.shell.as_ref().map(Row::name), Some("up"));
+    }
+
+    #[test]
     fn switching_views_refreshes_every_host_at_once() {
         let (wake, wakes) = mpsc::channel();
         let mut app = app(vec![HostState {
@@ -1000,7 +1025,8 @@ mod tests {
 
     #[test]
     fn detail_shows_the_fields_and_the_event_tail() {
-        let mut app = app(vec![state(ssh("prod-eu"), Some(Ok(vec![])))]);
+        let rows = vec![agent("echo-1", State::Running, true, &[("ui", 19007)])];
+        let mut app = app(vec![state(ssh("prod-eu"), Some(Ok(rows)))]);
         let detail = AgentDetail {
             name: "echo-1".parse().unwrap(),
             role: "echo".parse().unwrap(),

@@ -4,8 +4,9 @@ An [OpenClaw](https://github.com/openclaw/openclaw) 2.0 gateway in its own
 microVM, on the browser image so the agent can drive a real Chromium. Nothing
 to place before it boots: you pick a model provider in the browser.
 
-`egress = ["*"]` turns off reef's deny-by-default egress, because an agent that
-browses the web has to reach the web. For purpose-built agents with real egress
+`egress = ["*"]` opens the public internet, because an agent that browses the
+web has to reach the web. Private networks and cloud metadata stay out of
+reach. For purpose-built agents with real egress
 lists and org SSO, see [set up a team](/docs/enterprise/team).
 
 This page assumes a [prepared host](/docs/setup/host): reef and msb installed,

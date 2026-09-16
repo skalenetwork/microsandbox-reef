@@ -320,7 +320,7 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                         );
                         if role.network.egress.iter().any(Domain::is_any) {
                             eprintln!(
-                                "warn   {} disables egress filtering; its agents reach any host",
+                                "warn   {} opens egress to the whole public internet",
                                 role.name
                             );
                         }
@@ -592,10 +592,14 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .await
         }
         AgentCommand::Ssh { name } => {
-            require_agent(&ctx, &name)?;
-            ctx.vmm.ssh(&reconcile::sandbox_name(&name))
+            let agent = require_agent(&ctx, &name)?;
+            let sandbox = reconcile::sandbox_name(&name);
+            if !agent.spec.desired.live(ctx.vmm.status(&sandbox).await?) {
+                bail!("{name} is not running; start it with `reef agent start {name}`");
+            }
+            ctx.vmm.ssh(&sandbox)
         }
-        AgentCommand::Serve => serve::run(&ctx.store),
+        AgentCommand::Serve => serve::run(&ctx.store, &ctx.vmm).await,
         AgentCommand::Update { name } => {
             let agent = require_agent(&ctx, &name)?;
             let (active, _) = ctx
