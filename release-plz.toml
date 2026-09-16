@@ -4,6 +4,7 @@ publish = false
 git_release_enable = false
 git_tag_enable = false
 git_tag_name = "v{{ version }}"
+features_always_increment_minor = true
 changelog_update = false
 
 [[package]]
