@@ -9,9 +9,8 @@ Give this to your agent:
 
 Prepare a reef host by following https://reef.clawbits.ai/docs/setup/host.md.
 Measure the host first and show me the results before you change anything.
-Do not guess version numbers: read the msb pin from the reef release you
-install. Stop and ask me if /dev/kvm is missing, if a non-KVM hypervisor module
-is loaded, or if anything already listens in 19000-19999.
+Stop and ask me if /dev/kvm is missing, if a non-KVM hypervisor module is
+loaded, or if anything already listens in 19000-19999.
 ```
 
 ## Measure first
@@ -33,23 +32,21 @@ install anything.
 
 ## The runtime
 
-reef drives microsandbox rather than shipping it, and each reef release pins one
-exact `msb` version. The installer takes the newest release, which is not always
-the pinned one, so check rather than assume:
+reef drives microsandbox rather than shipping it, and supports only the `msb`
+release it pins, which is the latest while reef is current:
 
 ```sh
 curl -fsSL https://install.microsandbox.dev | sh
-curl -fsSL "https://raw.githubusercontent.com/skalenetwork/microsandbox-reef/v$(reef --version | cut -d' ' -f2)/crates/reef/Cargo.toml" | grep microsandbox
 msb --version
 ```
 
-Roll back with `msb self downgrade <version> -y` when the installer ran ahead. A
-mismatch does not fail at install time. It fails at the first `agent create`
-with a launch-config error that names neither version.
+When the installer runs ahead of reef, `agent create` fails with `no tested
+sandbox launch contract for runtime <version>`.
 
-reef resolves `msb` the way microsandbox does, and `MSB_PATH` overrides that
-when the bundle is somewhere else. Without one, every command fails with
-`msb not found: set MSB_PATH or install microsandbox`.
+`MSB_PATH` points reef at an `msb` outside `~/.microsandbox`, with `libkrunfw`
+beside it, in `../lib`, or at `MSB_LIBKRUNFW_PATH`. When none resolves,
+`reef doctor` fails with `cannot resolve msb: install microsandbox
+(https://microsandbox.dev) or set MSB_PATH`.
 
 `msb` needs `libcap-ng0`, and on aarch64 so does `reef` itself.
 
@@ -118,8 +115,7 @@ and answers nothing. Check the range before you start and after any
 `agent rm`.
 
 **msb.** The bundle lives at `$HOME/.microsandbox`, so separate accounts get
-separate versions and separate state. That is the clean way to run two reefs on
-one machine.
+separate state. That is the clean way to run two reefs on one machine.
 
 **cloudflared.** If a tunnel already runs here, do not use `cloudflared service
 install`: it writes one `cloudflared.service` and would replace it. Give yours

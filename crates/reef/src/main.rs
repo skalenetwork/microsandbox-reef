@@ -88,6 +88,8 @@ enum Command {
     },
     /// Replace this binary with the latest release
     Update,
+    /// Move this state dir's agents from reef 0.14 onto the installed msb, keeping volumes
+    Migrate,
 }
 
 #[derive(Subcommand)]
@@ -287,6 +289,7 @@ async fn main() -> Result<()> {
         }
         Command::Ui { hosts, reef } => ui::run(ui::hosts(hosts, reef, dir)?),
         Command::Update => update::run().await,
+        Command::Migrate => migrate(Ctx::open(&dir)?).await,
     };
     if let Some(notice) = notice {
         notice.finish().await;
@@ -659,6 +662,24 @@ fn events_command(ctx: Ctx, filter: EventFilter, json: bool) -> Result<()> {
             );
         }
     })
+}
+
+async fn migrate(ctx: Ctx) -> Result<()> {
+    ctx.vmm.migrate().await?;
+    let mut failed = false;
+    for agent in ctx.store.list_agents()? {
+        match reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &agent.name).await {
+            Ok(agent) => println!("{} {}", agent.name, agent.status.lifecycle.label()),
+            Err(e) => {
+                eprintln!("{}: {e:#}", agent.name);
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        bail!("some agents failed to recreate; fix them, then run `reef agent start`");
+    }
+    Ok(())
 }
 
 async fn set_desired(ctx: &Ctx, name: &AgentName, desired: Desired) -> Result<()> {

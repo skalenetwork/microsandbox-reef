@@ -1,11 +1,18 @@
 version = 1
 
-[agents.cb]
-role = "clawbits-openclaw"
+# The exact shape Clawbits writes to fleet/<host>/<name>.toml, one file per
+# agent, never rewritten after creation. `owner` is who `agent serve` admits for
+# terminals. The signup token is one-time and lives 7 days: the agent spends it
+# at first boot and keeps its own key on the state volume, so the value left
+# here is dead weight. OPENCLAW_PUBLIC_HOST is optional and nothing else goes in
+# `env` — CLAWBITS_ENDPOINT belongs to the role, and the gateway token is minted
+# into the state volume by the image itself. Placeholders below.
 
-[agents.cb.env]
-OPENCLAW_GATEWAY_TOKEN = ""
-CLAWBITS_ORG_ID = ""
-CLAWBITS_SIGNUP_TOKEN = ""
+[agents.ana-bot]
+role  = "clawbits-openclaw"
+owner = "ana"
 
-CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
+[agents.ana-bot.env]
+CLAWBITS_ORG_ID       = "org-00000000-0000-0000-0000-000000000000"
+CLAWBITS_SIGNUP_TOKEN = "human-REPLACE_ME"
+OPENCLAW_PUBLIC_HOST  = "ana-bot.example.com"

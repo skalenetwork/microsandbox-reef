@@ -6,6 +6,7 @@ use microsandbox::protocol::tcp::{TcpClose, TcpConnect, TcpConnected, TcpData, T
 use microsandbox::sandbox::{
     FsOpenOptions, RlimitResource, SandboxFsOps, SandboxHandle, SandboxStatus,
 };
+use microsandbox::setup::{InstallOptions, resolve_runtime_version};
 use microsandbox::size::SizeExt;
 use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkAction, NetworkPolicy, Sandbox, Volume,
@@ -17,12 +18,15 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const STATE_LABEL: &str = "reef.state";
 const PROC_NET_LIMIT: u64 = 256 * 1024;
 const LISTEN: &str = "0A";
 const DNS_PORT: u16 = 53;
+const STOP_GRACE: Duration = Duration::from_secs(10);
+const MAX_TCP_CONNECTIONS: usize = 1024;
 
 pub struct Msb {
     state_id: String,
@@ -39,13 +43,24 @@ impl Msb {
         Self { state_id }
     }
 
-    fn owned(&self, handle: &SandboxHandle) -> Result<bool> {
-        let config = handle.config()?;
-        Ok(config
-            .spec
-            .labels
-            .iter()
-            .any(|(key, value)| key == STATE_LABEL && *value == self.state_id))
+    async fn owned(&self) -> Result<Vec<SandboxHandle>> {
+        let mut handles = Vec::new();
+        let mut cursor = None;
+        loop {
+            let page = Sandbox::list_with(|list| {
+                let list = list.label(STATE_LABEL, &self.state_id);
+                match cursor.take() {
+                    Some(cursor) => list.cursor(cursor),
+                    None => list,
+                }
+            })
+            .await?;
+            handles.extend(page.sandboxes);
+            match page.next_cursor {
+                Some(next) => cursor = Some(next),
+                None => return Ok(handles),
+            }
+        }
     }
 }
 
@@ -91,12 +106,12 @@ impl Vmm for Msb {
                 builder.patch(|patch| patch.text(path.as_str(), file.content(), file.mode(), true));
         }
         let policy = network_policy(&role.network.egress)?;
-        builder = builder.network(|n| n.policy(policy));
+        builder = builder.network(|n| n.policy(policy).max_tcp_connections(MAX_TCP_CONNECTIONS));
         for secret in &config.secrets {
             builder = builder.secret(|s| {
                 s.env(secret.key.as_str())
                     .value(secret.value.expose())
-                    .allow_host(secret.host.as_str())
+                    .allow(secret.host.as_str())
             });
         }
         match builder.create_detached().await {
@@ -128,23 +143,24 @@ impl Vmm for Msb {
     }
 
     async fn stop(&self, name: &str) -> Result<()> {
-        Sandbox::get(name).await?.stop().await?;
-        Ok(())
+        halt(&Sandbox::get(name).await?).await
     }
 
     async fn remove(&self, name: &str) -> Result<()> {
-        let handle = match Sandbox::get(name).await {
-            Ok(handle) => handle,
-            Err(e) if is_not_found(&e) => return Ok(()),
-            Err(e) => return Err(e.into()),
+        let Some(handle) = self.owned().await?.into_iter().find(|h| h.name() == name) else {
+            return match Sandbox::get(name).await {
+                Err(e) if is_not_found(&e) => Ok(()),
+                Err(e) => Err(e.into()),
+                Ok(_) => bail!(
+                    "sandbox {name} exists but was not created by this reef state dir; \
+                     refusing to destroy it (remove it with `msb rm` if it is really yours)"
+                ),
+            };
         };
-        if !self.owned(&handle)? {
-            bail!(
-                "sandbox {name} exists but was not created by this reef state dir; \
-                 refusing to destroy it (remove it with `msb rm` if it is really yours)"
-            );
+        if map_status(handle.status_snapshot()) == VmStatus::Running {
+            halt(&handle).await?;
         }
-        handle.destroy().await?;
+        handle.remove().await?;
         Ok(())
     }
 
@@ -157,6 +173,44 @@ impl Vmm for Msb {
 }
 
 impl Msb {
+    pub async fn migrate(&self) -> Result<()> {
+        let msb = msb_path()?;
+        let pinned = InstallOptions::default().version;
+        let installed = resolve_runtime_version(&msb)?.map(|version| version.to_string());
+        if installed.as_deref() != Some(pinned.as_str()) {
+            bail!(
+                "reef needs msb {pinned}, but {} is {}; install it first",
+                msb.display(),
+                installed.as_deref().unwrap_or("an older release")
+            );
+        }
+        for handle in self.owned().await? {
+            if map_status(handle.status_snapshot()) == VmStatus::Stopped {
+                continue;
+            }
+            let stopped = async {
+                handle.request_stop().await?;
+                handle.wait_until_stopped().await
+            };
+            if !matches!(tokio::time::timeout(STOP_GRACE, stopped).await, Ok(Ok(_))) {
+                handle.kill().await?;
+            }
+        }
+        let upgraded = std::process::Command::new(&msb)
+            .env("MSB_BACKEND", "local")
+            .args(["volume", "ls", "-q"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .context("cannot run msb")?;
+        if !upgraded.success() {
+            bail!("msb could not upgrade its store; fix what it reported, then rerun");
+        }
+        for handle in self.owned().await? {
+            handle.remove().await?;
+        }
+        Ok(())
+    }
+
     pub fn ssh(&self, name: &str) -> Result<()> {
         use std::os::unix::process::CommandExt;
         let error = std::process::Command::new(msb_path()?)
@@ -214,11 +268,6 @@ impl Msb {
             .await
             .context("agent VM is not running")?;
         let client = sandbox.client_arc();
-        if !client.supports(MessageType::TcpConnect) {
-            bail!(
-                "this VM's runtime predates port forwarding; restart the agent (stop, then start)"
-            );
-        }
         let mut serve = tokio::task::JoinSet::new();
         for &(local, guest) in ports {
             let listener = tokio::net::TcpListener::bind(("127.0.0.1", local))
@@ -242,7 +291,7 @@ impl Msb {
                         }
                         Err(e) => {
                             eprintln!("accept for :{guest}: {e}");
-                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            tokio::time::sleep(Duration::from_millis(100)).await;
                         }
                     }
                 }
@@ -250,7 +299,7 @@ impl Msb {
         }
         let vanished = async {
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
                 if !matches!(sandbox.status().await, Ok(s) if map_status(s) == VmStatus::Running) {
                     return;
                 }
@@ -261,6 +310,17 @@ impl Msb {
             _ = serve.join_all() => Ok(()),
         }
     }
+}
+
+async fn halt(handle: &SandboxHandle) -> Result<()> {
+    if handle.status_snapshot() == SandboxStatus::Paused {
+        handle.resume().await?;
+    }
+    match handle.stop_with_timeout(STOP_GRACE).await {
+        Err(MicrosandboxError::StopTimeout { .. }) => handle.kill().await?,
+        result => result?,
+    }
+    Ok(())
 }
 
 async fn read_ports(fs: &SandboxFsOps<'_>, path: &str) -> Result<BTreeSet<u16>> {
@@ -311,6 +371,7 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
     let connect = TcpConnect {
         host: "127.0.0.1".to_owned(),
         port: guest,
+        bulk: None,
     };
     let (id, mut rx) = client.stream(MessageType::TcpConnect, &connect).await?;
     match rx.recv().await {
@@ -376,12 +437,11 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
 }
 
 fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
-    let builder = NetworkPolicy::builder()
-        .default_ingress(NetworkAction::Allow)
-        .egress(|rule| rule.tcp().udp().port(DNS_PORT).allow_host())
-        .egress(|rule| rule.deny_host().deny_loopback());
-    let policy = if domains.iter().any(Domain::is_any) {
-        builder.default_egress(NetworkAction::Allow)
+    let builder = NetworkPolicy::builder().default_ingress(NetworkAction::Allow);
+    let builder = if domains.iter().any(Domain::is_any) {
+        builder
+            .default_egress(NetworkAction::Allow)
+            .egress(|rule| rule.tcp().udp().port(DNS_PORT).allow_host())
     } else {
         let mut exact = Vec::new();
         let mut suffixes = Vec::new();
@@ -395,18 +455,21 @@ fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
             .default_egress(NetworkAction::Deny)
             .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
     };
-    policy.build().context("network policy")
+    builder
+        .egress(|rule| rule.deny_host().deny_loopback())
+        .build()
+        .context("network policy")
 }
 
 fn map_status(status: SandboxStatus) -> VmStatus {
     match status {
-        SandboxStatus::Running | SandboxStatus::Starting | SandboxStatus::Draining => {
-            VmStatus::Running
+        SandboxStatus::Running
+        | SandboxStatus::Starting
+        | SandboxStatus::Draining
+        | SandboxStatus::Paused => VmStatus::Running,
+        SandboxStatus::Created | SandboxStatus::Stopped | SandboxStatus::Crashed => {
+            VmStatus::Stopped
         }
-        SandboxStatus::Created
-        | SandboxStatus::Paused
-        | SandboxStatus::Stopped
-        | SandboxStatus::Crashed => VmStatus::Stopped,
     }
 }
 
@@ -425,8 +488,9 @@ pub fn vm_not_running(sandbox: &str) -> String {
 }
 
 pub fn msb_path() -> Result<PathBuf> {
-    microsandbox::config::resolve_msb_path()
-        .context("msb not found: set MSB_PATH or install microsandbox (https://microsandbox.dev)")
+    microsandbox::config::resolve_msb_path().context(
+        "cannot resolve msb: install microsandbox (https://microsandbox.dev) or set MSB_PATH",
+    )
 }
 
 pub fn doctor() -> Result<()> {
@@ -507,24 +571,36 @@ mod tests {
     }
 
     #[test]
-    fn the_host_and_loopback_are_denied_except_dns_whatever_the_egress_list_says() {
-        for egress in [vec!["*"], vec!["example.com", "*.acme.dev"]] {
+    fn dns_answers_only_allowed_names_and_the_host_stays_denied() {
+        let rules = |egress: &[&str]| {
             let domains: Vec<Domain> = egress.iter().map(|d| d.parse().unwrap()).collect();
-            let policy = network_policy(&domains).unwrap();
-            let group = |name: &str| {
-                policy
-                    .rules
-                    .iter()
-                    .filter(|rule| format!("{:?}", rule.destination).contains(name))
-                    .map(|rule| rule.action)
-                    .collect::<Vec<_>>()
-            };
-            assert_eq!(
-                group("Host"),
-                [NetworkAction::Allow, NetworkAction::Deny],
-                "dns is allowed to the host, everything else denied"
-            );
-            assert_eq!(group("Loopback"), [NetworkAction::Deny]);
-        }
+            network_policy(&domains)
+                .unwrap()
+                .rules
+                .iter()
+                .map(|rule| {
+                    let destination = format!("{:?}", rule.destination);
+                    let kind = ["DomainSuffix", "Domain", "Host", "Loopback"]
+                        .into_iter()
+                        .find(|kind| destination.contains(kind))
+                        .unwrap();
+                    (kind, rule.action)
+                })
+                .collect::<Vec<_>>()
+        };
+        use NetworkAction::{Allow, Deny};
+        assert_eq!(
+            rules(&["*"]),
+            [("Host", Allow), ("Host", Deny), ("Loopback", Deny)]
+        );
+        assert_eq!(
+            rules(&["example.com", "*.acme.dev"]),
+            [
+                ("Domain", Allow),
+                ("DomainSuffix", Allow),
+                ("Host", Deny),
+                ("Loopback", Deny)
+            ]
+        );
     }
 }

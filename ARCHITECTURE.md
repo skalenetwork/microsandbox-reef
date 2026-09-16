@@ -92,10 +92,9 @@ problems at once), stores it content-addressed by digest, and marks it active.
 `agent create` writes the record, then reconciles: the pure function
 `plan(Facts) -> &[Action]` decides Create/Modify/Start/Stop/Remove from three
 inputs (desired state, what drifted, observed VM), and the executor applies
-each action through the six-method `Vmm` trait. `msb.rs` is the only module
-that names a microsandbox type: the blast door for a pre-1.0 dependency
-pinned exactly (upgrades are a deliberate task gated on the real-VM smoke
-test, never a routine bump).
+each action through the `Vmm` trait. `msb.rs` is the only module that names a
+microsandbox type: the blast door for a pre-1.0 dependency pinned exactly to
+its latest release, each bump gated on the real-VM smoke test.
 
 Console: `ui.rs` is a client of the `--json` rows the CLI prints, nothing more.
 It fetches them by running this binary locally or `ssh ALIAS <reef> agent list
@@ -115,8 +114,8 @@ re-read from the runtime on every command. Role versions are immutable and
 content-addressed; `role rm` refuses while any agent is on the role, so a
 pinned agent's blast radius stays readable. microsandbox's own state under
 `~/.microsandbox` is treated as the runtime's property; reef never parses its
-files itself, reaching it only through the SDK, and doctor only checks the
-directory's mode.
+files itself, reaching it only through the SDK and the `msb` CLI (`ssh`,
+`migrate`), and doctor only checks the directory's mode.
 
 Secrets: roles hold `reef://store/name` references (a pasted literal is a
 parse error). Values resolve host-side at VM create from `secrets.toml`:
@@ -129,9 +128,9 @@ reef holds no credential for the credential store.
 
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
-  exception, and it holds only the six methods the reconciler drives;
-  operator commands (`ssh`, `exec`, `listening`, `forward`) live on the
-  adapter itself.
+  exception, and it holds only the lifecycle methods; operator commands
+  (`ssh`, `exec`, `listening`, `forward`, `migrate`) live on the adapter
+  itself.
 - Data structures first; illegal states unrepresentable (`Failed` cannot lack
   a reason; invalid names do not construct).
 - No inline comments: the code carries its meaning; clap doc-comments are

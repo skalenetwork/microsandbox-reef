@@ -28,14 +28,20 @@ directory, `REEF_VERSION=0.10.0` pins a version. Linux x86_64/aarch64 and
 Apple Silicon macOS; the Linux builds are glibc and need 2.39 or newer.
 
 reef drives microsandbox rather than shipping it, so a host needs the `msb`
-bundle installed once, at the version this release pins; `MSB_PATH` points at it
-when it lives somewhere microsandbox would not look. Checking that pin, the
-glibc floor, the KVM traps and running alongside another reef is
-[prepare a host](https://reef.clawbits.ai/docs/setup/host).
+bundle this reef pins, which is the latest while reef is current; `MSB_PATH`
+points at it when it lives somewhere microsandbox would not look. The glibc floor, the KVM traps and running alongside another reef are
+in [prepare a host](https://reef.clawbits.ai/docs/setup/host).
 
 `reef update` replaces the binary in place with the latest release. Commands
 note a newer version on stderr, checked at most once a day; `REEF_NO_UPDATE_CHECK=1`
 turns the notice off.
+
+A host still on reef 0.14 moves once. Pause whatever runs reef on its own
+(cron `fleet apply`, a remote `reef ui`, sshd `agent serve`), install the latest
+`msb`, run `reef update`, then `reef migrate` for each state dir. It stops the old
+VMs, lets `msb` upgrade its store and recreates the running agents from their
+records; stopped ones get a VM on their next `reef agent start`. Volumes stay
+where they are; anything a VM kept outside them is gone.
 
 ## Run OpenClaw in a microVM
 
@@ -134,6 +140,7 @@ outlive the VMs, and one console across hosts.
 | `reef fleet apply fleet/*.toml` | Converge the declared fleet |
 | `reef events --agent reviewer-1 --limit 20` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
+| `reef migrate` | Move a reef 0.14 host onto the latest msb, volumes kept |
 
 `role list`, `role get`, `agent list`, `agent get`, and `events` take
 `--json`.
@@ -413,11 +420,8 @@ survive removal.
 - One host per state dir, no auth on the CLI: it runs where the state lives,
   and `reef ui` reaches it over your own ssh (the HTTP API comes later and will
   not ship without auth).
-- `microsandbox` is pinned exactly (beta upstream, the version in
-  `crates/reef/Cargo.toml`); upgrades are a
-  deliberate task, never a routine bump. reef migrates `~/.microsandbox` to
-  that schema on first run, and an older `msb` refuses the store afterwards -
-  upgrade `msb` alongside reef, or roll back with `msb self downgrade`.
+- `microsandbox` is pinned exactly to its latest release (the version in
+  `crates/reef/Cargo.toml`); reef supports no older `msb`.
 
 ## Tests
 

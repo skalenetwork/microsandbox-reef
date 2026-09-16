@@ -22,12 +22,18 @@ tighten egress. Every role here is parse-checked by `cargo test`.
   shape and why each field is set,
   [browser access](../docs/enterprise/cloudflare-access.md) for the worked
   setup, and [fleet/openclaw-team.toml](../fleet/openclaw-team.toml).
-- `clawbits-openclaw`: the same gateway on the Clawbits image, which bakes the
-  clawbits plugins in. `[volumes]` mounts `state` and `workspace` separately and
-  never `/home/node/.openclaw`: a volume at the parent hides those plugins and
-  the agent degrades to stock OpenClaw. The image ships no `openclaw.json`, so
-  the role owns it. The clawbits account is four `${CLAWBITS_*}` references that
-  OpenClaw expands at read time, injected per agent with `agent create --env`,
-  so the guest holds the key; left blank, the agent runs detached, which is a
-  valid mode. `endpoint` beside them is a literal because schema validation runs
-  before expansion and rejects a `${...}` in a uri field.
+- `clawbits-openclaw`: the same gateway on the [Clawbits](https://clawbits.ai)
+  image, which bakes the clawbits plugins in and boots through its own entrypoint.
+  `[volumes]` mounts `state` and `workspace` separately and never
+  `/home/node/.openclaw`: a volume at the parent hides those plugins and the
+  agent degrades to stock OpenClaw. `CLAWBITS_ENDPOINT` in `[env]` is the
+  deployment every agent on this role enrols into — Clawbits offers the role only
+  to the org whose server it names, so a copy pointed elsewhere is a different
+  role. Each agent gets `CLAWBITS_ORG_ID` and a one-time `CLAWBITS_SIGNUP_TOKEN`
+  from its fleet file ([fleet/clawbits.toml](../fleet/clawbits.toml)); it spends
+  the token at first boot and keeps its own key on the `state` volume, so the
+  file is dead weight afterwards and a recreate comes back as the same agent. The
+  gateway token is a property of the machine, minted into the state volume on
+  first boot, so it never travels through the fleet file:
+  `reef agent exec NAME -- cat /home/node/.openclaw/state/gateway-token` reads it.
+  Left without an org and token, the agent runs detached, which is a valid mode.
