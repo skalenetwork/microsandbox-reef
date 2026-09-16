@@ -60,6 +60,8 @@ enum Command {
         #[command(subcommand)]
         command: SecretCommand,
     },
+    /// Drive every agent to its record: restart crashed VMs, retry failed changes
+    Reconcile,
     /// Show the event log
     Events {
         /// Only this agent's events
@@ -301,7 +303,12 @@ async fn main() -> Result<()> {
         }
         Command::Ui { hosts, reef } => ui::run(ui::hosts(hosts, reef, dir)?),
         Command::Update => update::run().await,
-        Command::Migrate => migrate(Ctx::open(&dir)?).await,
+        Command::Reconcile => reconcile_all(&Ctx::open(&dir)?).await,
+        Command::Migrate => {
+            let ctx = Ctx::open(&dir)?;
+            ctx.vmm.migrate().await?;
+            reconcile_all(&ctx).await
+        }
     };
     if let Some(notice) = notice {
         notice.finish().await;
@@ -680,8 +687,7 @@ fn events_command(ctx: Ctx, filter: EventFilter, json: bool) -> Result<()> {
     })
 }
 
-async fn migrate(ctx: Ctx) -> Result<()> {
-    ctx.vmm.migrate().await?;
+async fn reconcile_all(ctx: &Ctx) -> Result<()> {
     let mut failed = false;
     for agent in ctx.store.list_agents()? {
         match reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &agent.name).await {
@@ -693,7 +699,7 @@ async fn migrate(ctx: Ctx) -> Result<()> {
         }
     }
     if failed {
-        bail!("some agents failed to recreate; fix them, then run `reef agent start`");
+        bail!("some agents did not converge; fix them, then rerun `reef reconcile`");
     }
     Ok(())
 }

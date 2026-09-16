@@ -139,6 +139,7 @@ outlive the VMs, and one console across hosts.
 | `reef agent rm reviewer-1 --volumes` | VM destroyed, the agent's volumes deleted with it |
 | `reef fleet apply fleet/*.toml` | Converge the declared fleet |
 | `reef secret rotate reef://hermes/openrouter` | Push a changed secret into every agent VM that binds it |
+| `reef reconcile` | Drive every agent to its record, after a reboot or a crash |
 | `reef events --agent reviewer-1 --limit 20` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
 | `reef migrate` | Move a reef 0.14 host onto the latest msb, volumes kept |
@@ -157,6 +158,8 @@ desired state - or reports failed, which exits nonzero. It has no timeout and
 nothing reconciles while it waits; in scripts, wrap it in `timeout(1)`. A record
 that claims `running` is checked against the VM every command reads, so a guest
 that boots and then dies reports `failed` with the command that shows why.
+`reef reconcile` starts it again and logs an `exited` event first; run it at
+boot so agents return after a reboot ([prepare a host](https://reef.clawbits.ai/docs/setup/host)).
 
 `events` prints the log oldest-first; `--after ID` returns only what is newer,
 so a collector can poll it without re-reading. `agent get` prints the VM's

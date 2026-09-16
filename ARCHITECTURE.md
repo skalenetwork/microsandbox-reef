@@ -22,8 +22,9 @@ every instance inherits the policy.
 The **agent record is durable; the VM is cattle.** An `Agent` is a spec
 (owner, pinned role version, desired state) plus a status only the
 reconciler writes. Every mutating CLI command runs one reconcile pass that
-drives the VM toward the record, then returns. There is no daemon: VMs are
-created detached, outlive reef, and are re-discovered by name on the next
+drives the VM toward the record, then returns; `reef reconcile` runs it over
+every agent, which is how agents return after a reboot. There is no daemon: VMs
+are created detached, outlive reef, and are re-discovered by name on the next
 command.
 
 ```mermaid

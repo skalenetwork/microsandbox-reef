@@ -31,6 +31,9 @@ pub async fn reconcile<V: Vmm>(
         .with_context(|| format!("no such agent: {name}"))?;
     let sandbox = sandbox_name(name);
     let vm = vmm.status(&sandbox).await?;
+    if agent.crashed(vm) {
+        store.record(name, "exited", &sandbox)?;
+    }
     let steps = plan(Facts {
         desired: agent.spec.desired,
         drift: agent.drift(),
@@ -377,6 +380,28 @@ network = { egress = ["example.com"] }
         assert_eq!(agent.status.applied_digest, Some(next));
         assert!(agent.drift() == Drift::None && agent.reconciled());
         assert_eq!(kinds(&store, &name), ["create", "stop", "remove", "create"]);
+    }
+
+    #[tokio::test]
+    async fn a_vm_that_died_on_its_own_is_logged_then_restarted() {
+        let (store, secrets, _digest, name) = setup();
+        let vmm = FakeVmm::default();
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+
+        vmm.vms
+            .lock()
+            .unwrap()
+            .insert(sandbox_name(&name), VmStatus::Stopped);
+        let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert_eq!(agent.status.lifecycle, Lifecycle::Running);
+        assert_eq!(kinds(&store, &name), ["create", "exited", "start"]);
+
+        reconcile(&store, &secrets, &vmm, &name).await.unwrap();
+        assert_eq!(
+            kinds(&store, &name).len(),
+            3,
+            "a healthy agent logs nothing"
+        );
     }
 
     #[tokio::test]

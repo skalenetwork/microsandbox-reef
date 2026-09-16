@@ -128,6 +128,36 @@ work, but each one allocates its own copy of the image root instead of sharing
 extents. Prefer XFS with reflink or btrfs under `$HOME/.microsandbox` if you
 plan to run many agents.
 
+## After a reboot
+
+Nothing restarts agents on its own: there is no daemon, and microsandbox has no
+restart policy. `reef reconcile` drives every agent back to its record, starting
+the VMs that should run and logging an `exited` event for each one that died.
+Run it at boot from a oneshot unit, `/etc/systemd/system/reef-boot.service`:
+
+```ini
+[Unit]
+Description=Bring reef agents back after boot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=reef
+ExecStart=/home/reef/.local/bin/reef reconcile
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo systemctl enable reef-boot
+```
+
+`journalctl -u reef-boot` shows each agent's state after the run, and an
+agent that did not come back makes the unit fail. A second state directory gets
+its own unit with `--state`.
+
 ## Done when
 
 ```sh
