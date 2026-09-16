@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use reef_core::{
     Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, Lifecycle, Role, RoleName,
-    VmStatus, parse_fleet, parse_role,
+    SecretRef, VmStatus, parse_fleet, parse_role,
 };
 use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow};
 use secrets::Secrets;
@@ -54,6 +54,11 @@ enum Command {
     Fleet {
         #[command(subcommand)]
         command: FleetCommand,
+    },
+    /// Manage the secrets agents spend
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommand,
     },
     /// Show the event log
     Events {
@@ -101,6 +106,12 @@ enum FleetCommand {
         #[arg(long)]
         prune: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum SecretCommand {
+    /// Push a secret's current value into every agent VM that binds it
+    Rotate { secret: SecretRef },
 }
 
 #[derive(Subcommand)]
@@ -268,6 +279,7 @@ async fn main() -> Result<()> {
         Command::Role { command } => role_command(Ctx::open(&dir)?, command),
         Command::Agent { command } => agent_command(Ctx::open(&dir)?, command).await,
         Command::Fleet { command } => fleet_command(Ctx::open(&dir)?, command).await,
+        Command::Secret { command } => secret_command(Ctx::open(&dir)?, command).await,
         Command::Events {
             agent,
             after,
@@ -865,6 +877,41 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
     }
     if failed {
         bail!("some agents failed to converge");
+    }
+    Ok(())
+}
+
+async fn secret_command(ctx: Ctx, command: SecretCommand) -> Result<()> {
+    let SecretCommand::Rotate { secret } = command;
+    let bindings = ctx.store.secret_bindings(&secret)?;
+    if bindings.is_empty() {
+        bail!("no agent VM binds {secret}");
+    }
+    let value = ctx.secrets.resolve(&secret)?;
+    let mut failed = false;
+    for (name, key, host) in bindings {
+        let sandbox = reconcile::sandbox_name(&name);
+        let Some(vm) = ctx.vmm.status(&sandbox).await? else {
+            println!("{name} has no VM; its next create resolves the new value");
+            continue;
+        };
+        match ctx.vmm.rotate(&sandbox, &key, &value, &host).await {
+            Ok(()) => {
+                ctx.store
+                    .record(&name, "rotated", &format!("{key} {secret}"))?;
+                match vm {
+                    VmStatus::Running => println!("{name} {key} rotated"),
+                    VmStatus::Stopped => println!("{name} {key} rotated for its next start"),
+                }
+            }
+            Err(e) => {
+                eprintln!("{name} {key}: {e:#}");
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        bail!("some agents kept the old value");
     }
     Ok(())
 }

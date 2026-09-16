@@ -136,8 +136,8 @@ reef holds no credential for the credential store.
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
   exception, and it holds only the lifecycle methods; operator commands
-  (`ssh`, `exec`, `listening`, `forward`, `migrate`) live on the adapter
-  itself.
+  (`ssh`, `exec`, `listening`, `forward`, `rotate`, `migrate`) live on the
+  adapter itself.
 - Data structures first; illegal states unrepresentable (`Failed` cannot lack
   a reason; invalid names do not construct).
 - No inline comments: the code carries its meaning; clap doc-comments are

@@ -1,3 +1,4 @@
+use crate::secrets::Secret;
 use crate::vmm::{VmConfig, Vmm};
 use anyhow::{Context, Result, bail};
 use microsandbox::backend::LocalBackend;
@@ -11,7 +12,7 @@ use microsandbox::size::SizeExt;
 use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox, Volume,
 };
-use reef_core::{Domain, EnvKey, VmStatus};
+use reef_core::{Domain, EnvKey, Host, VmStatus};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -235,6 +236,26 @@ impl Msb {
         for handle in self.owned().await? {
             handle.remove().await?;
         }
+        Ok(())
+    }
+
+    pub async fn rotate(
+        &self,
+        name: &str,
+        key: &EnvKey,
+        value: &Secret,
+        host: &Host,
+    ) -> Result<()> {
+        Sandbox::get(name)
+            .await?
+            .modify()
+            .secret(|s| {
+                s.env(key.as_str())
+                    .value(value.expose())
+                    .allow(host.as_str())
+            })
+            .apply()
+            .await?;
         Ok(())
     }
 

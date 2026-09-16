@@ -138,6 +138,7 @@ outlive the VMs, and one console across hosts.
 | `reef agent rm reviewer-1 reviewer-2` | VMs destroyed, volumes kept |
 | `reef agent rm reviewer-1 --volumes` | VM destroyed, the agent's volumes deleted with it |
 | `reef fleet apply fleet/*.toml` | Converge the declared fleet |
+| `reef secret rotate reef://hermes/openrouter` | Push a changed secret into every agent VM that binds it |
 | `reef events --agent reviewer-1 --limit 20` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
 | `reef migrate` | Move a reef 0.14 host onto the latest msb, volumes kept |
@@ -359,6 +360,12 @@ Secrets bind to the one host they may be sent to; the VM only ever sees a
 placeholder - the real value is substituted host-side by microsandbox's proxy
 and never enters the guest.
 
+A changed value does not reach agents on its own. `reef secret rotate
+reef://store/name` resolves it once and pushes it into every agent VM built
+with that ref: a running VM switches in place with no restart, because the
+guest only holds the placeholder, and a stopped one gets it at its next start.
+Each agent records a `rotated` event with the key and ref, never the value.
+
 ## Fleets
 
 Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
@@ -393,8 +400,8 @@ survive removal.
   every command.
 - `secrets.toml` - resolves `reef://store/name` references; `chmod 600` or
   reef refuses to read it. A store is an inline table (**plaintext at rest**)
-  or, under `[resolvers]`, a command run at VM create whose stdout is the
-  value - plugging reef into whatever the org already runs:
+  or, under `[resolvers]`, a command run at VM create and at `secret rotate`
+  whose stdout is the value - plugging reef into whatever the org already runs:
 
   ```toml
   [resolvers]
@@ -411,11 +418,9 @@ survive removal.
 ## Limits
 
 - Secrets are plaintext at rest in two places: `secrets.toml` (0600-guarded)
-  and microsandbox's sandbox config under `~/.microsandbox` until the VM is
-  recreated - editing `secrets.toml` alone does not refresh a running agent.
-  Rotating one is `agent rm` then `fleet apply`: volumes survive removal, and
-  nothing short of a role change recreates a VM. `reef doctor` warns when
-  `~/.microsandbox` is readable by other users.
+  and microsandbox's sandbox config under `~/.microsandbox`, which holds the
+  value each VM was last given. `reef doctor` warns when `~/.microsandbox` is
+  readable by other users.
 - Published host ports are unique per state dir only: a second `--state` on
   this host, or an unrelated process squatting `19000-19999`, can collide -
   and microsandbox reports a failed port bind only in its own logs.

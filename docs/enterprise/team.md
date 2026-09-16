@@ -115,12 +115,19 @@ openrouter = "sk-or-..."
 
 Inline values are plaintext at rest. To resolve them from whatever secret store
 the org already runs, give the store a `[resolvers]` command instead: reef runs
-it at VM create and takes its stdout as the value, so reef holds no credential
-for the credential store.
+it at VM create and at `secret rotate`, and takes its stdout as the value, so
+reef holds no credential for the credential store.
 
 ```toml
 [resolvers]
 openclaw-marketing = "op read 'op://Infra/{name}/credential' -n"
+```
+
+To change a key later, update it where it lives, then push it into the agents
+that spend it. Running agents switch without a restart:
+
+```sh
+reef secret rotate reef://openclaw-coding/openrouter
 ```
 
 ## Why these fields are set

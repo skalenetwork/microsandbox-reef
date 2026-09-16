@@ -1,8 +1,8 @@
 use crate::rows::Event;
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, ImageRef, Lifecycle,
-    PortName, Role, RoleName, VolumeName,
+    Agent, AgentName, AgentSpec, AgentStatus, Desired, Digest, EnvKey, Host, ImageRef, Lifecycle,
+    PortName, Role, RoleName, SecretRef, VolumeName,
 };
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, Type, ValueRef};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -168,6 +168,19 @@ impl Store {
              WHERE v.role = ?1",
         )?;
         let rows = stmt.query_map([role.as_str()], |row| text(row, 0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn secret_bindings(&self, secret: &SecretRef) -> Result<Vec<(AgentName, EnvKey, Host)>> {
+        let mut stmt = self.db.prepare(
+            "SELECT a.name, binding.key, json_extract(binding.value, '$.host')
+             FROM agents a, role_versions v, json_each(v.definition, '$.secrets') binding
+             WHERE v.digest = a.applied_digest AND json_extract(binding.value, '$.ref') = ?1
+             ORDER BY a.name, binding.key",
+        )?;
+        let rows = stmt.query_map([secret.to_string()], |row| {
+            Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?))
+        })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -568,6 +581,60 @@ network = { egress = ["example.com"] }
             .map(VolumeName::to_string)
             .collect();
         assert_eq!(entries, ["data", "state"]);
+    }
+
+    #[test]
+    fn secret_bindings_follow_the_role_version_each_vm_was_built_from() {
+        let store = Store::open_temp();
+        let version = |digest: &str, secret: &str| {
+            let role = parse_role(&format!(
+                "{ROLE}[secrets]\nAPI_KEY = {{ ref = \"{secret}\", host = \"example.com\" }}\n"
+            ))
+            .unwrap();
+            let digest: Digest = digest.repeat(64).parse().unwrap();
+            let json = serde_json::to_string(&role).unwrap();
+            store.import_role(&role, &digest, &json).unwrap();
+            digest
+        };
+        let old = version("a", "reef://demo/old");
+        let new = version("b", "reef://demo/new");
+        let agent = |name: &str, pinned: &Digest, applied: Option<&Digest>| {
+            let mut agent = Agent::new(
+                name.parse().unwrap(),
+                false,
+                AgentSpec {
+                    owner: "dmytro".to_owned(),
+                    role: "echo".parse().unwrap(),
+                    role_digest: pinned.clone(),
+                    desired: Desired::Running,
+                    env: BTreeMap::new(),
+                },
+            );
+            store.insert_agent(&agent).unwrap();
+            agent.status.applied_digest = applied.cloned();
+            store.set_status(&agent.name, &agent.status).unwrap();
+        };
+        agent("built-old-pinned-new", &new, Some(&old));
+        agent("built-new", &new, Some(&new));
+        agent("never-built", &old, None);
+
+        let bindings = |secret: &str| {
+            store
+                .secret_bindings(&secret.parse().unwrap())
+                .unwrap()
+                .into_iter()
+                .map(|(name, key, host)| format!("{name} {key} {host}"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            bindings("reef://demo/old"),
+            ["built-old-pinned-new API_KEY example.com"]
+        );
+        assert_eq!(
+            bindings("reef://demo/new"),
+            ["built-new API_KEY example.com"]
+        );
+        assert!(bindings("reef://demo/none").is_empty());
     }
 
     #[test]

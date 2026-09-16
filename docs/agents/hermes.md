@@ -20,7 +20,8 @@ openrouter = "sk-or-..."
 ```
 
 The value is substituted host-side against `openrouter.ai`. The guest only
-ever sees a placeholder.
+ever sees a placeholder, so a new key reaches running agents without a
+restart: change it here, then run `reef secret rotate reef://hermes/openrouter`.
 
 OpenRouter is only what this example picks. Any provider the agent supports
 works: rename the key in `[secrets]`, point its `host` at that provider's API,
