@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.1] - 2026-09-17
+
+### Fixed
+- Pin microsandbox 0.7.1 so reef migrate upgrades the msb store\
+
+
 ## [0.15.0] - 2026-09-17
 
 ### Added
