@@ -10,7 +10,8 @@ use microsandbox::sandbox::{
 use microsandbox::setup::{InstallOptions, resolve_runtime_version};
 use microsandbox::size::SizeExt;
 use microsandbox::{
-    AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox, Volume,
+    AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox,
+    SshStdioStream, Volume,
 };
 use reef_core::{Domain, EnvKey, Host, VmStatus};
 use sha2::{Digest, Sha256};
@@ -30,6 +31,7 @@ const MAX_TCP_CONNECTIONS: usize = 1024;
 
 pub struct Msb {
     state_id: String,
+    host_key: PathBuf,
 }
 
 impl Msb {
@@ -40,7 +42,10 @@ impl Msb {
             .unwrap_or_else(|_| state_dir.to_owned());
         let hash = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
         let state_id = format!("{hash:x}")[..8].to_owned();
-        Self { state_id }
+        Self {
+            state_id,
+            host_key: state_dir.join("ssh_host_ed25519_key"),
+        }
     }
 
     async fn owned(&self) -> Result<Vec<SandboxHandle>> {
@@ -259,12 +264,18 @@ impl Msb {
         Ok(())
     }
 
-    pub fn ssh(&self, name: &str) -> Result<()> {
-        use std::os::unix::process::CommandExt;
-        let error = std::process::Command::new(msb_path()?)
-            .args(["ssh", "connect", name])
-            .exec();
-        Err(error).context("cannot run msb ssh connect")
+    pub async fn ssh(&self, name: &str) -> Result<i32> {
+        let sandbox = Sandbox::get(name).await?.connect().await?;
+        Ok(sandbox.ssh().connect().await?.attach().await?)
+    }
+
+    pub async fn serve(&self, name: &str, key: &str) -> Result<()> {
+        let sandbox = Sandbox::get(name).await?.connect().await?;
+        let server = sandbox
+            .ssh()
+            .server_with(|s| s.authorized_key(key).host_key_path(&self.host_key))
+            .await?;
+        Ok(server.serve(SshStdioStream::new()).await?)
     }
 
     pub async fn exec(&self, name: &str, command: &[String]) -> Result<i32> {
@@ -528,7 +539,7 @@ pub fn vm_not_running(sandbox: &str) -> String {
     )
 }
 
-pub fn msb_path() -> Result<PathBuf> {
+fn msb_path() -> Result<PathBuf> {
     microsandbox::config::resolve_msb_path().context(
         "cannot resolve msb: install microsandbox (https://microsandbox.dev) or set MSB_PATH",
     )

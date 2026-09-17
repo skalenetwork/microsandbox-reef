@@ -15,9 +15,8 @@ reef account has a real login shell: sshd's `ForceCommand` runs through it, so
 flowchart TD
   ana[person, CA-signed cert] --> sshd[sshd on the reef host]
   sshd -->|ForceCommand| serve[reef agent serve]
-  serve -->|principal matches owner| msb[msb ssh serve]
+  serve -->|principal matches owner| vm[agent microVM]
   serve -.->|no match| deny[access denied]
-  msb --> vm[agent microVM]
 ```
 
 1. The org's SSH CA issues short-lived certificates from the existing SSO
@@ -31,9 +30,11 @@ flowchart TD
 4. serve compares the certificate's principals to the requested agent's
    `owner`, so a certificate opens the agents its holder owns and nothing
    else, and refuses one that is not running.
-5. `msb ssh serve --stdio` bridges the session into the microVM over the
-   runtime's own channel. No sshd in the guest, no port at the VM boundary,
-   and the role's egress list stays the agent's entire network policy.
+5. serve answers the session with microsandbox's SSH server, admitting only
+   the key the certificate was issued for, and bridges it into the microVM
+   over the runtime's own channel. No sshd in the guest, no port at the VM
+   boundary, and the role's egress list stays the agent's entire network
+   policy.
 
 ## Host setup
 
@@ -50,17 +51,12 @@ Match User reef
   DisableForwarding yes
 ```
 
-`reef agent serve` reads the certificate by running `ssh-keygen -L`, so the
-host needs OpenSSH's client tools alongside sshd; `reef doctor` does not check
-for them.
-
 `reef-principals` lists one username per line: who may reach the account at
 all. `reef agent serve` is the whole authorization step: it reads the
 certificate sshd verified, admits the caller only if one of its principals
 matches the requested agent's `owner`, refuses an agent that is not running
-with a `refused` event, records a `served` event, and hands the session to
-`msb ssh serve --stdio`. Give each agent its person at create
-time:
+with a `refused` event, records a `served` event, and serves the session
+itself. Give each agent its person at create time:
 
 ```sh
 reef agent create --role hermes --name hermes-ana --owner ana
@@ -72,19 +68,6 @@ user is recorded.
 sshd's auth log records each authentication with the certificate's key id and
 principal, and every session serve opens is a `served` event in `reef events`;
 one refused because the agent is not running is a `refused` event.
-
-## Enroll each person
-
-The session inside the tunnel authenticates a second time, against
-microsandbox's own authorized keys. Add each person's public key once, as the
-reef account:
-
-```sh
-msb ssh authorize --file ~/.ssh/id_ed25519.pub
-```
-
-Everything above this is one-time host setup. This is per person, alongside the
-certificate their CA issues them.
 
 ## Administrators
 
@@ -119,13 +102,19 @@ Host *.reef
   ProxyCommand ssh reef@reef-host.example.com "$(basename %h .reef)"
 ```
 
-Then `ssh hermes-ana.reef` opens a terminal in the agent, and `scp` and
-`ssh -L` work through it. Remote (`-R`) forwarding, agent forwarding and X11 are
-not implemented at the VM boundary.
+Then `ssh hermes-ana.reef` opens a terminal in the agent, and `sftp` and
+`ssh -L` work through it. `scp` copies the file but exits 1, because
+microsandbox's SFTP server sends no exit status. Remote (`-R`) forwarding,
+agent forwarding and X11 are not implemented at the VM boundary.
 
-The agent's SSH host key lives in microsandbox's per-sandbox directory and is
-deleted with the VM, so any role change regenerates it and each client has to
-drop the stale `known_hosts` entry for that name.
+The session inside the tunnel authenticates a second time, with the key the
+certificate was issued for, so the client needs that private key next to the
+certificate: `id_ed25519` beside `id_ed25519-cert.pub`, or both loaded in
+ssh-agent. An ssh-agent holding only the certificate is refused.
+
+One host key, `ssh_host_ed25519_key` in the reef state directory, answers for
+every agent on the host. It is created on first use and survives role changes
+and recreates, so `known_hosts` entries stay valid.
 
 ## Certificates
 

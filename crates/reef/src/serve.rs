@@ -1,34 +1,34 @@
+use crate::msb::Msb;
+use crate::reconcile;
 use crate::store::Store;
 use crate::vmm::Vmm;
-use crate::{msb, reconcile};
 use anyhow::{Context, Result, bail};
 use reef_core::AgentName;
-use std::io::Write;
-use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio};
+use ssh_key::{Certificate, PublicKey};
 
-pub async fn run(store: &Store, vmm: &impl Vmm) -> Result<()> {
+pub async fn run(store: &Store, msb: &Msb) -> Result<()> {
     let name = requested()?;
     let auth = std::env::var("SSH_USER_AUTH")
         .context("SSH_USER_AUTH is not set; sshd needs `ExposeAuthInfo yes`")?;
     let auth = std::fs::read_to_string(&auth).with_context(|| format!("cannot read {auth}"))?;
-    let principals = certificate_principals(&auth)?;
+    let cert = certificate(&auth).context(
+        "this session did not authenticate with a certificate; \
+         the client needs one signed by the trusted CA",
+    )?;
     let agent = store
         .get_agent(&name)?
         .with_context(|| format!("no such agent: {name}"))?;
-    if !principals.contains(&agent.spec.owner) {
+    if !cert.valid_principals().contains(&agent.spec.owner) {
         bail!("access denied: this certificate cannot open {name}");
     }
     let sandbox = reconcile::sandbox_name(&name);
-    if !agent.spec.desired.live(vmm.status(&sandbox).await?) {
+    if !agent.spec.desired.live(msb.status(&sandbox).await?) {
         store.record(&name, "refused", &agent.spec.owner)?;
         bail!("{name} is not running; it has to be started on its host first");
     }
     store.record(&name, "served", &agent.spec.owner)?;
-    let error = Command::new(msb::msb_path()?)
-        .args(["ssh", "serve", "--stdio", &sandbox])
-        .exec();
-    Err(error).context("cannot run msb ssh serve")
+    let key = PublicKey::from(cert.public_key().clone()).to_openssh()?;
+    msb.serve(&sandbox, &key).await
 }
 
 fn requested() -> Result<AgentName> {
@@ -41,90 +41,19 @@ fn requested() -> Result<AgentName> {
         .map_err(|e| anyhow::anyhow!("SSH_ORIGINAL_COMMAND: {e}"))
 }
 
-fn certificate_principals(auth: &str) -> Result<Vec<String>> {
-    let cert = certificate(auth).context(
-        "this session did not authenticate with a certificate; \
-         the client needs one signed by the trusted CA",
-    )?;
-    let mut child = Command::new("ssh-keygen")
-        .args(["-L", "-f", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("cannot run ssh-keygen")?;
-    child.stdin.take().unwrap().write_all(cert.as_bytes())?;
-    let listing = child.wait_with_output()?;
-    if !listing.status.success() {
-        bail!(
-            "ssh-keygen rejected the certificate: {}",
-            String::from_utf8_lossy(&listing.stderr).trim()
-        );
-    }
-    Ok(principals(&String::from_utf8_lossy(&listing.stdout)))
-}
-
-fn certificate(auth: &str) -> Option<&str> {
+fn certificate(auth: &str) -> Option<Certificate> {
     auth.lines()
         .filter_map(|line| line.strip_prefix("publickey "))
-        .find(|key| {
-            key.split_whitespace()
-                .next()
-                .is_some_and(|algorithm| algorithm.ends_with("-cert-v01@openssh.com"))
-        })
-}
-
-fn principals(listing: &str) -> Vec<String> {
-    let mut lines = listing.lines();
-    let Some(header) = lines.find(|line| line.trim() == "Principals:") else {
-        return Vec::new();
-    };
-    let depth = indent(header);
-    lines
-        .take_while(|line| !line.trim().is_empty() && indent(line) > depth)
-        .map(|line| line.trim().to_owned())
-        .collect()
-}
-
-fn indent(line: &str) -> usize {
-    line.len() - line.trim_start().len()
+        .find_map(|key| Certificate::from_openssh(key).ok())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     #[test]
-    fn principals_come_from_their_indented_block() {
-        let listing = "id-cert.pub:\n        \
-            Type: ssh-ed25519-cert-v01@openssh.com user certificate\n        \
-            Key ID: \"ana-cert\"\n        \
-            Principals: \n                \
-            ana\n                \
-            hermes-ops\n        \
-            Critical Options: (none)\n        \
-            Extensions: \n                \
-            permit-pty\n";
-        assert_eq!(principals(listing), ["ana", "hermes-ops"]);
-        assert!(principals("        Principals: (none)\n").is_empty());
-        assert!(principals("").is_empty());
-    }
-
-    #[test]
-    fn only_certificate_lines_are_certificates() {
-        let auth = "publickey ssh-ed25519 AAAAC3Nza key\n\
-                    publickey ssh-ed25519-cert-v01@openssh.com AAAA1234\n";
-        assert_eq!(
-            certificate(auth),
-            Some("ssh-ed25519-cert-v01@openssh.com AAAA1234")
-        );
-        assert_eq!(certificate("publickey ssh-ed25519 AAAAC3Nza\n"), None);
-        assert_eq!(certificate("password\n"), None);
-        assert_eq!(certificate(""), None);
-    }
-
-    #[test]
-    fn a_real_certificate_yields_its_principals() {
+    fn the_certificate_names_its_principals_and_the_holders_key() {
         let dir = std::env::temp_dir().join(format!("reef-serve-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let keygen = |args: &[&str]| {
@@ -138,16 +67,17 @@ mod tests {
         keygen(&["-q", "-t", "ed25519", "-N", "", "-f", "ca"]);
         keygen(&["-q", "-t", "ed25519", "-N", "", "-f", "id"]);
         keygen(&["-q", "-s", "ca", "-I", "test", "-n", "ana,ops", "id.pub"]);
+        let key = std::fs::read_to_string(dir.join("id.pub")).unwrap();
         let cert = std::fs::read_to_string(dir.join("id-cert.pub")).unwrap();
         std::fs::remove_dir_all(&dir).ok();
 
-        let auth = format!("publickey {cert}");
-        assert_eq!(certificate_principals(&auth).unwrap(), ["ana", "ops"]);
-        assert!(
-            certificate_principals("publickey ssh-ed25519 AAAAC3Nza\n")
-                .unwrap_err()
-                .to_string()
-                .contains("certificate")
+        let cert = certificate(&format!("publickey {key}publickey {cert}")).unwrap();
+        assert_eq!(cert.valid_principals(), ["ana", "ops"]);
+        assert_eq!(
+            cert.public_key(),
+            PublicKey::from_openssh(&key).unwrap().key_data()
         );
+        assert!(certificate(&format!("publickey {key}")).is_none());
+        assert!(certificate("password\n").is_none());
     }
 }

@@ -4,7 +4,7 @@
 
 # reef
 
-**Run OpenClaw agents from one reviewed file.**
+**Contained AI agents on your servers.**
 
 [Install](#install) · [Commands](#commands) · [Docs](https://reef.clawbits.ai/docs) · [Architecture](ARCHITECTURE.md)
 
@@ -182,8 +182,7 @@ operator access: the role's egress list stays the agent's entire network policy.
 
 `agent ssh` drops you into an interactive shell in the VM over microsandbox's
 SSH bridge - local operator access like `exec`, no identity involved. It
-refuses an agent that is not running; `agent start` it first. Authorize
-your key once with `msb ssh authorize --file ~/.ssh/id_ed25519.pub`.
+refuses an agent that is not running; `agent start` it first.
 
 `agent serve` bridges one SSH session into an agent and is meant to run as an
 sshd `ForceCommand`: it reads the client's CA-signed certificate from
@@ -191,7 +190,8 @@ sshd `ForceCommand`: it reads the client's CA-signed certificate from
 the caller only if a certificate principal matches the agent's `owner` (set
 with `--owner` at create, or per agent in a fleet file; default `$USER`),
 refuses an agent that is not running (a `refused` event), records a `served`
-event, and hands the session to `msb ssh serve --stdio`.
+event, and serves the session with microsandbox's SSH server, admitting only
+the key the certificate was issued for.
 The full pattern - certificates, sshd config, client config - is
 [terminal access](https://reef.clawbits.ai/docs/enterprise/terminals).
 

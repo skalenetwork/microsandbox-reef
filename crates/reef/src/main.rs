@@ -616,7 +616,8 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             if !agent.spec.desired.live(ctx.vmm.status(&sandbox).await?) {
                 bail!("{name} is not running; start it with `reef agent start {name}`");
             }
-            ctx.vmm.ssh(&sandbox)
+            let code = ctx.vmm.ssh(&sandbox).await?;
+            std::process::exit(code);
         }
         AgentCommand::Serve => serve::run(&ctx.store, &ctx.vmm).await,
         AgentCommand::Update { name } => {

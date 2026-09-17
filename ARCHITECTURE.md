@@ -122,7 +122,7 @@ re-read from the runtime on every command. Role versions are immutable and
 content-addressed; `role rm` refuses while any agent is on the role, so a
 pinned agent's blast radius stays readable. microsandbox's own state under
 `~/.microsandbox` is treated as the runtime's property; reef never parses its
-files itself, reaching it only through the SDK and the `msb` CLI (`ssh`,
+files itself, reaching it only through the SDK and the `msb` CLI (`pull`,
 `migrate`), and doctor only checks the directory's mode.
 
 Secrets: roles hold `reef://store/name` references (a pasted literal is a
@@ -137,8 +137,8 @@ reef holds no credential for the credential store.
 - Least code that does the job. Fewer features over more. One mechanism per
   job. No speculative abstraction: the `Vmm` trait is the single deliberate
   exception, and it holds only the lifecycle methods; operator commands
-  (`ssh`, `exec`, `listening`, `forward`, `rotate`, `migrate`) live on the
-  adapter itself.
+  (`ssh`, `serve`, `exec`, `listening`, `forward`, `rotate`, `migrate`) live
+  on the adapter itself.
 - Data structures first; illegal states unrepresentable (`Failed` cannot lack
   a reason; invalid names do not construct).
 - No inline comments: the code carries its meaning; clap doc-comments are
