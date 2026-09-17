@@ -30,7 +30,7 @@ html {
 }
 
 body {
-  max-width: 560px;
+  max-width: 640px;
   margin: 0 auto;
   padding: 0 20px;
 }
@@ -44,6 +44,62 @@ main {
   flex-direction: column;
   gap: 32px;
   padding: 64px 0;
+}
+
+.blocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 48px 32px;
+}
+
+section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+main > section {
+  margin-top: 16px;
+}
+
+.visual {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 2;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.visual svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.visual text {
+  dominant-baseline: central;
+  fill: var(--text);
+}
+
+.visual .muted {
+  fill: var(--text-2);
+}
+
+.visual line,
+.visual path {
+  fill: none;
+  stroke: var(--text-2);
+  stroke-width: 1.5;
+}
+
+.visual rect {
+  fill: var(--paper);
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.visual .dashed {
+  stroke-dasharray: 3 4;
 }
 
 .hero,
@@ -89,7 +145,6 @@ nav a[aria-current] {
 }
 
 nav .release {
-  margin-left: auto;
   color: var(--text-2);
 }
 
@@ -97,11 +152,11 @@ aside {
   display: none;
   position: fixed;
   top: 264px;
-  left: calc(50% - 500px);
+  left: calc(50% - 540px);
   width: 180px;
 }
 
-@media (min-width: 1140px) {
+@media (min-width: 1220px) {
   aside {
     display: block;
   }
@@ -118,13 +173,24 @@ h1 {
 }
 
 h2 {
-  margin-top: 16px;
   font-size: 16px;
   font-weight: 500;
 }
 
+article h2 {
+  margin-top: 16px;
+}
+
+.blocks h2 {
+  margin-top: 8px;
+}
+
 p {
   color: var(--text-2);
+}
+
+.intro {
+  color: var(--text);
 }
 
 article p {
@@ -219,7 +285,7 @@ button[data-copied] svg:first-child {
 
 @media (min-width: 600px) {
   main {
-    padding: 128px 0;
+    padding: 96px 0;
   }
 
   .hero {

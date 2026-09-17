@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { bullets, description, docs, files, install, posts, route, url } from "../content";
+import { description, docs, files, install, intro, posts, route, url } from "../content";
 
 export const GET: APIRoute = () => {
   const examples = Object.keys(files)
@@ -13,7 +13,7 @@ export const GET: APIRoute = () => {
 
 > ${description}
 
-${bullets.map((bullet) => `- ${bullet}`).join("\n")}
+${intro}
 
 Install: \`${install}\`, then \`reef doctor\`. Linux x86_64/aarch64 and Apple Silicon macOS.
 

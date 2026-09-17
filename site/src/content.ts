@@ -1,6 +1,6 @@
 import type { MarkdownInstance } from "astro";
 
-export const description = "Run OpenClaw agents from one reviewed file.";
+export const description = "Contained AI agents on your servers.";
 
 const slug = "skalenetwork/microsandbox-reef";
 
@@ -12,10 +12,33 @@ export const url = (path: string) => new URL(path, import.meta.env.SITE);
 
 export const install = `curl -fsSL ${url("/install")} | sh`;
 
-export const bullets = [
-  `A role is a [small TOML file](${repo}/blob/main/roles/hermes.toml): the image, the domains the agent may reach and the secrets it may spend. The secret values never enter the VM.`,
-  "Each agent runs in its own [microsandbox](https://microsandbox.dev) microVM on your own servers and can only reach the domains its role allows.",
-  "Developers create agents from the roles you approved with one command. There is no daemon or server to run.",
+export const intro = `[One reviewed file](${repo}/blob/main/roles/hermes.toml) decides what an agent can reach and what it can spend. reef holds every agent to it, in its own microVM on your own servers. Approve the file once and developers create agents from it with one command.`;
+
+export const blocks = [
+  {
+    title: "Anything not listed is blocked",
+    text: "A role lists what an agent may reach. The rest is refused at DNS, outside the guest.",
+  },
+  {
+    title: "Keys stay on the host",
+    text: "The VM holds a placeholder. The key is added on the way out, to one host. Rotate it live.",
+  },
+  {
+    title: "Approve once, launch many",
+    text: "Review a role once. Every agent created from it inherits the policy, no approval per agent.",
+  },
+  {
+    title: "Terminals through your SSH CA",
+    text: "reef adds no auth of its own. A certificate from your SSH CA opens only the agents you own.",
+  },
+  {
+    title: "Keys from your own store",
+    text: "Roles hold references. Values come from Vault, AWS or the store you already run.",
+  },
+  {
+    title: "Safe updates",
+    text: "A role change builds the new VM and swaps only when it is ready. Volumes carry over.",
+  },
 ];
 
 export const files = import.meta.glob(

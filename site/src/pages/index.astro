@@ -1,36 +1,60 @@
 ---
 import { Code } from "astro:components";
 import Layout from "../layouts/Layout.astro";
-import { bullets, description, install, url } from "../content";
+import Egress from "../components/Egress.astro";
+import Keys from "../components/Keys.astro";
+import Approve from "../components/Approve.astro";
+import Terminals from "../components/Terminals.astro";
+import Store from "../components/Store.astro";
+import Upgrade from "../components/Upgrade.astro";
+import DocsNav from "../components/DocsNav.astro";
+import { blocks, description, install, intro, repo, url } from "../content";
 
-const journey = `# is this host ready?
-reef doctor
-
-# fetch the openclaw role and import it
-curl -fsSLO ${url("/roles/openclaw.toml")}
-reef role apply openclaw.toml
-
-# one agent from it, with its own gateway token
-token=$(openssl rand -hex 32)
-reef agent create --role openclaw --name claw \\
-  --env OPENCLAW_GATEWAY_TOKEN=$token
-reef agent get claw --wait`;
+const quickstart = `# a host with KVM or Apple Silicon, msb installed
+curl -fsSL -o role.toml -o fleet.toml \\
+  ${url("/")}{roles,fleet}/openclaw.toml
+# your gateway token goes in fleet.toml: openssl rand -hex 32
+reef role apply role.toml
+reef fleet apply fleet.toml
+# open the printed URL, paste the token, pick a provider`;
 const prompt = `Install reef and create my first agent.
 Start with ${url("/llms.txt")}`;
+const visuals = [Egress, Keys, Approve, Terminals, Store, Upgrade];
 const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 ---
 
 <Layout title={`reef - ${description}`} path="/">
   <Code code={install} lang="sh" theme="css-variables" class="clear" />
-  <ul>
-    {bullets.map((bullet) => <li set:html={html(bullet)} />)}
-  </ul>
-  <div class="group">
-    <p>In your terminal</p>
-    <Code code={journey} lang="sh" theme="css-variables" />
+  <p class="intro" set:html={html(intro)} />
+  <div class="blocks">
+    {
+      blocks.map((block, i) => {
+        const Visual = visuals[i];
+        return (
+          <section>
+            <div class="visual"><Visual /></div>
+            <h2>{block.title}</h2>
+            <p>{block.text}</p>
+          </section>
+        );
+      })
+    }
   </div>
-  <div class="group">
-    <p>Or tell your agent</p>
+  <section>
+    <h2>Your first agent</h2>
+    <Code code={quickstart} lang="sh" theme="css-variables" />
+    <p>
+      <code>role apply</code> warns that this role opens the whole public internet, which an agent that browses the web
+      needs. The <a href={`${repo}/blob/main/roles/hermes.toml`}>hermes role</a> lists one domain instead.{" "}
+      <a href="/docs/setup/host">Prepare a host</a> covers KVM and msb.
+    </p>
+  </section>
+  <section>
+    <h2>Or tell your agent</h2>
     <Code code={prompt} lang="text" theme="css-variables" wrap class="clear" />
-  </div>
+  </section>
+  <section>
+    <h2>Go deeper</h2>
+    <DocsNav />
+  </section>
 </Layout>

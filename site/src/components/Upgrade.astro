@@ -1,0 +1,172 @@
+<svg
+  viewBox="-16 -12 336 224"
+  width="304"
+  height="203"
+  role="img"
+  aria-label="A role change checks secrets, ports, volume and image, then hermes v2 appears on the same data volume and hermes v1 retires."
+>
+  <text class="muted role" x="152" y="24" text-anchor="middle">role</text>
+  <rect x="8" y="144" width="288" height="40" rx="4" />
+  <text class="data" x="152" y="164" text-anchor="middle">data</text>
+  <g class="old">
+    <line x1="60" y1="96" x2="60" y2="144" />
+    <rect x="8" y="48" width="104" height="48" rx="4" />
+    <text x="60" y="72" text-anchor="middle">hermes v1</text>
+  </g>
+  <g class="new">
+    <line x1="244" y1="96" x2="244" y2="144" />
+    <rect x="192" y="48" width="104" height="48" rx="4" />
+    <text x="244" y="72" text-anchor="middle">hermes v2</text>
+  </g>
+  <text class="c1" x="152" y="48" text-anchor="middle">secrets</text>
+  <text class="c2" x="152" y="72" text-anchor="middle">ports</text>
+  <text class="c3" x="152" y="96" text-anchor="middle">volume</text>
+  <text class="c4" x="152" y="120" text-anchor="middle">image</text>
+</svg>
+
+<style>
+  .data {
+    fill: var(--accent);
+  }
+
+  .old {
+    opacity: 0;
+    animation: upgrade-old 6s linear infinite;
+  }
+
+  .new {
+    animation: upgrade-new 6s linear infinite;
+  }
+
+  .role {
+    animation: upgrade-role 6s linear infinite;
+  }
+
+  .c1 {
+    animation: upgrade-c1 6s linear infinite;
+  }
+
+  .c2 {
+    animation: upgrade-c2 6s linear infinite;
+  }
+
+  .c3 {
+    animation: upgrade-c3 6s linear infinite;
+  }
+
+  .c4 {
+    animation: upgrade-c4 6s linear infinite;
+  }
+
+  @keyframes upgrade-role {
+    0%,
+    3% {
+      opacity: 0;
+    }
+    5%,
+    74% {
+      opacity: 1;
+    }
+    77%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes upgrade-c1 {
+    0%,
+    7% {
+      opacity: 0;
+    }
+    9%,
+    74% {
+      opacity: 1;
+    }
+    77%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes upgrade-c2 {
+    0%,
+    12% {
+      opacity: 0;
+    }
+    14%,
+    74% {
+      opacity: 1;
+    }
+    77%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes upgrade-c3 {
+    0%,
+    17% {
+      opacity: 0;
+    }
+    19%,
+    74% {
+      opacity: 1;
+    }
+    77%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes upgrade-c4 {
+    0%,
+    22% {
+      opacity: 0;
+    }
+    24%,
+    74% {
+      opacity: 1;
+    }
+    77%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes upgrade-new {
+    0%,
+    27% {
+      opacity: 0;
+    }
+    29%,
+    74% {
+      opacity: 1;
+    }
+    77%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes upgrade-old {
+    0%,
+    32% {
+      opacity: 1;
+    }
+    34%,
+    80% {
+      opacity: 0;
+    }
+    83%,
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    text,
+    g {
+      animation: none;
+    }
+  }
+</style>

@@ -1,0 +1,158 @@
+<svg
+  viewBox="-16 -6.5 336 224"
+  width="304"
+  height="203"
+  role="img"
+  aria-label="The agent holds the placeholder $MSB_KEY. A request leaves the agent, the host swaps the placeholder for its key on the way out, and openrouter.ai receives the key."
+>
+  <line x1="16" y1="96" x2="288" y2="96" />
+  <path d="M88 48H172a4 4 0 0 1 4 4V176" />
+  <rect x="16" y="24" width="72" height="48" rx="4" />
+  <text x="52" y="48" text-anchor="middle">agent</text>
+  <text class="placeholder" x="188" y="48">$MSB_KEY</text>
+  <text class="muted" x="16" y="131">host</text>
+  <text class="key" x="188" y="131">sk-a1f3</text>
+  <text class="ph" x="188" y="131">$MSB_KEY</text>
+  <text x="16" y="176">openrouter.ai</text>
+  <text class="value" x="188" y="176">sk-a1f3</text>
+  <circle class="dot" cx="88" cy="48" r="3" />
+</svg>
+
+<style>
+  .key,
+  .value,
+  .dot {
+    fill: var(--accent);
+  }
+
+  .ph,
+  .dot {
+    opacity: 0;
+  }
+
+  .dot {
+    transform: translate(88px, 128px);
+    animation: keys-dot 6s linear infinite;
+  }
+
+  .placeholder {
+    animation: placeholder 6s linear infinite;
+  }
+
+  .ph {
+    animation: ph 6s linear infinite;
+  }
+
+  .key {
+    animation: key 6s linear infinite;
+  }
+
+  .value {
+    animation: value 6s linear infinite;
+  }
+
+  @keyframes keys-dot {
+    0%,
+    3% {
+      transform: translate(0, 0);
+      opacity: 0;
+      fill: var(--text);
+      animation-timing-function: ease-in-out;
+    }
+    4% {
+      opacity: 1;
+    }
+    13% {
+      transform: translate(88px, 0);
+      animation-timing-function: ease-in-out;
+    }
+    23%,
+    31.5% {
+      transform: translate(88px, 83px);
+      fill: var(--text);
+    }
+    34%,
+    36% {
+      transform: translate(88px, 83px);
+      fill: var(--accent);
+      animation-timing-function: ease-in-out;
+    }
+    46%,
+    47% {
+      transform: translate(88px, 128px);
+      opacity: 1;
+    }
+    50%,
+    100% {
+      transform: translate(88px, 128px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes placeholder {
+    0%,
+    12% {
+      opacity: 0;
+    }
+    14.5%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes ph {
+    0%,
+    23% {
+      opacity: 0;
+    }
+    24.5%,
+    28% {
+      opacity: 1;
+    }
+    30%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes key {
+    0%,
+    31.5% {
+      opacity: 0;
+    }
+    34%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes value {
+    0%,
+    46% {
+      opacity: 0;
+    }
+    48%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    text,
+    circle {
+      animation: none;
+    }
+  }
+</style>

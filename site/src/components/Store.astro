@@ -1,0 +1,153 @@
+<svg
+  viewBox="-16 0 336 224"
+  width="304"
+  height="203"
+  role="img"
+  aria-label="The role references reef://vault/api-key. The host fetches the value from Vault, not from AWS or 1Password."
+>
+  <text class="muted" x="16" y="24">role</text>
+  <text class="ref" x="62" y="24">reef://vault/api-key</text>
+  <line x1="120" y1="72" x2="216" y2="128" />
+  <line class="dashed" x1="120" y1="128" x2="216" y2="128" />
+  <line class="dashed" x1="120" y1="184" x2="216" y2="128" />
+  <rect class="used" x="16" y="48" width="104" height="48" rx="4" />
+  <text class="used" x="68" y="72" text-anchor="middle">Vault</text>
+  <rect class="store" x="16" y="104" width="104" height="48" rx="4" />
+  <text class="muted" x="68" y="128" text-anchor="middle">AWS</text>
+  <rect class="store" x="16" y="160" width="104" height="48" rx="4" />
+  <text class="muted" x="68" y="184" text-anchor="middle">1Password</text>
+  <rect x="216" y="104" width="72" height="48" rx="4" />
+  <text x="252" y="128" text-anchor="middle">host</text>
+  <text class="value" x="252" y="168" text-anchor="middle">sk-a1f3</text>
+  <circle class="dot" cx="216" cy="128" r="3" />
+</svg>
+
+<style>
+  .store {
+    stroke: var(--text-2);
+  }
+
+  rect.used {
+    animation: store-used-stroke 6s linear infinite;
+  }
+
+  text.used {
+    animation: store-used-text 6s linear infinite;
+  }
+
+  .ref {
+    animation: store-ref 6s linear infinite;
+  }
+
+  .value {
+    fill: var(--accent);
+    animation: store-value 6s linear infinite;
+  }
+
+  .dot {
+    fill: var(--accent);
+    opacity: 0;
+    animation: store-dot 6s linear infinite;
+  }
+
+  @keyframes store-dot {
+    0%,
+    5% {
+      transform: translate(0, 0);
+      opacity: 0;
+      fill: var(--text);
+      animation-timing-function: ease-in-out;
+    }
+    6% {
+      opacity: 1;
+    }
+    13%,
+    14% {
+      transform: translate(-96px, -56px);
+      fill: var(--text);
+    }
+    16% {
+      transform: translate(-96px, -56px);
+      fill: var(--accent);
+      animation-timing-function: ease-in-out;
+    }
+    24%,
+    25% {
+      transform: translate(0, 0);
+      opacity: 1;
+    }
+    28%,
+    100% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes store-ref {
+    0%,
+    3% {
+      opacity: 0;
+    }
+    5%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes store-used-stroke {
+    0%,
+    14% {
+      stroke: var(--text-2);
+    }
+    16%,
+    90% {
+      stroke: var(--text);
+    }
+    93%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @keyframes store-used-text {
+    0%,
+    14% {
+      fill: var(--text-2);
+    }
+    16%,
+    90% {
+      fill: var(--text);
+    }
+    93%,
+    100% {
+      fill: var(--text-2);
+    }
+  }
+
+  @keyframes store-value {
+    0%,
+    24% {
+      opacity: 0;
+    }
+    26%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    text,
+    rect,
+    circle {
+      animation: none;
+    }
+  }
+</style>

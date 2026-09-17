@@ -1,0 +1,187 @@
+<svg
+  viewBox="-16 -15 336 224"
+  width="304"
+  height="203"
+  role="img"
+  aria-label="One role file, hermes.toml, is approved once. Three agents, hermes-1 to hermes-3, are created from it and each carries the role's policy."
+>
+  <path d="M152 64V96M52 96H252M52 96V130M152 96V130M252 96V130" />
+  <rect x="92" y="16" width="120" height="48" rx="4" />
+  <text x="152" y="40" text-anchor="middle">hermes.toml</text>
+  <text class="approved" x="160" y="80">approved</text>
+  <g class="mid">
+    <rect x="108" y="130" width="88" height="48" rx="4" />
+    <text x="152" y="154" text-anchor="middle">hermes-2</text>
+  </g>
+  <g class="side">
+    <rect x="8" y="130" width="88" height="48" rx="4" />
+    <text x="52" y="154" text-anchor="middle">hermes-1</text>
+  </g>
+  <g class="side">
+    <rect x="208" y="130" width="88" height="48" rx="4" />
+    <text x="252" y="154" text-anchor="middle">hermes-3</text>
+  </g>
+  <circle class="trunk" cx="152" cy="64" r="3" />
+  <circle class="left" cx="152" cy="96" r="3" />
+  <circle class="down" cx="152" cy="96" r="3" />
+  <circle class="right" cx="152" cy="96" r="3" />
+</svg>
+
+<style>
+  .approved {
+    fill: var(--accent);
+    animation: approved 6s linear infinite;
+  }
+
+  .mid {
+    animation: mid 6s linear infinite;
+  }
+
+  .side {
+    animation: side 6s linear infinite;
+  }
+
+  circle {
+    fill: var(--text);
+    opacity: 0;
+  }
+
+  .trunk {
+    animation: trunk 6s linear infinite;
+  }
+
+  .left {
+    --to: -100px;
+    animation: split 6s linear infinite;
+  }
+
+  .right {
+    --to: 100px;
+    animation: split 6s linear infinite;
+  }
+
+  .down {
+    animation: down 6s linear infinite;
+  }
+
+  @keyframes trunk {
+    0%,
+    3% {
+      transform: translateY(0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    4% {
+      opacity: 1;
+    }
+    9%,
+    10% {
+      transform: translateY(32px);
+      opacity: 1;
+    }
+    11%,
+    100% {
+      transform: translateY(32px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes approved {
+    0%,
+    9% {
+      opacity: 0;
+    }
+    11%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes down {
+    0%,
+    15% {
+      transform: translateY(0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    15.5% {
+      opacity: 1;
+    }
+    20% {
+      transform: translateY(34px);
+      opacity: 1;
+    }
+    22%,
+    100% {
+      transform: translateY(34px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes split {
+    0%,
+    15% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    15.5% {
+      opacity: 1;
+    }
+    23% {
+      transform: translate(var(--to), 0);
+      animation-timing-function: ease-in-out;
+    }
+    28% {
+      transform: translate(var(--to), 34px);
+      opacity: 1;
+    }
+    30%,
+    100% {
+      transform: translate(var(--to), 34px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes mid {
+    0%,
+    20% {
+      opacity: 0;
+    }
+    22%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes side {
+    0%,
+    28% {
+      opacity: 0;
+    }
+    30%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    text,
+    g,
+    circle {
+      animation: none;
+    }
+  }
+</style>

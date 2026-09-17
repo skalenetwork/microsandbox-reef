@@ -1,0 +1,113 @@
+<svg
+  viewBox="-16 -21 336 224"
+  width="304"
+  height="203"
+  role="img"
+  aria-label="Two certificates from your SSH CA, ana and bob, reach the serve gate. Ana's opens the agent ana-hermes, Bob's is refused at the gate."
+>
+  <text class="muted" x="52" y="24" text-anchor="middle">SSH CA</text>
+  <text class="muted" x="132" y="24" text-anchor="middle">serve</text>
+  <line x1="132" y1="40" x2="132" y2="164" />
+  <line x1="88" y1="62" x2="176" y2="102" />
+  <line x1="88" y1="142" x2="132" y2="122" />
+  <line class="dashed" x1="132" y1="122" x2="176" y2="102" />
+  <rect x="16" y="38" width="72" height="48" rx="4" />
+  <text x="52" y="62" text-anchor="middle">ana</text>
+  <rect x="16" y="118" width="72" height="48" rx="4" />
+  <text x="52" y="142" text-anchor="middle">bob</text>
+  <rect class="agent" x="176" y="78" width="112" height="48" rx="4" />
+  <text x="232" y="102" text-anchor="middle">ana-hermes</text>
+  <circle class="ana" cx="88" cy="62" r="3" />
+  <circle class="bob" cx="88" cy="142" r="3" />
+</svg>
+
+<style>
+  .agent {
+    animation: agent 6s linear infinite;
+  }
+
+  .ana {
+    fill: var(--text);
+    opacity: 0;
+    animation: ana 6s linear infinite;
+  }
+
+  .bob {
+    fill: var(--accent);
+    transform: translate(44px, -20px);
+    animation: bob 6s linear infinite;
+  }
+
+  @keyframes ana {
+    0%,
+    3% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    4% {
+      opacity: 1;
+    }
+    12%,
+    13% {
+      transform: translate(88px, 40px);
+      opacity: 1;
+    }
+    15%,
+    100% {
+      transform: translate(88px, 40px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes agent {
+    0%,
+    12% {
+      stroke: var(--text-2);
+    }
+    14%,
+    90% {
+      stroke: var(--text);
+    }
+    93%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @keyframes bob {
+    0%,
+    16% {
+      transform: translate(0, 0);
+      opacity: 0;
+      fill: var(--text);
+      animation-timing-function: ease-in-out;
+    }
+    16.5% {
+      opacity: 1;
+    }
+    21% {
+      transform: translate(44px, -20px);
+      fill: var(--text);
+    }
+    22%,
+    90% {
+      transform: translate(44px, -20px);
+      fill: var(--accent);
+      opacity: 1;
+    }
+    93%,
+    100% {
+      transform: translate(44px, -20px);
+      fill: var(--accent);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    rect,
+    circle {
+      animation: none;
+    }
+  }
+</style>

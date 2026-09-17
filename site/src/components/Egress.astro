@@ -1,0 +1,129 @@
+<svg
+  viewBox="-16 -21 336 224"
+  width="304"
+  height="203"
+  role="img"
+  aria-label="The agent reaches openrouter.ai. github.com and api.openai.com are refused at DNS."
+>
+  <text class="muted" x="120" y="26" text-anchor="middle">DNS</text>
+  <line x1="120" y1="40" x2="120" y2="164" />
+  <line x1="88" y1="102" x2="144" y2="50" />
+  <line x1="88" y1="102" x2="120" y2="102" />
+  <line class="dashed" x1="120" y1="102" x2="144" y2="102" />
+  <line x1="88" y1="102" x2="120" y2="131.7" />
+  <line class="dashed" x1="120" y1="131.7" x2="144" y2="154" />
+  <rect x="16" y="78" width="72" height="48" rx="4" />
+  <text x="52" y="102" text-anchor="middle">agent</text>
+  <text class="allowed" x="152" y="50">openrouter.ai</text>
+  <text class="muted" x="152" y="102">github.com</text>
+  <text class="muted" x="152" y="154">api.openai.com</text>
+  <circle class="pass" cx="88" cy="102" r="3" />
+  <circle class="two" cx="88" cy="102" r="3" />
+  <circle class="three" cx="88" cy="102" r="3" />
+</svg>
+
+<style>
+  circle {
+    fill: var(--accent);
+  }
+
+  .pass {
+    fill: var(--text);
+    opacity: 0;
+    animation: pass 4.5s linear infinite;
+  }
+
+  .two {
+    --to: 32px, 0;
+  }
+
+  .three {
+    --to: 32px, 29.7px;
+  }
+
+  .two,
+  .three {
+    transform: translate(var(--to));
+    animation: refused 4.5s linear infinite;
+  }
+
+  .allowed {
+    animation: allowed 4.5s linear infinite;
+  }
+
+  @keyframes allowed {
+    0%,
+    22% {
+      fill: var(--text-2);
+    }
+    24%,
+    96% {
+      fill: var(--text);
+    }
+    100% {
+      fill: var(--text-2);
+    }
+  }
+
+  @keyframes pass {
+    0%,
+    2% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    3% {
+      opacity: 1;
+    }
+    22% {
+      transform: translate(56px, -52px);
+      opacity: 1;
+    }
+    24%,
+    100% {
+      transform: translate(56px, -52px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes refused {
+    0%,
+    27% {
+      transform: translate(0, 0);
+      opacity: 0;
+      fill: var(--text);
+    }
+    28% {
+      opacity: 1;
+    }
+    40% {
+      transform: translate(var(--to));
+      opacity: 1;
+      fill: var(--text);
+    }
+    41% {
+      opacity: 1;
+      fill: var(--accent);
+    }
+    44% {
+      opacity: 0;
+    }
+    47%,
+    96% {
+      transform: translate(var(--to));
+      opacity: 1;
+      fill: var(--accent);
+    }
+    100% {
+      transform: translate(var(--to));
+      opacity: 0;
+      fill: var(--accent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    circle,
+    .allowed {
+      animation: none;
+    }
+  }
+</style>
