@@ -14,12 +14,59 @@ jobs:
     concurrency:
       group: release-plz
       cancel-in-progress: false
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - run: sudo apt-get update && sudo apt-get install -y libcap-ng-dev
       - uses: Swatinem/rust-cache@v2
-      - uses: release-plz/action@v0.5
+      - id: release-plz
+        uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - id: tag
+        run: echo "tag=$(jq -r '.[] | select(.package_name == "reef").tag' <<< "$RELEASES")" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+
+  build:
+    needs: release-plz
+    if: needs.release-plz.outputs.tag
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcap-ng-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked
+      - run: tar czf reef-${{ matrix.target }}.tar.gz -C target/release reef
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reef-${{ matrix.target }}
+          path: reef-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: [release-plz, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - run: sha256sum reef-*.tar.gz > checksums.sha256
+      - run: gh release upload "$TAG" reef-*.tar.gz checksums.sha256 --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-plz.outputs.tag }}

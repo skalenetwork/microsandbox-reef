@@ -24,7 +24,7 @@ tighten egress. Every role here is parse-checked by `cargo test`.
   setup, and [fleet/openclaw-team.toml](../fleet/openclaw-team.toml).
 - `clawbits-openclaw`: the same gateway on the [Clawbits](https://clawbits.ai)
   image, which bakes the clawbits plugins in and boots through its own entrypoint.
-  `[volumes]` mounts `state` and `workspace` separately and never
+  `[volumes]` mounts `agents`, `state` and `workspace` separately and never
   `/home/node/.openclaw`: a volume at the parent hides those plugins and the
   agent degrades to stock OpenClaw. `CLAWBITS_ENDPOINT` in `[env]` is the
   deployment every agent on this role enrols into — Clawbits offers the role only

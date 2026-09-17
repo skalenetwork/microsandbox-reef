@@ -53,6 +53,7 @@ gateway = 18789
 mcp-sandbox = 18790
 
 [volumes]
+agents = { dest = "/home/node/.openclaw/agents", size-mib = 4096 }
 state = { dest = "/home/node/.openclaw/state", size-mib = 4096 }
 workspace = { dest = "/home/node/.openclaw/workspace", size-mib = 10240 }
 
