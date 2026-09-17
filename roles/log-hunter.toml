@@ -15,7 +15,7 @@ version = 1
 # image and back out again, and an mcp-sandbox port appeared). Regenerate rather
 # than hand-edit - see the command in .claude/handoff-clawbits-msb.md.
 name  = "log-hunter"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.3-pl0.17.24-ge5abfaa"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.4-pl0.17.25-g5f2de20"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
