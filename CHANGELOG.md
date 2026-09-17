@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.15.0] - 2026-09-17
+
+### Added
+- Serve terminals through microsandbox SSH server, no per-person enrollment
+- Reef reconcile brings agents back after a reboot or crash
+- Reef secret rotate pushes a changed secret into running agents live
+- Preflight recreates, public-only star egress, refuse terminals on stopped agents
+- Move to microsandbox 0.7, add reef migrate for 0.14 hosts
+
+
 ## [0.14.0] - 2026-09-09
 
 ### Added
