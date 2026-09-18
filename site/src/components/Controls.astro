@@ -1,0 +1,30 @@
+<svg
+  viewBox="-32 -24 704 264"
+  width="640"
+  height="240"
+  role="img"
+  aria-label="Three controls sit outside the agent VM: DNS refuses unlisted names, the egress proxy adds the real key, and published ports bind to host loopback only."
+>
+  <text class="muted" x="248" y="4" text-anchor="middle">outside the guest</text>
+  <line x1="248" y1="24" x2="248" y2="192" />
+  <line x1="112" y1="108" x2="248" y2="48" />
+  <line x1="112" y1="108" x2="248" y2="108" />
+  <line x1="112" y1="108" x2="248" y2="168" />
+  <rect x="0" y="84" width="112" height="48" rx="4" />
+  <text x="56" y="108" text-anchor="middle">agent</text>
+  <text x="268" y="48">DNS</text>
+  <text class="muted" x="640" y="48" text-anchor="end">unlisted names never resolve</text>
+  <text x="268" y="108">egress proxy</text>
+  <text class="muted" x="640" y="108" text-anchor="end">the real key is added here</text>
+  <text x="268" y="168">published port</text>
+  <text class="muted" x="640" y="168" text-anchor="end">bound to 127.0.0.1</text>
+  <circle cx="248" cy="48" r="3.5" />
+  <circle cx="248" cy="108" r="3.5" />
+  <circle cx="248" cy="168" r="3.5" />
+</svg>
+
+<style>
+  circle {
+    fill: var(--text);
+  }
+</style>

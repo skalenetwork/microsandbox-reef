@@ -1,0 +1,23 @@
+---
+type Props = { section?: string; title?: string; lead?: string; class?: string };
+
+const { section, title, lead, class: klass } = Astro.props;
+---
+
+<section class:list={["slide", klass]}>
+  <div class="frame">
+    {
+      (section || title || lead) && (
+        <header>
+          {section && <p class="label">{section}</p>}
+          {title && <h2>{title}</h2>}
+          {lead && <p class="lead">{lead}</p>}
+        </header>
+      )
+    }
+    <div class="body">
+      <slot />
+    </div>
+    <p class="n" aria-hidden="true"></p>
+  </div>
+</section>

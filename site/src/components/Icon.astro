@@ -1,0 +1,19 @@
+---
+import type { Copy01Icon } from "@hugeicons/core-free-icons";
+
+type Props = { icon: typeof Copy01Icon; size?: number };
+
+const { icon, size = 16 } = Astro.props;
+const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const markup = icon
+  .map(([tag, attrs]) => {
+    const rendered = Object.entries(attrs)
+      .filter(([key]) => key !== "key")
+      .map(([key, value]) => `${kebab(key)}="${value}"`)
+      .join(" ");
+    return `<${tag} ${rendered}/>`;
+  })
+  .join("");
+---
+
+<svg viewBox="0 0 24 24" width={size} height={size} fill="none" aria-hidden="true" set:html={markup} />

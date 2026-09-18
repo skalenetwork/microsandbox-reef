@@ -3,6 +3,7 @@ import type { ImageMetadata } from "astro";
 import { Font, Image, getImage } from "astro:assets";
 import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import DocsNav from "../components/DocsNav.astro";
+import Icon from "../components/Icon.astro";
 import { description, latest, repo, url } from "../content";
 import logo from "../assets/reef.png";
 import fallback from "../assets/og.jpg";
@@ -21,17 +22,6 @@ const links = [
   { href: repo, label: "GitHub" },
 ];
 const current = (href: string) => (href === path ? "page" : href !== "/" && path.startsWith(href) ? "true" : undefined);
-const kebab = (k: string) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
-const svg = (icon: typeof Copy01Icon) =>
-  icon
-    .map(([tag, attrs]) => {
-      const rendered = Object.entries(attrs)
-        .filter(([k]) => k !== "key")
-        .map(([k, v]) => `${kebab(k)}="${v}"`)
-        .join(" ");
-      return `<${tag} ${rendered}/>`;
-    })
-    .join("");
 ---
 
 <!doctype html>
@@ -55,7 +45,7 @@ const svg = (icon: typeof Copy01Icon) =>
     <meta name="twitter:title" content={path.startsWith("/blog/") ? title : description} />
     <Font cssVariable="--font" preload />
   </head>
-  <body>
+  <body class="column">
     <main>
       <a class="hero" href="/">
         <Image src={logo} width={40} densities={[1, 2, 3]} format="png" loading="eager" alt="" />
@@ -78,7 +68,7 @@ const svg = (icon: typeof Copy01Icon) =>
     )}
     <template id="copy">
       <button aria-label="Copy">
-        {[Copy01Icon, Tick02Icon].map((icon) => <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true" set:html={svg(icon)} />)}
+        {[Copy01Icon, Tick02Icon].map((icon) => <Icon icon={icon} />)}
       </button>
     </template>
     <script>

@@ -1,0 +1,45 @@
+<svg
+  viewBox="-32 -32 704 288"
+  width="640"
+  height="262"
+  role="img"
+  aria-label="A browser reaches Cloudflare Access, which signs the person in with your identity provider. cloudflared on the reef host forwards to the agent on 127.0.0.1. Other agents are denied that port."
+>
+  <defs>
+    <marker id="sso-arrow" viewBox="0 0 7 6" refX="7" refY="3" markerWidth="7" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+      <polygon class="arrow" points="0,0 7,3 0,6" />
+    </marker>
+  </defs>
+  <text class="muted" x="236" y="12" text-anchor="middle">Cloudflare</text>
+  <text class="muted" x="488" y="12" text-anchor="middle">reef host</text>
+  <path d="M136 64H161" marker-end="url(#sso-arrow)" />
+  <path d="M304 64H329" marker-end="url(#sso-arrow)" />
+  <path d="M472 64H497" marker-end="url(#sso-arrow)" />
+  <path d="M236 88V153" marker-end="url(#sso-arrow)" />
+  <path class="dashed" d="M572 160V96" />
+  <rect x="0" y="40" width="136" height="48" rx="4" />
+  <text x="68" y="64" text-anchor="middle">browser</text>
+  <rect x="168" y="40" width="136" height="48" rx="4" />
+  <text x="236" y="64" text-anchor="middle">Access</text>
+  <rect x="336" y="40" width="136" height="48" rx="4" />
+  <text x="404" y="64" text-anchor="middle">cloudflared</text>
+  <rect x="504" y="40" width="136" height="48" rx="4" />
+  <text x="572" y="64" text-anchor="middle">agent</text>
+  <text class="muted" x="488" y="112" text-anchor="middle">127.0.0.1</text>
+  <text class="muted" x="248" y="120">sign in</text>
+  <rect x="168" y="160" width="136" height="48" rx="4" />
+  <text x="236" y="184" text-anchor="middle">your IdP</text>
+  <rect x="504" y="160" width="136" height="48" rx="4" />
+  <text class="denied" x="572" y="184" text-anchor="middle">other agents</text>
+  <text class="muted" x="496" y="136" text-anchor="end">denied</text>
+</svg>
+
+<style>
+  .arrow {
+    fill: var(--text-2);
+  }
+
+  .denied {
+    fill: var(--accent);
+  }
+</style>

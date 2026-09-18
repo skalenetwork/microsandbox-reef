@@ -1,0 +1,1104 @@
+---
+import { Code } from "astro:components";
+import { Font, Image, getImage } from "astro:assets";
+import { Download01Icon } from "@hugeicons/core-free-icons";
+import Icon from "../components/Icon.astro";
+import Slide from "../components/Slide.astro";
+import Approve from "../components/Approve.astro";
+import Bus from "../components/Bus.astro";
+import Controls from "../components/Controls.astro";
+import Egress from "../components/Egress.astro";
+import Host from "../components/Host.astro";
+import Keys from "../components/Keys.astro";
+import Layers from "../components/Layers.astro";
+import Sso from "../components/Sso.astro";
+import Store from "../components/Store.astro";
+import Terminals from "../components/Terminals.astro";
+import Upgrade from "../components/Upgrade.astro";
+import logo from "../assets/reef.png";
+import card from "../assets/og.jpg";
+import clawbitsShot from "../assets/deck/clawbits.webp";
+import terminal from "../assets/deck/terminal.webp";
+import { description, docs, latest, repo, url } from "../content";
+import {
+  benefits, cases, changes, clawbits, comparison, controls, gaps, integration, invariants,
+  notes, parts, questions, reach, request, role, shifts, stack, status, steps, terminalConsole,
+} from "../deck";
+import "../styles.css";
+
+const title = "reef deck";
+const summary = "Why organizations run AI agents with reef: the policy model, the security controls, the architecture and where it fits.";
+const path = "/deck";
+const icon = await getImage({ src: logo, width: 64, format: "png" });
+const contents = [
+  { n: "02", title: "The case", text: "What changed, and what existing controls miss" },
+  { n: "06", title: "The product", text: "Roles, microVMs, the three controls" },
+  { n: "13", title: "Where it fits", text: "Use cases, your stack, the runtime" },
+  { n: "17", title: "Case study", text: "Clawbits, a product built on reef" },
+  { n: "20", title: "The system", text: "Architecture, sign-on, limits" },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={summary} />
+    <link rel="icon" href={icon.src} />
+    <link rel="canonical" href={url(path)} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={url(path)} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={summary} />
+    <meta property="og:image" content={url(card.src)} />
+    <meta property="og:image:width" content={card.width} />
+    <meta property="og:image:height" content={card.height} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={description} />
+    <Font cssVariable="--font" preload />
+  </head>
+  <body>
+    <header class="bar">
+      <div>
+        <a class="mark" href="/">
+          <Image src={logo} width={20} densities={[1, 2, 3]} format="png" loading="eager" alt="" />
+          reef
+        </a>
+        <button type="button" class="export">
+          <Icon icon={Download01Icon} />
+          Export PDF
+        </button>
+      </div>
+    </header>
+
+    <main class="deck">
+      <Slide class="cover">
+        <div class="intro">
+          <h1>{description}</h1>
+          <p class="lead">
+            One reviewed file decides what an agent can reach and which credentials it can use. reef holds every agent
+            to it, in its own microVM on your own servers.
+          </p>
+          <p class="meta">
+            Open source, MIT license<span class="release" data-latest={latest}></span> · <a href={url("/")}>reef.clawbits.ai</a>
+          </p>
+        </div>
+        <ol class="contents">
+          {contents.map((part) => (
+            <li>
+              <span class="label">{part.n}</span>
+              <b>{part.title}</b>
+              <span class="label">{part.text}</span>
+            </li>
+          ))}
+        </ol>
+      </Slide>
+
+      <Slide class="aside"
+        section="The case"
+        title="How agents are deployed today"
+        lead="They are long-running software with access to your systems."
+      >
+        <dl class="rows">
+          {shifts.map((item) => (
+            <div>
+              <dt>{item.title}</dt>
+              <dd>{item.text}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide class="aside"
+        section="The case"
+        title="Why configuration is not a control"
+        lead="Settings that live inside the agent depend on the agent to honour them."
+      >
+        <dl class="rows">
+          {gaps.map((item) => (
+            <div>
+              <dt>{item.title}</dt>
+              <dd>{item.text}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide class="aside"
+        section="The case"
+        title="Questions before an agent goes live"
+        lead="Security and platform teams need clear answers. reef turns each one into a setting you can review."
+      >
+        <dl class="rows">
+          {questions.map((item) => (
+            <div>
+              <dt>{item.q}</dt>
+              <dd>{item.a}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide
+        section="The case"
+        title="What reef is"
+        lead="A policy layer for agents you run yourself. The rules are applied by the runtime, not by the agent."
+      >
+        <div class="visual wide"><Layers /></div>
+        <div class="cols four">
+          {parts.map((item) => (
+            <div class="item">
+              <b>{item.title}</b>
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="From an approved role to a running agent"
+        lead="A platform team defines agent types. Teams launch agents from them without a ticket."
+      >
+        <div class="side">
+          <div class="visual"><Approve /></div>
+          <div class="stack-list">
+            {steps.map((item) => (
+              <div class="item">
+                <span class="label">{item.n}</span>
+                <b>{item.title}</b>
+                <p>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="What a role defines"
+        lead="A reviewer reads it once. Every agent created from it inherits it."
+      >
+        <div class="side">
+          <dl class="sheet">
+            <div class="head">
+              <dt>Coding agent</dt>
+              <dd class="label">roles/openclaw-coding.toml</dd>
+            </div>
+            {role.map((item) => (
+              <div>
+                <dt class="label">{item.k}</dt>
+                <dd>{item.v}</dd>
+              </div>
+            ))}
+          </dl>
+          <div class="stack-list">
+            {notes.map((item) => (
+              <div class="item">
+                <b>{item.title}</b>
+                <p>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="Network access is an allowlist"
+        lead="A role lists the domains an agent may reach. Everything else is refused at DNS, outside the guest, so the rule holds even if the agent ignores its own settings."
+      >
+        <div class="side">
+          <div class="visual"><Egress /></div>
+          <div class="stack-list">
+            <Code code={'egress = ["openrouter.ai"]'} lang="toml" theme="css-variables" />
+            <p>
+              Opening the whole public internet takes an explicit <code>*</code>, and <code>role apply</code> warns when
+              a role asks for it.
+            </p>
+          </div>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="Credentials stay on the host"
+        lead="A secret is a reference bound to one domain. The agent holds a placeholder; the runtime swaps in the value on the way out."
+      >
+        <div class="side">
+          <div class="visual"><Keys /></div>
+          <div class="stack-list">
+            <Code code={"# inside a real agent VM\n$ echo [$FAKE_KEY]\n[$MSB_FAKE_KEY]"} lang="sh" theme="css-variables" />
+            <p>
+              <code>reef secret rotate</code> pushes a changed value into every running agent that binds it. Each agent
+              records the key and the reference, never the value.
+            </p>
+          </div>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="Terminals through your SSH CA"
+        lead="reef adds no accounts, keys or auth of its own. Your certificate authority says who someone is, and reef decides which agents that identity may open."
+      >
+        <div class="side">
+          <div class="visual"><Terminals /></div>
+          <div class="stack-list">
+            <div class="item">
+              <b>No enrollment</b>
+              <p>Certificates come from the SSO flow your people already use. Nobody registers a key with reef.</p>
+            </div>
+            <div class="item">
+              <b>Owner, not operator</b>
+              <p>sshd always runs <code>reef agent serve</code>, which opens an agent only when a certificate principal matches its owner.</p>
+            </div>
+          </div>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="Updates and secret rotation"
+        lead="A role change builds the new VM and swaps only when it is ready. Secret values come from the store you already run."
+      >
+        <div class="pair">
+          <figure>
+            <div class="visual"><Upgrade /></div>
+            <figcaption>A new role version checks secrets, ports, volume and image first. The data volume carries over to the new VM.</figcaption>
+          </figure>
+          <figure>
+            <div class="visual"><Store /></div>
+            <figcaption>Roles hold references such as <code>reef://vault/api-key</code>. The host resolves them through 1Password, OpenBao or AWS.</figcaption>
+          </figure>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The product"
+        title="The terminal console"
+        lead="reef ui shows every agent across your hosts: role version, resources, network policy, ports and history."
+      >
+        <div class="side shots">
+          <figure class="shot">
+            <Image src={terminal} widths={[700, 1400]} sizes="(min-width: 900px) 55vw, 100vw" loading="lazy" alt="reef ui in a terminal showing one OpenClaw agent: role version, image, owner, running state, resources, volume, egress, ports and recent events." />
+          </figure>
+          <div class="stack-list">
+            {terminalConsole.map((item) => (
+              <div class="item">
+                <b>{item.title}</b>
+                <p>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Slide>
+
+      <Slide class="aside" section="Where it fits" title="Where teams use reef" lead="Each example matches a role that ships in the repo.">
+        <div class="cols two">
+          {cases.map((item) => (
+            <div class="item">
+              <b>{item.title}</b>
+              <p>{item.text}</p>
+              <p class="tags">{item.tags.map((tag) => <span class="tag">{tag}</span>)}</p>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide class="aside" section="Where it fits" title="Works with what you already run">
+        <dl class="rows">
+          {stack.map((item) => (
+            <div>
+              <dt>{item.k}</dt>
+              <dd>{item.v}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide
+        section="Where it fits"
+        title="Built on microsandbox"
+        lead="Isolation comes from microsandbox, an open-source microVM runtime under the Apache-2.0 license. We chose it because it combines the four properties agents need in one runtime."
+      >
+        <div class="tbl">
+        <table class="cmp">
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              {comparison.columns.map((column) => <th scope="col">{column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.rows.map((row) => (
+              <tr>
+                <th scope="row">{row.k}</th>
+                {row.v.map((cell) => <td>{cell}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+        <p class="label">
+          Several runtimes advertise similar features. In our August 2026 review, each alternative fell short on
+          something reef needs. reef adds the layer above: role files, reviewed versions, fleets, durable agent records
+          and one console across hosts.
+        </p>
+      </Slide>
+
+      <Slide class="aside" section="Where it fits" title="What organizations get">
+        <dl class="rows">
+          {benefits.map((item) => (
+            <div>
+              <dt>{item.title}</dt>
+              <dd>{item.text}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide
+        section="Case study"
+        title="Clawbits, a team workspace built on reef"
+        lead="Any member launches an agent from the app and it joins their channels. The agents run on the organization's own servers."
+      >
+        <div class="side shots">
+          <figure class="shot">
+            <Image src={clawbitsShot} widths={[700, 1400]} sizes="(min-width: 900px) 55vw, 100vw" loading="lazy" alt="The Clawbits reef settings page: one machine running six agents, each with its owner and status, beside a list of recent activity." />
+            <figcaption>One machine running six agents, with their owners, health and recent activity.</figcaption>
+          </figure>
+          <div class="stack-list">
+            {clawbits.map((item) => (
+              <div class="item">
+                <b>{item.title}</b>
+                <p>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Slide>
+
+      <Slide class="aside"
+        section="Case study"
+        title="What the integration uses"
+        lead="Each thing the product needed maps onto a primitive reef already had."
+      >
+        <dl class="rows">
+          <div class="head">
+            <dt class="label">What Clawbits needed</dt>
+            <dd class="label">What it uses</dd>
+          </div>
+          {integration.map((item) => (
+            <div>
+              <dt>{item.k}</dt>
+              <dd>{item.v}</dd>
+            </div>
+          ))}
+        </dl>
+        <p class="label">
+          Identity is a one-time signup token, valid for seven days. The agent spends it at first boot and keeps its own
+          key on its state volume, so the file is dead weight afterwards and a recreate returns as the same agent.
+        </p>
+      </Slide>
+
+      <Slide
+        section="Case study"
+        title="How Clawbits and reef communicate"
+        lead="Clawbits writes agent files to your private repository. Each host pulls every 30 seconds and pushes its status back."
+      >
+        <div class="visual wide"><Bus /></div>
+        <div class="cols four">
+          {reach.map((item) => (
+            <div class="item">
+              <b>{item.k}</b>
+              <p>{item.v}</p>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide
+        section="The system"
+        title="Architecture"
+        lead="reef is a command-line tool with no daemon. Each command updates the agent record, compares it with the running VM and applies the difference."
+      >
+        <div class="visual wide"><Host /></div>
+        <div class="cols four">
+          {invariants.map((item) => (
+            <div class="item">
+              <b>{item.title}</b>
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide
+        section="The system"
+        title="Where each control is enforced"
+        lead="None of them depends on the agent's own configuration or good behaviour."
+      >
+        <div class="visual wide"><Controls /></div>
+        <div class="cols">
+          {controls.map((item) => (
+            <div class="item">
+              <b>{item.title}</b>
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </div>
+        <p class="label">
+          The cost is explicit: declaring a secret turns on TLS interception for the whole VM, and the shipped roles
+          then skip browser certificate checks. <a href={url("/blog/egress-allowlist")}>What an egress allowlist costs</a>
+        </p>
+      </Slide>
+
+      <Slide
+        section="The system"
+        title="What each change affects"
+        lead="Volumes are the durable part. Everything else is rebuilt from the record."
+      >
+        <div class="tbl">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Change</th>
+              <th scope="col">What reef does</th>
+              {["System disk", "Volumes", "Host port"].map((column) => <th scope="col">{column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {changes.map((row) => (
+              <tr>
+                <th scope="row">{row.k}</th>
+                <td>{row.v}</td>
+                {row.cells.map((cell) => (
+                  <td>
+                    <span class:list={["dot", cell.kept ? "yes" : "no"]} />
+                    {cell.label}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      </Slide>
+
+      <Slide
+        section="The system"
+        title="Browser access through single sign-on"
+        lead="reef publishes agent ports on loopback only. Cloudflare Access handles sign-in and cloudflared dials out from the host, so nothing connects in."
+      >
+        <div class="visual wide"><Sso /></div>
+        <ol class="steps">
+          {request.map((step) => <li>{step}</li>)}
+        </ol>
+        <p class="label">
+          Cloudflare is one option. Any sign-on proxy that is the only path to the port works.
+          <a href={url("/docs/enterprise/cloudflare-access")}>Setup guide</a>
+        </p>
+      </Slide>
+
+      <Slide class="aside" section="The system" title="Status and limits">
+        <div class="cols">
+          {status.map((column) => (
+            <div class="item">
+              <b>{column.title}</b>
+              <ul>
+                {column.items.map((item) => <li>{item}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide class="aside" title="Documentation" lead="Everything in this deck is documented, and the source is public.">
+        <div class="cols four docs">
+          <section class="item">
+            <p class="label">Start</p>
+            <a href={url("/")}>reef.clawbits.ai</a>
+            <a href={url("/ARCHITECTURE.md")}>Architecture</a>
+            <a href={url("/blog/egress-allowlist")}>Egress allowlists in practice</a>
+          </section>
+          {["Setup", "Agents", "Enterprise"].map((section) => (
+            <section class="item">
+              <p class="label">{section}</p>
+              {docs.filter((doc) => doc.section === section).map((doc) => <a href={doc.path}>{doc.title}</a>)}
+            </section>
+          ))}
+        </div>
+        <p class="label">
+          <a href={repo}>reef on GitHub</a> ·{" "}
+          <a href="https://github.com/superradcompany/microsandbox">microsandbox on GitHub</a> · MIT license
+        </p>
+      </Slide>
+    </main>
+
+    <script>
+      const button = document.querySelector<HTMLButtonElement>(".export")!;
+      button.addEventListener("click", () => print());
+
+      const slides = [...document.querySelectorAll<HTMLElement>(".slide")];
+      const offset = (slide: HTMLElement) => {
+        const box = slide.getBoundingClientRect();
+        return Math.abs(box.top + box.height / 2 - innerHeight / 2);
+      };
+
+      addEventListener("keydown", (event) => {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        const step = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 }[event.key];
+        if (!step) return;
+        event.preventDefault();
+        const current = slides.indexOf(slides.reduce((best, slide) => (offset(slide) < offset(best) ? slide : best)));
+        slides[Math.min(slides.length - 1, Math.max(0, current + step))]?.scrollIntoView({ block: "center" });
+      });
+
+      const release = document.querySelector<HTMLElement>(".release")!;
+      const version = await fetch(release.dataset.latest!)
+        .then((res) => res.json())
+        .then((data) => String(data.value))
+        .catch(() => "");
+
+      if (/^v\d/.test(version)) release.textContent = `, ${version}`;
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  html {
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    --page: 1440px;
+    --gutter: 24px;
+    --bar: 64px;
+    --slide: min(100%, calc((100svh - var(--bar) * 2) * 16 / 9));
+  }
+
+  .bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    max-width: var(--page);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+    background: var(--paper);
+  }
+
+  .bar > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: var(--slide);
+    height: var(--bar);
+    margin-inline: auto;
+  }
+
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+  }
+
+  .export {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .export:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+
+  .deck {
+    display: grid;
+    gap: var(--bar);
+    max-width: var(--page);
+    margin-inline: auto;
+    padding: 0 var(--gutter) var(--bar);
+    counter-reset: slide;
+  }
+
+  .slide {
+    position: relative;
+    display: block;
+    box-sizing: border-box;
+    container-type: inline-size;
+    aspect-ratio: 16 / 9;
+    width: var(--slide);
+    min-width: 0;
+    min-height: 0;
+    margin: 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    scroll-snap-align: center;
+    counter-increment: slide;
+  }
+
+  .frame {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2em;
+    padding: 2.5em 3em 3.75em;
+    font-size: 1.35cqw;
+    line-height: 1.5;
+  }
+
+  .frame > header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+  }
+
+  .aside .frame {
+    display: grid;
+    grid-template-columns: minmax(0, 0.44fr) minmax(0, 1fr);
+    gap: 3.5em;
+  }
+
+  .aside .frame > header {
+    align-self: start;
+  }
+
+  .aside h2,
+  .aside .lead {
+    max-width: none;
+  }
+
+  .body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1.5em;
+    min-height: 0;
+  }
+
+  .slide h1 {
+    font-size: 2.6em;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    max-width: 20ch;
+  }
+
+  .slide h2 {
+    font-size: 1.6em;
+    font-weight: 500;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    max-width: 30ch;
+  }
+
+  .slide b,
+  .slide dt,
+  .slide th {
+    font-weight: 500;
+  }
+
+  .slide .lead,
+  .slide .label,
+  .slide p,
+  .slide li,
+  .slide dd,
+  .slide figcaption {
+    color: var(--text-2);
+  }
+
+  .slide .lead {
+    max-width: 68ch;
+  }
+
+  .slide a {
+    text-underline-offset: 3px;
+  }
+
+  .n {
+    position: absolute;
+    right: 3em;
+    bottom: 2.5em;
+    color: var(--text-2);
+  }
+
+  .n::before {
+    content: counter(slide, decimal-leading-zero);
+  }
+
+  .cover .n {
+    display: none;
+  }
+
+  .cover .body {
+    justify-content: space-between;
+  }
+
+  .cover .intro {
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+  }
+
+  .contents {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 2em;
+    padding: 1.5em 0 0;
+    border-top: 1px solid var(--line);
+    list-style: none;
+  }
+
+  .contents li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35em;
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2em;
+  }
+
+  .cols.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cols.four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .item,
+  .steps li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    padding-top: 1em;
+    border-top: 1px solid var(--line);
+  }
+
+  .side {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 2.5em;
+    align-items: start;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2.5em;
+  }
+
+  .pair figure,
+  .stack-list,
+  .shot {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 1em;
+  }
+
+  .stack-list {
+    gap: 1.25em;
+  }
+
+  .rows > div,
+  .sheet > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    gap: 2em;
+    padding: 1.1em 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .rows > div:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rows .head {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .sheet {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  .sheet > div {
+    grid-template-columns: 8em minmax(0, 1fr);
+    gap: 1.5em;
+    padding: 0.85em 1.25em;
+  }
+
+  .sheet > div:first-child {
+    border-top: 0;
+  }
+
+  .sheet .head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1em;
+    background: var(--surface);
+    border-radius: 7px 7px 0 0;
+  }
+
+  .slide .visual {
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+    padding: 1em;
+  }
+
+  .slide .visual svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .slide .visual.wide {
+    aspect-ratio: auto;
+    min-height: 0;
+  }
+
+  .shots {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .shot {
+    flex: 1;
+  }
+
+  .shot img {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    object-fit: contain;
+    object-position: left center;
+  }
+
+  .tbl {
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .slide table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .slide th,
+  .slide td {
+    padding: 0.7em 1.5em 0.7em 0;
+    text-align: start;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .slide thead th {
+    color: var(--text-2);
+    font-weight: 400;
+  }
+
+  .slide td {
+    color: var(--text-2);
+  }
+
+  .cmp td:last-child,
+  .cmp thead th:last-child {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 0.5em;
+    height: 0.5em;
+    margin-right: 0.7em;
+    border-radius: 50%;
+  }
+
+  .dot.yes {
+    background: var(--text);
+  }
+
+  .dot.no {
+    border: 1px solid var(--text-2);
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2em;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  .steps li {
+    counter-increment: step;
+  }
+
+  .steps li::before {
+    content: counter(step, decimal-leading-zero);
+  }
+
+  .slide ul {
+    gap: 0.4em;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+  }
+
+  .tag {
+    padding: 0.1em 0.75em;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-2);
+  }
+
+  .docs a {
+    text-decoration: none;
+  }
+
+  .docs a:hover {
+    text-decoration: underline;
+  }
+
+  .slide pre {
+    padding: 0.75em 1em;
+  }
+
+  .slide :not(pre) > code {
+    padding: 0 0.3em;
+  }
+
+  @media (max-width: 720px) {
+    html {
+      scroll-snap-type: none;
+    }
+
+    body {
+      --gutter: 16px;
+      --bar: 56px;
+      --slide: 100%;
+    }
+
+    .deck {
+      gap: 24px;
+      padding: 0 var(--gutter) 24px;
+    }
+
+    .slide {
+      aspect-ratio: auto;
+      overflow: visible;
+    }
+
+    .frame {
+      position: static;
+      gap: 1.5em;
+      padding: 1.5em;
+      font-size: 16px;
+    }
+
+    .n {
+      right: 1.5em;
+      bottom: 1.5em;
+    }
+
+    .cols,
+    .cols.two,
+    .cols.four,
+    .side,
+    .pair,
+    .steps,
+    .rows > div,
+    .sheet > div {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .aside .frame {
+      display: flex;
+      gap: 1.5em;
+    }
+
+    .contents {
+      grid-auto-flow: row;
+    }
+
+    .slide table {
+      min-width: 34em;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  @media print {
+    @page {
+      size: 297mm 167mm;
+      margin: 0;
+    }
+
+    html {
+      overflow-y: visible;
+      scroll-snap-type: none;
+      scroll-behavior: auto;
+    }
+
+    .bar {
+      display: none;
+    }
+
+    .deck {
+      display: block;
+      gap: 0;
+      padding: 0;
+    }
+
+    .deck * {
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+      animation: none !important;
+    }
+
+    .slide {
+      width: 297mm;
+      max-width: none;
+      height: 167mm;
+      aspect-ratio: auto;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      break-inside: avoid;
+      break-after: page;
+    }
+
+    .slide:last-child {
+      break-after: auto;
+    }
+  }
+</style>
