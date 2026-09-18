@@ -218,27 +218,9 @@ impl Msb {
             );
         }
         for handle in self.owned().await? {
-            if map_status(handle.status_snapshot()) == VmStatus::Stopped {
-                continue;
+            if map_status(handle.status_snapshot()) == VmStatus::Running {
+                halt(&handle).await?;
             }
-            let stopped = async {
-                handle.request_stop().await?;
-                handle.wait_until_stopped().await
-            };
-            if !matches!(tokio::time::timeout(STOP_GRACE, stopped).await, Ok(Ok(_))) {
-                handle.kill().await?;
-            }
-        }
-        let upgraded = std::process::Command::new(&msb)
-            .env("MSB_BACKEND", "local")
-            .args(["volume", "ls", "-q"])
-            .stdout(std::process::Stdio::null())
-            .status()
-            .context("cannot run msb")?;
-        if !upgraded.success() {
-            bail!("msb could not upgrade its store; fix what it reported, then rerun");
-        }
-        for handle in self.owned().await? {
             handle.remove().await?;
         }
         Ok(())

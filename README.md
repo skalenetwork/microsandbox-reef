@@ -38,11 +38,9 @@ turns the notice off.
 
 A host still on reef 0.14 moves once. Pause whatever runs reef on its own
 (cron `fleet apply`, a remote `reef ui`, sshd `agent serve`), install the latest
-`msb`, run `reef update`, then `reef migrate` for each state dir. It stops the old
-VMs, lets `msb` upgrade its store and recreates the running agents from their
-records; stopped ones get a VM on their next `reef agent start`. `msb` upgrades
-only once no VM on the host runs, so a migrate refused while another state dir's
-VMs run has already stopped its own: run it again after the others. Volumes stay
+`msb`, run `reef update`, then `reef migrate` for each state dir. It upgrades the
+msb store, replaces the old VMs and recreates the running agents from their
+records; stopped ones get a VM on their next `reef agent start`. Volumes stay
 where they are; anything a VM kept outside them is gone.
 
 ## Run OpenClaw in a microVM

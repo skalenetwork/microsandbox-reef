@@ -122,8 +122,8 @@ re-read from the runtime on every command. Role versions are immutable and
 content-addressed; `role rm` refuses while any agent is on the role, so a
 pinned agent's blast radius stays readable. microsandbox's own state under
 `~/.microsandbox` is treated as the runtime's property; reef never parses its
-files itself, reaching it only through the SDK and the `msb` CLI (`pull`,
-`migrate`), and doctor only checks the directory's mode.
+files itself, reaching it only through the SDK and the `msb` CLI (`pull`),
+and doctor only checks the directory's mode.
 
 Secrets: roles hold `reef://store/name` references (a pasted literal is a
 parse error). Values resolve host-side at VM create from `secrets.toml`:

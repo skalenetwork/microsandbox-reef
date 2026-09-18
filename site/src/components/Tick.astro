@@ -1,0 +1,372 @@
+<svg
+  viewBox="-32 -32 704 344"
+  width="640"
+  height="313"
+  role="img"
+  aria-label="One tick of the host timer: every 30 seconds it pulls, then either applies and prunes when a branch moved or reconciles when nothing did, writes status, and pushes only if the file changed."
+>
+  <defs>
+    <marker id="tick-arrow" viewBox="0 0 7 6" refX="7" refY="3" markerWidth="7" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+      <polygon class="arrow" points="0,0 7,3 0,6" />
+    </marker>
+  </defs>
+  <text class="muted" x="248" y="24" text-anchor="middle">moved</text>
+  <text class="muted" x="212" y="120">idle</text>
+  <text class="muted" x="314" y="224" text-anchor="middle">push if changed</text>
+  <path d="M104 64H136" marker-end="url(#tick-arrow)" />
+  <path d="M232 64H264" marker-end="url(#tick-arrow)" />
+  <path d="M424 64H456" marker-end="url(#tick-arrow)" />
+  <path d="M184 88V152H264" marker-end="url(#tick-arrow)" />
+  <path d="M424 152H480V88" marker-end="url(#tick-arrow)" />
+  <path d="M576 88V240H52V88" marker-end="url(#tick-arrow)" />
+  <rect x="0" y="40" width="104" height="48" rx="4" />
+  <text x="52" y="64" text-anchor="middle">every 30s</text>
+  <rect class="pull" x="136" y="40" width="96" height="48" rx="4" />
+  <text x="184" y="64" text-anchor="middle">pull</text>
+  <rect class="apply" x="264" y="40" width="160" height="48" rx="4" />
+  <text x="344" y="64" text-anchor="middle">apply, prune</text>
+  <rect class="reconcile" x="264" y="128" width="160" height="48" rx="4" />
+  <text x="344" y="152" text-anchor="middle">reconcile</text>
+  <rect class="status" x="456" y="40" width="144" height="48" rx="4" />
+  <text x="528" y="64" text-anchor="middle">write status</text>
+  <circle class="s1a" cx="104" cy="64" r="3" />
+  <circle class="s2a" cx="232" cy="64" r="3" />
+  <circle class="s3a" cx="424" cy="64" r="3" />
+  <circle class="s4a" cx="576" cy="88" r="3" />
+  <circle class="s1b" cx="104" cy="64" r="3" />
+  <circle class="s2b" cx="184" cy="88" r="3" />
+  <circle class="s3b" cx="424" cy="152" r="3" />
+  <circle class="s4b" cx="576" cy="88" r="3" />
+</svg>
+
+<style>
+  .arrow {
+    fill: var(--text-2);
+  }
+
+  circle {
+    fill: var(--text);
+    opacity: 0;
+  }
+
+  .pull {
+    animation: tick-pull 9s linear infinite;
+  }
+
+  .apply {
+    animation: tick-apply 9s linear infinite;
+  }
+
+  .reconcile {
+    animation: tick-reconcile 9s linear infinite;
+  }
+
+  .status {
+    animation: tick-status 9s linear infinite;
+  }
+
+  .s1a {
+    animation: tick-s1a 9s linear infinite;
+  }
+
+  .s2a {
+    animation: tick-s2a 9s linear infinite;
+  }
+
+  .s3a {
+    animation: tick-s3a 9s linear infinite;
+  }
+
+  .s4a {
+    animation: tick-s4a 9s linear infinite;
+  }
+
+  .s1b {
+    animation: tick-s1b 9s linear infinite;
+  }
+
+  .s2b {
+    animation: tick-s2b 9s linear infinite;
+  }
+
+  .s3b {
+    animation: tick-s3b 9s linear infinite;
+  }
+
+  .s4b {
+    animation: tick-s4b 9s linear infinite;
+  }
+
+  @keyframes tick-s1a {
+    0%,
+    2% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    3% {
+      opacity: 1;
+    }
+    6%,
+    7% {
+      transform: translate(32px, 0);
+      opacity: 1;
+    }
+    8%,
+    100% {
+      transform: translate(32px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s2a {
+    0%,
+    8% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    9% {
+      opacity: 1;
+    }
+    12%,
+    13% {
+      transform: translate(32px, 0);
+      opacity: 1;
+    }
+    14%,
+    100% {
+      transform: translate(32px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s3a {
+    0%,
+    14% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    15% {
+      opacity: 1;
+    }
+    18%,
+    19% {
+      transform: translate(32px, 0);
+      opacity: 1;
+    }
+    20%,
+    100% {
+      transform: translate(32px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s4a {
+    0%,
+    20% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    21% {
+      opacity: 1;
+    }
+    25% {
+      transform: translate(0, 152px);
+    }
+    37% {
+      transform: translate(-524px, 152px);
+    }
+    41%,
+    42% {
+      transform: translate(-524px, 0);
+      opacity: 1;
+    }
+    43%,
+    100% {
+      transform: translate(-524px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s1b {
+    0%,
+    46% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    47% {
+      opacity: 1;
+    }
+    50%,
+    51% {
+      transform: translate(32px, 0);
+      opacity: 1;
+    }
+    52%,
+    100% {
+      transform: translate(32px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s2b {
+    0%,
+    52% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    53% {
+      opacity: 1;
+    }
+    56% {
+      transform: translate(0, 64px);
+    }
+    59%,
+    60% {
+      transform: translate(80px, 64px);
+      opacity: 1;
+    }
+    61%,
+    100% {
+      transform: translate(80px, 64px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s3b {
+    0%,
+    61% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    62% {
+      opacity: 1;
+    }
+    65% {
+      transform: translate(56px, 0);
+    }
+    68%,
+    69% {
+      transform: translate(56px, -64px);
+      opacity: 1;
+    }
+    70%,
+    100% {
+      transform: translate(56px, -64px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-s4b {
+    0%,
+    70% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    71% {
+      opacity: 1;
+    }
+    75% {
+      transform: translate(0, 152px);
+    }
+    87% {
+      transform: translate(-524px, 152px);
+    }
+    91%,
+    92% {
+      transform: translate(-524px, 0);
+      opacity: 1;
+    }
+    93%,
+    100% {
+      transform: translate(-524px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tick-pull {
+    0%,
+    6% {
+      stroke: var(--text-2);
+    }
+    7%,
+    43% {
+      stroke: var(--text);
+    }
+    45%,
+    50% {
+      stroke: var(--text-2);
+    }
+    51%,
+    92% {
+      stroke: var(--text);
+    }
+    94%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @keyframes tick-apply {
+    0%,
+    12% {
+      stroke: var(--text-2);
+    }
+    13%,
+    43% {
+      stroke: var(--text);
+    }
+    45%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @keyframes tick-reconcile {
+    0%,
+    59% {
+      stroke: var(--text-2);
+    }
+    60%,
+    92% {
+      stroke: var(--text);
+    }
+    94%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @keyframes tick-status {
+    0%,
+    18% {
+      stroke: var(--text-2);
+    }
+    19%,
+    43% {
+      stroke: var(--text);
+    }
+    45%,
+    68% {
+      stroke: var(--text-2);
+    }
+    69%,
+    92% {
+      stroke: var(--text);
+    }
+    94%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    rect,
+    circle {
+      animation: none;
+    }
+  }
+</style>

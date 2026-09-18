@@ -1,0 +1,316 @@
+<svg
+  viewBox="-32 -32 704 344"
+  width="640"
+  height="313"
+  role="img"
+  aria-label="The platform team writes roles to main and Clawbits writes one file per agent to fleet, in one private repo. The reef host pulls both, boots the agent and writes status back, and Clawbits reads the status."
+>
+  <defs>
+    <marker id="bus-arrow" viewBox="0 0 7 6" refX="7" refY="3" markerWidth="7" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+      <polygon class="arrow" points="0,0 7,3 0,6" />
+    </marker>
+  </defs>
+  <text class="muted" x="320" y="12" text-anchor="middle">private repo</text>
+  <text class="muted" x="568" y="108" text-anchor="middle">pulls every 30s</text>
+  <path d="M144 64H272" marker-end="url(#bus-arrow)" />
+  <path d="M144 152H272" marker-end="url(#bus-arrow)" />
+  <path d="M272 240L144 168" marker-end="url(#bus-arrow)" />
+  <path d="M368 64L496 140" marker-end="url(#bus-arrow)" />
+  <path d="M368 152H496" marker-end="url(#bus-arrow)" />
+  <path d="M496 164L368 240" marker-end="url(#bus-arrow)" />
+  <rect x="0" y="40" width="144" height="48" rx="4" />
+  <text x="72" y="64" text-anchor="middle">platform team</text>
+  <rect x="0" y="128" width="144" height="48" rx="4" />
+  <text x="72" y="152" text-anchor="middle">clawbits</text>
+  <text class="running" x="72" y="200" text-anchor="middle">running</text>
+  <rect x="272" y="40" width="96" height="48" rx="4" />
+  <text class="main" x="320" y="64" text-anchor="middle">main</text>
+  <rect x="272" y="128" width="96" height="48" rx="4" />
+  <text class="fleet" x="320" y="152" text-anchor="middle">fleet</text>
+  <rect x="272" y="216" width="96" height="48" rx="4" />
+  <text class="status" x="320" y="240" text-anchor="middle">status</text>
+  <rect class="host" x="496" y="128" width="144" height="48" rx="4" />
+  <text x="568" y="152" text-anchor="middle">reef host</text>
+  <g class="agent">
+    <path d="M568 176V216" marker-end="url(#bus-arrow)" />
+    <rect x="532" y="216" width="72" height="48" rx="4" />
+    <text x="568" y="240" text-anchor="middle">agent</text>
+  </g>
+  <circle class="roles" cx="144" cy="64" r="3" />
+  <circle class="declare" cx="144" cy="152" r="3" />
+  <circle class="pull-main" cx="368" cy="64" r="3" />
+  <circle class="pull-fleet" cx="368" cy="152" r="3" />
+  <circle class="push" cx="496" cy="164" r="3" />
+  <circle class="read" cx="272" cy="240" r="3" />
+</svg>
+
+<style>
+  .arrow {
+    fill: var(--text-2);
+  }
+
+  circle {
+    fill: var(--text);
+    opacity: 0;
+  }
+
+  .running {
+    fill: var(--accent);
+    animation: bus-running 9s linear infinite;
+  }
+
+  .main {
+    animation: bus-main 9s linear infinite;
+  }
+
+  .fleet {
+    animation: bus-fleet 9s linear infinite;
+  }
+
+  .status {
+    animation: bus-status 9s linear infinite;
+  }
+
+  .host {
+    animation: bus-host 9s linear infinite;
+  }
+
+  .agent {
+    animation: bus-agent 9s linear infinite;
+  }
+
+  .roles {
+    animation: bus-roles 9s linear infinite;
+  }
+
+  .declare {
+    animation: bus-declare 9s linear infinite;
+  }
+
+  .pull-main {
+    --to: 128px, 76px;
+    animation: bus-pull 9s linear infinite;
+  }
+
+  .pull-fleet {
+    --to: 128px, 0;
+    animation: bus-pull 9s linear infinite;
+  }
+
+  .push {
+    animation: bus-push 9s linear infinite;
+  }
+
+  .read {
+    animation: bus-read 9s linear infinite;
+  }
+
+  @keyframes bus-roles {
+    0%,
+    3% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    4% {
+      opacity: 1;
+    }
+    12%,
+    13% {
+      transform: translate(128px, 0);
+      opacity: 1;
+    }
+    14.5%,
+    100% {
+      transform: translate(128px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes bus-main {
+    0%,
+    12% {
+      fill: var(--text-2);
+    }
+    14%,
+    90% {
+      fill: var(--text);
+    }
+    93%,
+    100% {
+      fill: var(--text-2);
+    }
+  }
+
+  @keyframes bus-declare {
+    0%,
+    16% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    17% {
+      opacity: 1;
+    }
+    25%,
+    26% {
+      transform: translate(128px, 0);
+      opacity: 1;
+    }
+    27.5%,
+    100% {
+      transform: translate(128px, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes bus-fleet {
+    0%,
+    25% {
+      fill: var(--text-2);
+    }
+    27%,
+    90% {
+      fill: var(--text);
+    }
+    93%,
+    100% {
+      fill: var(--text-2);
+    }
+  }
+
+  @keyframes bus-pull {
+    0%,
+    30% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    31% {
+      opacity: 1;
+    }
+    41%,
+    42% {
+      transform: translate(var(--to));
+      opacity: 1;
+    }
+    43.5%,
+    100% {
+      transform: translate(var(--to));
+      opacity: 0;
+    }
+  }
+
+  @keyframes bus-host {
+    0%,
+    41% {
+      stroke: var(--text-2);
+    }
+    43%,
+    90% {
+      stroke: var(--text);
+    }
+    93%,
+    100% {
+      stroke: var(--text-2);
+    }
+  }
+
+  @keyframes bus-agent {
+    0%,
+    44% {
+      opacity: 0;
+    }
+    46%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes bus-push {
+    0%,
+    50% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    51% {
+      opacity: 1;
+    }
+    61%,
+    62% {
+      transform: translate(-128px, 76px);
+      opacity: 1;
+    }
+    63.5%,
+    100% {
+      transform: translate(-128px, 76px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes bus-status {
+    0%,
+    61% {
+      fill: var(--text-2);
+    }
+    63%,
+    90% {
+      fill: var(--text);
+    }
+    93%,
+    100% {
+      fill: var(--text-2);
+    }
+  }
+
+  @keyframes bus-read {
+    0%,
+    65% {
+      transform: translate(0, 0);
+      opacity: 0;
+      animation-timing-function: ease-in-out;
+    }
+    66% {
+      opacity: 1;
+    }
+    76%,
+    77% {
+      transform: translate(-128px, -72px);
+      opacity: 1;
+    }
+    78.5%,
+    100% {
+      transform: translate(-128px, -72px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes bus-running {
+    0%,
+    77% {
+      opacity: 0;
+    }
+    79%,
+    90% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    text,
+    rect,
+    g,
+    circle {
+      animation: none;
+    }
+  }
+</style>
