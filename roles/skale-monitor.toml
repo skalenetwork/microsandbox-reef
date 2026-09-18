@@ -1,21 +1,20 @@
 version = 1
 
-# Fork of roles/clawbits-openclaw.toml, regenerated from it. Three changes only:
+# Fork of roles/clawbits-openclaw.toml, regenerated from it. Changes:
 #   - name, so both can live in reef.db side by side
 #   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144. Measured here: the cap
-#     is a ceiling, not a reservation (905 MiB actually resident), and 2 vCPU is
-#     what every agent on this host has run on. 2048 MiB is NOT enough -
-#     OpenClaw's pressure threshold is ~27% of guest RAM and the guest hangs.
-#   - agents.defaults.model.primary, pinned to deepseek instead of
-#     openrouter/auto. Verified: the start script re-applies defaults.json
-#     through `config patch` on every boot, so a model set by hand is gone after
-#     the next restart - it has to be changed here.
+#     is a ceiling, not a reservation, and 2048 MiB is NOT enough - OpenClaw's
+#     pressure threshold is ~27% of guest RAM and the guest hangs.
+#   - model pinned to deepseek: the start script re-applies defaults.json on
+#     every boot, so setting it by hand does not survive a restart.
+#   - image ahead of upstream, on Dmytro's word that the tag is good.
+#     Drop this difference once upstream catches up.
 #
-# Upstream changes often and structurally (the start script has moved into the
-# image and back out again, and an mcp-sandbox port appeared). Regenerate rather
-# than hand-edit - see the command in .claude/handoff-clawbits-msb.md.
+# Regenerate after every pull; never hand-edit. Upstream changes structurally -
+# the `agents` volume that keeps chat sessions was added there on 2026-09-17,
+# and a fork edited by hand would silently keep losing them.
 name  = "skale-monitor"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.3-pl0.17.24-ge5abfaa"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.4-pl0.17.27-gdd95c44"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
@@ -67,6 +66,7 @@ gateway = 18789
 mcp-sandbox = 18790
 
 [volumes]
+agents = { dest = "/home/node/.openclaw/agents", size-mib = 4096 }
 state = { dest = "/home/node/.openclaw/state", size-mib = 4096 }
 workspace = { dest = "/home/node/.openclaw/workspace", size-mib = 10240 }
 
