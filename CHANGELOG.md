@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.16.0] - 2026-09-18
+
+### Added
+- Let a role open host ports with network.host
+
+
 ## [0.15.2] - 2026-09-18
 
 ### Fixed
