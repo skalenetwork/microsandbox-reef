@@ -1,13 +1,7 @@
-export const shifts = [
+export const problem = [
   { title: "They run code and browse", text: "Agents run commands and open websites with no person approving each step." },
-  { title: "They hold credentials", text: "Model provider keys, code repositories and business applications." },
-  { title: "They run continuously", text: "Long-lived agents serve whole teams, not one chat session." },
-];
-
-export const gaps = [
-  { title: "Agent settings are advisory", text: "Anything that reaches the agent, including its own input, can talk it out of them." },
-  { title: "Containers share the host kernel", text: "One escape reaches every other agent on the machine." },
-  { title: "A readable key is an exfiltratable key", text: "A credential inside the VM can be printed, logged or sent elsewhere." },
+  { title: "They hold credentials", text: "A key an agent can read is a key it can print, log or send somewhere else." },
+  { title: "Their settings are not a boundary", text: "Anything reaching the agent, including its own input, can talk it out of them." },
 ];
 
 export const questions = [
@@ -162,4 +156,23 @@ export const terminalConsole = [
   { title: "Every host at once", text: "One console merges agents from independent hosts, reached over your own ssh." },
   { title: "Full detail", text: "Role version, image, owner, resources, volumes, egress policy and ports." },
   { title: "Single keys", text: "Start, stop, update, remove and open a terminal into the agent." },
+];
+
+export const appendix = [
+  { id: "a-questions", title: "Questions before an agent goes live" },
+  { id: "a-role", title: "What a role defines" },
+  { id: "a-egress", title: "Network access is an allowlist" },
+  { id: "a-keys", title: "Credentials stay on the host" },
+  { id: "a-terminals", title: "Terminals through your SSH CA" },
+  { id: "a-sso", title: "Browser access through single sign-on" },
+  { id: "a-updates", title: "Updates and secret rotation" },
+  { id: "a-architecture", title: "Architecture" },
+  { id: "a-changes", title: "What each change affects" },
+  { id: "a-ui", title: "The terminal console" },
+  { id: "a-cases", title: "Where teams use reef" },
+  { id: "a-stack", title: "Works with what you already run" },
+  { id: "a-integration", title: "Clawbits: what the integration uses" },
+  { id: "a-git", title: "Clawbits: how the systems communicate" },
+  { id: "a-status", title: "Status and limits" },
+  { id: "a-docs", title: "Documentation" },
 ];

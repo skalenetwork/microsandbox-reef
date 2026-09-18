@@ -1,10 +1,10 @@
 ---
-type Props = { section?: string; title?: string; lead?: string; class?: string };
+type Props = { id?: string; section?: string; title?: string; lead?: string; class?: string };
 
-const { section, title, lead, class: klass } = Astro.props;
+const { id, section, title, lead, class: klass } = Astro.props;
 ---
 
-<section class:list={["slide", klass]}>
+<section id={id} class:list={["slide", klass]}>
   <div class="frame">
     {
       (section || title || lead) && (
@@ -18,6 +18,7 @@ const { section, title, lead, class: klass } = Astro.props;
     <div class="body">
       <slot />
     </div>
+    {klass?.includes("appendix") && <a class="back" href="#appendix">Appendix</a>}
     <p class="n" aria-hidden="true"></p>
   </div>
 </section>

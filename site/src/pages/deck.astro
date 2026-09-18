@@ -21,8 +21,8 @@ import clawbitsShot from "../assets/deck/clawbits.webp";
 import terminal from "../assets/deck/terminal.webp";
 import { description, docs, latest, repo, url } from "../content";
 import {
-  benefits, cases, changes, clawbits, comparison, controls, gaps, integration, invariants,
-  notes, parts, questions, reach, request, role, shifts, stack, status, steps, terminalConsole,
+  appendix, benefits, cases, changes, clawbits, comparison, controls, integration, invariants,
+  notes, parts, problem, questions, reach, request, role, stack, status, steps, terminalConsole,
 } from "../deck";
 import "../styles.css";
 
@@ -31,11 +31,10 @@ const summary = "Why organizations run AI agents with reef: the policy model, th
 const path = "/deck";
 const icon = await getImage({ src: logo, width: 64, format: "png" });
 const contents = [
-  { n: "02", title: "The case", text: "What changed, and what existing controls miss" },
-  { n: "06", title: "The product", text: "Roles, microVMs, the three controls" },
-  { n: "13", title: "Where it fits", text: "Use cases, your stack, the runtime" },
-  { n: "17", title: "Case study", text: "Clawbits, a product built on reef" },
-  { n: "20", title: "The system", text: "Architecture, sign-on, limits" },
+  { n: "02", title: "The problem", text: "What changed, and why existing controls miss it" },
+  { n: "03", title: "The product", text: "Roles, microVMs, three controls" },
+  { n: "06", title: "Proof", text: "Clawbits, and the runtime underneath" },
+  { n: "09", title: "Appendix", text: "Detail on any of it, one click away" },
 ];
 ---
 
@@ -96,53 +95,27 @@ const contents = [
         </ol>
       </Slide>
 
-      <Slide class="aside"
-        section="The case"
-        title="How agents are deployed today"
-        lead="They are long-running software with access to your systems."
+      <Slide
+        class="aside"
+        id="problem"
+        section="The problem"
+        title="Agents act on their own"
+        lead="They are long-running software with access to your systems, not chat windows."
       >
         <dl class="rows">
-          {shifts.map((item) => (
+          {problem.map((item) => (
             <div>
               <dt>{item.title}</dt>
               <dd>{item.text}</dd>
             </div>
           ))}
         </dl>
-      </Slide>
-
-      <Slide class="aside"
-        section="The case"
-        title="Why configuration is not a control"
-        lead="Settings that live inside the agent depend on the agent to honour them."
-      >
-        <dl class="rows">
-          {gaps.map((item) => (
-            <div>
-              <dt>{item.title}</dt>
-              <dd>{item.text}</dd>
-            </div>
-          ))}
-        </dl>
-      </Slide>
-
-      <Slide class="aside"
-        section="The case"
-        title="Questions before an agent goes live"
-        lead="Security and platform teams need clear answers. reef turns each one into a setting you can review."
-      >
-        <dl class="rows">
-          {questions.map((item) => (
-            <div>
-              <dt>{item.q}</dt>
-              <dd>{item.a}</dd>
-            </div>
-          ))}
-        </dl>
+        <p class="label jump">Appendix: <a href="#a-questions">Questions before an agent goes live</a></p>
       </Slide>
 
       <Slide
-        section="The case"
+        id="reef"
+        section="The product"
         title="What reef is"
         lead="A policy layer for agents you run yourself. The rules are applied by the runtime, not by the agent."
       >
@@ -155,9 +128,11 @@ const contents = [
             </div>
           ))}
         </div>
+        <p class="label jump">Appendix: <a href="#a-role">What a role defines</a> · <a href="#a-architecture">Architecture</a></p>
       </Slide>
 
       <Slide
+        id="launch"
         section="The product"
         title="From an approved role to a running agent"
         lead="A platform team defines agent types. Teams launch agents from them without a ticket."
@@ -174,10 +149,135 @@ const contents = [
             ))}
           </div>
         </div>
+        <p class="label jump">Appendix: <a href="#a-role">What a role defines</a> · <a href="#a-cases">Where teams use reef</a></p>
       </Slide>
 
       <Slide
+        id="controls"
         section="The product"
+        title="Three controls, enforced outside the agent"
+        lead="None of them depends on the agent's own configuration or good behaviour."
+      >
+        <div class="visual wide"><Controls /></div>
+        <div class="cols">
+          {controls.map((item) => (
+            <div class="item">
+              <b>{item.title}</b>
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </div>
+        <p class="label jump">Appendix: <a href="#a-egress">Network allowlist</a> · <a href="#a-keys">Credentials</a> · <a href="#a-terminals">Terminals</a> · <a href="#a-sso">Browser access</a></p>
+      </Slide>
+
+      <Slide
+        id="clawbits"
+        section="Proof"
+        title="Clawbits, a team workspace built on reef"
+        lead="Any member launches an agent from the app and it joins their channels. The agents run on the organization's own servers."
+      >
+        <div class="side shots">
+          <figure class="shot">
+            <Image src={clawbitsShot} widths={[700, 1400]} sizes="(min-width: 900px) 55vw, 100vw" loading="lazy" alt="The Clawbits reef settings page: one machine running six agents, each with its owner and status, beside a list of recent activity." />
+            <figcaption>One machine running six agents, with their owners, health and recent activity.</figcaption>
+          </figure>
+          <div class="stack-list">
+            {clawbits.map((item) => (
+              <div class="item">
+                <b>{item.title}</b>
+                <p>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p class="label jump">Appendix: <a href="#a-integration">What the integration uses</a> · <a href="#a-git">How the systems communicate</a></p>
+      </Slide>
+
+      <Slide
+        id="runtime"
+        section="Proof"
+        title="Built on microsandbox"
+        lead="Isolation comes from microsandbox, an open-source microVM runtime under the Apache-2.0 license. We chose it because it combines the four properties agents need in one runtime."
+      >
+        <div class="tbl">
+        <table class="cmp">
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              {comparison.columns.map((column) => <th scope="col">{column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.rows.map((row) => (
+              <tr>
+                <th scope="row">{row.k}</th>
+                {row.v.map((cell) => <td>{cell}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+        <p class="label">
+          Several runtimes advertise similar features. In our August 2026 review, each alternative fell short on
+          something reef needs. reef adds the layer above: role files, reviewed versions, fleets, durable agent records
+          and one console across hosts.
+        </p>
+        <p class="label jump">Appendix: <a href="#a-architecture">Architecture</a> · <a href="#a-status">Status and limits</a></p>
+      </Slide>
+
+      <Slide
+        class="aside"
+        id="summary"
+        section="Summary"
+        title="What organizations get"
+      >
+        <dl class="rows">
+          {benefits.map((item) => (
+            <div>
+              <dt>{item.title}</dt>
+              <dd>{item.text}</dd>
+            </div>
+          ))}
+        </dl>
+        <p class="label jump">Appendix: <a href="#a-stack">Works with what you already run</a> · <a href="#a-status">Status and limits</a></p>
+      </Slide>
+
+      <Slide
+        class="aside"
+        id="appendix"
+        title="Appendix"
+        lead="Detail on anything above. Every line jumps straight to its slide, in the PDF as well as the browser."
+      >
+        <ol class="index">
+          {appendix.map((item) => (
+            <li>
+              <a href={`#${item.id}`}>{item.title}</a>
+            </li>
+          ))}
+        </ol>
+      </Slide>
+
+      <Slide
+        class="aside appendix"
+        id="a-questions"
+        section="Appendix"
+        title="Questions before an agent goes live"
+        lead="Security and platform teams need clear answers. reef turns each one into a setting you can review."
+      >
+        <dl class="rows">
+          {questions.map((item) => (
+            <div>
+              <dt>{item.q}</dt>
+              <dd>{item.a}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide
+        class="appendix"
+        id="a-role"
+        section="Appendix"
         title="What a role defines"
         lead="A reviewer reads it once. Every agent created from it inherits it."
       >
@@ -206,7 +306,9 @@ const contents = [
       </Slide>
 
       <Slide
-        section="The product"
+        class="appendix"
+        id="a-egress"
+        section="Appendix"
         title="Network access is an allowlist"
         lead="A role lists the domains an agent may reach. Everything else is refused at DNS, outside the guest, so the rule holds even if the agent ignores its own settings."
       >
@@ -223,7 +325,9 @@ const contents = [
       </Slide>
 
       <Slide
-        section="The product"
+        class="appendix"
+        id="a-keys"
+        section="Appendix"
         title="Credentials stay on the host"
         lead="A secret is a reference bound to one domain. The agent holds a placeholder; the runtime swaps in the value on the way out."
       >
@@ -235,12 +339,18 @@ const contents = [
               <code>reef secret rotate</code> pushes a changed value into every running agent that binds it. Each agent
               records the key and the reference, never the value.
             </p>
+            <p>
+              Declaring a secret turns on TLS interception for the whole VM, and the shipped roles then skip browser
+              certificate checks. <a href={url("/blog/egress-allowlist")}>What an egress allowlist costs</a>
+            </p>
           </div>
         </div>
       </Slide>
 
       <Slide
-        section="The product"
+        class="appendix"
+        id="a-terminals"
+        section="Appendix"
         title="Terminals through your SSH CA"
         lead="reef adds no accounts, keys or auth of its own. Your certificate authority says who someone is, and reef decides which agents that identity may open."
       >
@@ -260,7 +370,26 @@ const contents = [
       </Slide>
 
       <Slide
-        section="The product"
+        class="appendix"
+        id="a-sso"
+        section="Appendix"
+        title="Browser access through single sign-on"
+        lead="reef publishes agent ports on loopback only. Cloudflare Access handles sign-in and cloudflared dials out from the host, so nothing connects in."
+      >
+        <div class="visual wide"><Sso /></div>
+        <ol class="steps">
+          {request.map((step) => <li>{step}</li>)}
+        </ol>
+        <p class="label">
+          Cloudflare is one option. Any sign-on proxy that is the only path to the port works.
+          <a href={url("/docs/enterprise/cloudflare-access")}>Setup guide</a>
+        </p>
+      </Slide>
+
+      <Slide
+        class="appendix"
+        id="a-updates"
+        section="Appendix"
         title="Updates and secret rotation"
         lead="A role change builds the new VM and swaps only when it is ready. Secret values come from the store you already run."
       >
@@ -277,151 +406,9 @@ const contents = [
       </Slide>
 
       <Slide
-        section="The product"
-        title="The terminal console"
-        lead="reef ui shows every agent across your hosts: role version, resources, network policy, ports and history."
-      >
-        <div class="side shots">
-          <figure class="shot">
-            <Image src={terminal} widths={[700, 1400]} sizes="(min-width: 900px) 55vw, 100vw" loading="lazy" alt="reef ui in a terminal showing one OpenClaw agent: role version, image, owner, running state, resources, volume, egress, ports and recent events." />
-          </figure>
-          <div class="stack-list">
-            {terminalConsole.map((item) => (
-              <div class="item">
-                <b>{item.title}</b>
-                <p>{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Slide>
-
-      <Slide class="aside" section="Where it fits" title="Where teams use reef" lead="Each example matches a role that ships in the repo.">
-        <div class="cols two">
-          {cases.map((item) => (
-            <div class="item">
-              <b>{item.title}</b>
-              <p>{item.text}</p>
-              <p class="tags">{item.tags.map((tag) => <span class="tag">{tag}</span>)}</p>
-            </div>
-          ))}
-        </div>
-      </Slide>
-
-      <Slide class="aside" section="Where it fits" title="Works with what you already run">
-        <dl class="rows">
-          {stack.map((item) => (
-            <div>
-              <dt>{item.k}</dt>
-              <dd>{item.v}</dd>
-            </div>
-          ))}
-        </dl>
-      </Slide>
-
-      <Slide
-        section="Where it fits"
-        title="Built on microsandbox"
-        lead="Isolation comes from microsandbox, an open-source microVM runtime under the Apache-2.0 license. We chose it because it combines the four properties agents need in one runtime."
-      >
-        <div class="tbl">
-        <table class="cmp">
-          <thead>
-            <tr>
-              <th scope="col"></th>
-              {comparison.columns.map((column) => <th scope="col">{column}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {comparison.rows.map((row) => (
-              <tr>
-                <th scope="row">{row.k}</th>
-                {row.v.map((cell) => <td>{cell}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-        <p class="label">
-          Several runtimes advertise similar features. In our August 2026 review, each alternative fell short on
-          something reef needs. reef adds the layer above: role files, reviewed versions, fleets, durable agent records
-          and one console across hosts.
-        </p>
-      </Slide>
-
-      <Slide class="aside" section="Where it fits" title="What organizations get">
-        <dl class="rows">
-          {benefits.map((item) => (
-            <div>
-              <dt>{item.title}</dt>
-              <dd>{item.text}</dd>
-            </div>
-          ))}
-        </dl>
-      </Slide>
-
-      <Slide
-        section="Case study"
-        title="Clawbits, a team workspace built on reef"
-        lead="Any member launches an agent from the app and it joins their channels. The agents run on the organization's own servers."
-      >
-        <div class="side shots">
-          <figure class="shot">
-            <Image src={clawbitsShot} widths={[700, 1400]} sizes="(min-width: 900px) 55vw, 100vw" loading="lazy" alt="The Clawbits reef settings page: one machine running six agents, each with its owner and status, beside a list of recent activity." />
-            <figcaption>One machine running six agents, with their owners, health and recent activity.</figcaption>
-          </figure>
-          <div class="stack-list">
-            {clawbits.map((item) => (
-              <div class="item">
-                <b>{item.title}</b>
-                <p>{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Slide>
-
-      <Slide class="aside"
-        section="Case study"
-        title="What the integration uses"
-        lead="Each thing the product needed maps onto a primitive reef already had."
-      >
-        <dl class="rows">
-          <div class="head">
-            <dt class="label">What Clawbits needed</dt>
-            <dd class="label">What it uses</dd>
-          </div>
-          {integration.map((item) => (
-            <div>
-              <dt>{item.k}</dt>
-              <dd>{item.v}</dd>
-            </div>
-          ))}
-        </dl>
-        <p class="label">
-          Identity is a one-time signup token, valid for seven days. The agent spends it at first boot and keeps its own
-          key on its state volume, so the file is dead weight afterwards and a recreate returns as the same agent.
-        </p>
-      </Slide>
-
-      <Slide
-        section="Case study"
-        title="How Clawbits and reef communicate"
-        lead="Clawbits writes agent files to your private repository. Each host pulls every 30 seconds and pushes its status back."
-      >
-        <div class="visual wide"><Bus /></div>
-        <div class="cols four">
-          {reach.map((item) => (
-            <div class="item">
-              <b>{item.k}</b>
-              <p>{item.v}</p>
-            </div>
-          ))}
-        </div>
-      </Slide>
-
-      <Slide
-        section="The system"
+        class="appendix"
+        id="a-architecture"
+        section="Appendix"
         title="Architecture"
         lead="reef is a command-line tool with no daemon. Each command updates the agent record, compares it with the running VM and applies the difference."
       >
@@ -437,27 +424,9 @@ const contents = [
       </Slide>
 
       <Slide
-        section="The system"
-        title="Where each control is enforced"
-        lead="None of them depends on the agent's own configuration or good behaviour."
-      >
-        <div class="visual wide"><Controls /></div>
-        <div class="cols">
-          {controls.map((item) => (
-            <div class="item">
-              <b>{item.title}</b>
-              <p>{item.text}</p>
-            </div>
-          ))}
-        </div>
-        <p class="label">
-          The cost is explicit: declaring a secret turns on TLS interception for the whole VM, and the shipped roles
-          then skip browser certificate checks. <a href={url("/blog/egress-allowlist")}>What an egress allowlist costs</a>
-        </p>
-      </Slide>
-
-      <Slide
-        section="The system"
+        class="appendix"
+        id="a-changes"
+        section="Appendix"
         title="What each change affects"
         lead="Volumes are the durable part. Everything else is rebuilt from the record."
       >
@@ -489,21 +458,110 @@ const contents = [
       </Slide>
 
       <Slide
-        section="The system"
-        title="Browser access through single sign-on"
-        lead="reef publishes agent ports on loopback only. Cloudflare Access handles sign-in and cloudflared dials out from the host, so nothing connects in."
+        class="appendix"
+        id="a-ui"
+        section="Appendix"
+        title="The terminal console"
+        lead="reef ui shows every agent across your hosts: role version, resources, network policy, ports and history."
       >
-        <div class="visual wide"><Sso /></div>
-        <ol class="steps">
-          {request.map((step) => <li>{step}</li>)}
-        </ol>
+        <div class="side shots">
+          <figure class="shot">
+            <Image src={terminal} widths={[700, 1400]} sizes="(min-width: 900px) 55vw, 100vw" loading="lazy" alt="reef ui in a terminal showing one OpenClaw agent: role version, image, owner, running state, resources, volume, egress, ports and recent events." />
+          </figure>
+          <div class="stack-list">
+            {terminalConsole.map((item) => (
+              <div class="item">
+                <b>{item.title}</b>
+                <p>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Slide>
+
+      <Slide
+        class="aside appendix"
+        id="a-cases"
+        section="Appendix"
+        title="Where teams use reef"
+        lead="Each example matches a role that ships in the repo."
+      >
+        <div class="cols two">
+          {cases.map((item) => (
+            <div class="item">
+              <b>{item.title}</b>
+              <p>{item.text}</p>
+              <p class="tags">{item.tags.map((tag) => <span class="tag">{tag}</span>)}</p>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide
+        class="aside appendix"
+        id="a-stack"
+        section="Appendix"
+        title="Works with what you already run"
+      >
+        <dl class="rows">
+          {stack.map((item) => (
+            <div>
+              <dt>{item.k}</dt>
+              <dd>{item.v}</dd>
+            </div>
+          ))}
+        </dl>
+      </Slide>
+
+      <Slide
+        class="aside appendix"
+        id="a-integration"
+        section="Appendix"
+        title="Clawbits: what the integration uses"
+        lead="Each thing the product needed maps onto a primitive reef already had."
+      >
+        <dl class="rows">
+          <div class="head">
+            <dt class="label">What Clawbits needed</dt>
+            <dd class="label">What it uses</dd>
+          </div>
+          {integration.map((item) => (
+            <div>
+              <dt>{item.k}</dt>
+              <dd>{item.v}</dd>
+            </div>
+          ))}
+        </dl>
         <p class="label">
-          Cloudflare is one option. Any sign-on proxy that is the only path to the port works.
-          <a href={url("/docs/enterprise/cloudflare-access")}>Setup guide</a>
+          Identity is a one-time signup token, valid for seven days. The agent spends it at first boot and keeps its own
+          key on its state volume, so the file is dead weight afterwards and a recreate returns as the same agent.
         </p>
       </Slide>
 
-      <Slide class="aside" section="The system" title="Status and limits">
+      <Slide
+        class="appendix"
+        id="a-git"
+        section="Appendix"
+        title="Clawbits: how the systems communicate"
+        lead="Clawbits writes agent files to your private repository. Each host pulls every 30 seconds and pushes its status back."
+      >
+        <div class="visual wide"><Bus /></div>
+        <div class="cols four">
+          {reach.map((item) => (
+            <div class="item">
+              <b>{item.k}</b>
+              <p>{item.v}</p>
+            </div>
+          ))}
+        </div>
+      </Slide>
+
+      <Slide
+        class="aside appendix"
+        id="a-status"
+        section="Appendix"
+        title="Status and limits"
+      >
         <div class="cols">
           {status.map((column) => (
             <div class="item">
@@ -516,7 +574,13 @@ const contents = [
         </div>
       </Slide>
 
-      <Slide class="aside" title="Documentation" lead="Everything in this deck is documented, and the source is public.">
+      <Slide
+        class="aside appendix"
+        id="a-docs"
+        section="Appendix"
+        title="Documentation"
+        lead="Everything in this deck is documented, and the source is public."
+      >
         <div class="cols four docs">
           <section class="item">
             <p class="label">Start</p>
@@ -630,7 +694,7 @@ const contents = [
     max-width: var(--page);
     margin-inline: auto;
     padding: 0 var(--gutter) var(--bar);
-    counter-reset: slide;
+    counter-reset: slide appendix;
   }
 
   .slide {
@@ -647,7 +711,14 @@ const contents = [
     border: 1px solid var(--line);
     border-radius: var(--radius);
     scroll-snap-align: center;
+  }
+
+  .slide:not(.appendix) {
     counter-increment: slide;
+  }
+
+  .slide.appendix {
+    counter-increment: appendix;
   }
 
   .frame {
@@ -738,6 +809,59 @@ const contents = [
 
   .n::before {
     content: counter(slide, decimal-leading-zero);
+  }
+
+  .appendix .n::before {
+    content: "A" counter(appendix, decimal-leading-zero);
+  }
+
+  .back {
+    position: absolute;
+    left: 3em;
+    bottom: 2.5em;
+    color: var(--text-2);
+  }
+
+  .jump {
+    position: absolute;
+    left: 3em;
+    bottom: 2.5em;
+  }
+
+  .jump a {
+    color: var(--text);
+  }
+
+  .index {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(8, auto);
+    gap: 0 3em;
+    padding: 0;
+    list-style: none;
+    counter-reset: entry;
+  }
+
+  .index li {
+    display: grid;
+    grid-template-columns: 3.5em minmax(0, 1fr);
+    gap: 1em;
+    padding: 0.5em 0;
+    border-top: 1px solid var(--line);
+    counter-increment: entry;
+  }
+
+  .index li::before {
+    content: "A" counter(entry, decimal-leading-zero);
+    color: var(--text-2);
+  }
+
+  .index a {
+    text-decoration: none;
+  }
+
+  .index a:hover {
+    text-decoration: underline;
   }
 
   .cover .n {
@@ -1025,6 +1149,15 @@ const contents = [
     .n {
       right: 1.5em;
       bottom: 1.5em;
+    }
+
+    .back {
+      left: 1.5em;
+      bottom: 1.5em;
+    }
+
+    .jump {
+      position: static;
     }
 
     .cols,
