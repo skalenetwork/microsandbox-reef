@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.2] - 2026-09-18
+
+### Fixed
+- Upgrade to microsandbox 0.7.2 and shrink reef migrate
+
+
 ## [0.15.1] - 2026-09-17
 
 ### Fixed
