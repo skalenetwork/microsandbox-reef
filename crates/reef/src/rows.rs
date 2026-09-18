@@ -50,6 +50,9 @@ impl RoleDetail {
             )
         }));
         rows.push(("egress", egress(&role.network.egress)));
+        if !role.network.host.is_empty() {
+            rows.push(("host", host_ports(&role.network.host)));
+        }
         rows.extend(role.secrets.iter().map(|(key, binding)| {
             (
                 "secret",
@@ -122,6 +125,7 @@ pub struct AgentDetail {
     pub fleet: bool,
     pub resources: AgentResources,
     pub egress: Vec<Domain>,
+    pub host: Vec<u16>,
     pub secrets: BTreeMap<EnvKey, SecretBinding>,
     pub volumes: BTreeMap<VolumeName, String>,
     pub desired: Desired,
@@ -170,6 +174,9 @@ impl AgentDetail {
                 .map(|(entry, name)| ("volume", format!("{entry} {name}"))),
         );
         rows.push(("egress", egress(&self.egress)));
+        if !self.host.is_empty() {
+            rows.push(("host", host_ports(&self.host)));
+        }
         rows.extend(self.secrets.iter().map(|(key, binding)| {
             (
                 "secret",
@@ -199,6 +206,14 @@ impl AgentDetail {
 fn capacity(vcpus: u8, memory_mib: u32, disk_gib: Option<u32>) -> String {
     let disk = disk_gib.map_or(String::new(), |gib| format!(", {gib} GiB disk"));
     format!("{vcpus} vcpu, {memory_mib} MiB{disk}")
+}
+
+pub fn host_ports(ports: &[u16]) -> String {
+    ports
+        .iter()
+        .map(u16::to_string)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn egress(domains: &[Domain]) -> String {
@@ -319,6 +334,7 @@ egress = ["example.com"]
                 max_pids: None,
             },
             egress: vec!["example.com".parse().unwrap()],
+            host: vec![8000],
             secrets: BTreeMap::new(),
             volumes: BTreeMap::from([("data".parse().unwrap(), "reef-vol-echo-1-data".to_owned())]),
             desired: Desired::Running,
@@ -335,7 +351,7 @@ egress = ["example.com"]
         round_trips(
             &detail,
             &format!(
-                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","role_current":true,"image":"alpine","owner":"dmytro","fleet":false,"resources":{{"vcpus":2,"memory_mib":1024,"disk_gib":null,"max_pids":null}},"egress":["example.com"],"secrets":{{}},"volumes":{{"data":"reef-vol-echo-1-data"}},"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
+                r#"{{"name":"echo-1","role":"echo","role_digest":"{digest}","role_current":true,"image":"alpine","owner":"dmytro","fleet":false,"resources":{{"vcpus":2,"memory_mib":1024,"disk_gib":null,"max_pids":null}},"egress":["example.com"],"host":[8000],"secrets":{{}},"volumes":{{"data":"reef-vol-echo-1-data"}},"desired":"running","state":"failed","reason":"boom","generation":2,"applied_generation":1,"applied_digest":null,"vm":"stopped","sandbox":"reef-echo-1","ports":{{}},"env":{{"FOO":"bar"}}}}"#
             ),
         );
     }

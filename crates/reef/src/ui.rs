@@ -1042,6 +1042,7 @@ mod tests {
                 max_pids: None,
             },
             egress: Vec::new(),
+            host: Vec::new(),
             secrets: BTreeMap::new(),
             volumes: BTreeMap::new(),
             desired: Desired::Running,

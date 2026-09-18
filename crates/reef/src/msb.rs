@@ -13,7 +13,7 @@ use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox,
     SshStdioStream, Volume,
 };
-use reef_core::{Domain, EnvKey, Host, VmStatus};
+use reef_core::{Domain, EnvKey, Host, Network, VmStatus};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -138,7 +138,7 @@ impl Vmm for Msb {
             builder =
                 builder.patch(|patch| patch.text(path.as_str(), file.content(), file.mode(), true));
         }
-        let policy = network_policy(&role.network.egress)?;
+        let policy = network_policy(&role.network)?;
         builder = builder.network(|n| n.policy(policy).max_tcp_connections(MAX_TCP_CONNECTIONS));
         for secret in &config.secrets {
             builder = builder.secret(|s| {
@@ -477,22 +477,32 @@ async fn tunnel(client: Arc<AgentClient>, socket: tokio::net::TcpStream, guest: 
     result
 }
 
-fn network_policy(domains: &[Domain]) -> Result<NetworkPolicy> {
-    if domains.iter().any(Domain::is_any) {
-        return Ok(NetworkPolicy::from_profiles([NetworkProfile::Public]));
-    }
-    let mut exact = Vec::new();
-    let mut suffixes = Vec::new();
-    for domain in domains {
-        match domain.wildcard_suffix() {
-            Some(suffix) => suffixes.push(suffix),
-            None => exact.push(domain.as_str()),
+fn network_policy(network: &Network) -> Result<NetworkPolicy> {
+    let mut policy = if network.egress.iter().any(Domain::is_any) {
+        NetworkPolicy::from_profiles([NetworkProfile::Public])
+    } else {
+        let mut exact = Vec::new();
+        let mut suffixes = Vec::new();
+        for domain in &network.egress {
+            match domain.wildcard_suffix() {
+                Some(suffix) => suffixes.push(suffix),
+                None => exact.push(domain.as_str()),
+            }
         }
+        NetworkPolicy::builder()
+            .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
+            .build()
+            .context("network policy")?
+    };
+    if !network.host.is_empty() {
+        let ports = network.host.clone();
+        let host = NetworkPolicy::builder()
+            .egress(move |rule| rule.tcp().ports(ports).allow_host())
+            .build()
+            .context("host policy")?;
+        policy.rules.extend(host.rules);
     }
-    NetworkPolicy::builder()
-        .egress(move |rule| rule.allow_domains(exact).allow_domain_suffixes(suffixes))
-        .build()
-        .context("network policy")
+    Ok(policy)
 }
 
 fn map_status(status: SandboxStatus) -> VmStatus {
@@ -604,12 +614,19 @@ mod tests {
         assert_eq!(bind_address("7F"), None);
     }
 
+    fn policy(egress: &[&str], host: &[u16]) -> NetworkPolicy {
+        network_policy(&Network {
+            egress: egress.iter().map(|d| d.parse().unwrap()).collect(),
+            host: host.to_vec(),
+        })
+        .unwrap()
+    }
+
     #[test]
     fn only_allowed_names_resolve_and_star_reaches_only_the_public_internet() {
         use microsandbox::NetworkAction::{Allow, Deny};
         let rules = |egress: &[&str]| {
-            let domains: Vec<Domain> = egress.iter().map(|d| d.parse().unwrap()).collect();
-            let policy = network_policy(&domains).unwrap();
+            let policy = policy(egress, &[]);
             assert_eq!(
                 (policy.default_egress, policy.default_ingress),
                 (Deny, Allow)
@@ -632,5 +649,18 @@ mod tests {
             rules(&["example.com", "*.acme.dev"]),
             [("Domain", Allow), ("DomainSuffix", Allow)]
         );
+    }
+
+    #[test]
+    fn host_ports_are_tcp_scoped_so_the_dns_allowlist_still_holds() {
+        for egress in [&["*"][..], &["example.com"][..]] {
+            let policy = policy(egress, &[8000]);
+            let host = policy.rules.last().unwrap();
+            assert!(format!("{:?}", host.destination).contains("Host"));
+            assert_eq!(format!("{:?}", host.protocols), "[Tcp]");
+            assert_eq!(host.ports.len(), 1);
+            assert!(format!("{:?}", host.ports).contains("8000"));
+        }
+        assert_eq!(policy(&["example.com"], &[]).rules.len(), 1);
     }
 }

@@ -66,11 +66,16 @@ Invariants:
   about; private (RFC 1918, CGNAT, ULA), link-local and cloud metadata
   addresses stay denied, and a secret's host binding still holds, so an unrestricted role
   spends secrets without reading them.
-- The host's loopback is never a destination. No role allows the gateway or
-  loopback groups, so no agent reaches a service the host binds to loopback,
-  another agent's published port included, whatever its egress list says. DNS
-  is the one exception, because the guest's resolver is the sandbox gateway. A
-  service on the host's public address is as reachable as any public host.
+- The host is a destination only for the ports a role names. Without
+  `network.host` no agent reaches a service the host binds to loopback, another
+  agent's published port included, whatever its egress list says; DNS is the one
+  exception, because the guest's resolver is the sandbox gateway. `host = [8000]`
+  opens TCP to those host ports at `host.microsandbox.internal` and nothing
+  else: the rule is port-scoped, so it never widens the DNS allowlist, 53 is
+  refused at parse, and `role apply` warns. A host port is as strong as the
+  service behind it: open one that can reach the internet and the egress list
+  stops meaning anything. A service on the host's public address is as reachable
+  as any public host.
 - `agent serve` and `agent ssh` refuse an agent that is not meant to run or
   whose VM is not up.
 - Drift is explicit: `generation != applied_generation` is visible in

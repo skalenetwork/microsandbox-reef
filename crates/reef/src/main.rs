@@ -14,7 +14,7 @@ use reef_core::{
     Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, Lifecycle, Role, RoleName,
     SecretRef, VmStatus, parse_fleet, parse_role,
 };
-use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow};
+use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow, host_ports};
 use secrets::Secrets;
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
@@ -343,6 +343,13 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                                 role.name
                             );
                         }
+                        if !role.network.host.is_empty() {
+                            eprintln!(
+                                "warn   {} reaches the host on {} via host.microsandbox.internal",
+                                role.name,
+                                host_ports(&role.network.host)
+                            );
+                        }
                     }
                     Err(e) => {
                         failed = true;
@@ -555,6 +562,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 fleet: agent.fleet,
                 resources: resources.into(),
                 egress: network.egress,
+                host: network.host,
                 secrets,
                 volumes,
                 desired: agent.spec.desired,

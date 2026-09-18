@@ -73,6 +73,8 @@ pub struct Resources {
 #[serde(deny_unknown_fields)]
 pub struct Network {
     pub egress: Vec<Domain>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host: Vec<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -218,6 +220,15 @@ impl Role {
                 r#"network.egress: "*" allows every public host, so it must stand alone"#
                     .to_owned(),
             );
+        }
+        for port in &self.network.host {
+            match port {
+                0 => out.push("network.host: port cannot be 0".to_owned()),
+                53 => {
+                    out.push("network.host: 53 is the guest's resolver, not a host port".to_owned())
+                }
+                _ => {}
+            }
         }
         for (key, binding) in &self.secrets {
             if key.as_str().starts_with("MSB_") {
@@ -371,6 +382,19 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
 
         let problems = invalid(&egress(r#"["*", "github.com"]"#));
         assert!(problems[0].contains("stand alone"), "{problems:?}");
+    }
+
+    #[test]
+    fn host_ports_are_an_opt_in_list() {
+        let host = |line: &str| GOOD.replace("[secrets]", &format!("{line}\n\n[secrets]"));
+
+        assert!(parse_role(GOOD).unwrap().network.host.is_empty());
+        assert_eq!(
+            parse_role(&host("host = [8000]")).unwrap().network.host,
+            [8000]
+        );
+        assert!(invalid(&host("host = [0]"))[0].contains("cannot be 0"));
+        assert!(invalid(&host("host = [53]"))[0].contains("resolver"));
     }
 
     #[test]

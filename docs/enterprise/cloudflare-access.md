@@ -48,9 +48,9 @@ request carrying an `Origin` header must also match
 `gateway.controlUi.allowedOrigins`.
 
 So the boundary is that **only `cloudflared` can reach the agent's port**. reef
-gets you most of the way: published ports bind to host loopback, and every role
-is denied the host and loopback groups whatever its egress list says, so one
-agent cannot reach another's port. What is left is the host itself, which is why
+gets you most of the way: published ports bind to host loopback, and a role that
+does not name host ports in `network.host` is denied the host and loopback
+groups whatever its egress list says, so one agent cannot reach another's port. What is left is the host itself, which is why
 `cloudflared` gets its own account below.
 
 `trustedProxies` is `172.16.0.0/12` because reef's relay re-injects each

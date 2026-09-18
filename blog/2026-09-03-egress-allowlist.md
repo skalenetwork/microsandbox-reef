@@ -71,9 +71,10 @@ domain is pinning that address, and only for as long as the record's TTL.
 Anything that hardcodes IPs will not work. Usually that is exactly what you
 want. Once in a while it is a surprise.
 
-The host is not reachable either, and that part is not up for negotiation. An
-agent cannot get to the reef host's loopback or to another agent's published
-port, whatever its egress list says.
+The host is not reachable either, unless the role names the ports it wants:
+`host = [8000]` opens those host ports over TCP and nothing else. Leave it out,
+and an agent cannot get to the reef host's loopback or to another agent's
+published port, whatever its egress list says.
 
 ## What I would put in on day one
 

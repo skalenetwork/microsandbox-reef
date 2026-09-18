@@ -87,6 +87,19 @@ image, resources, the dashboard port and a volume: twenty lines in all.
 Approve that version once and every agent created from it inherits the policy,
 while agents left on an older version read as stale.
 
+A service on the reef host stays out of reach unless the role names its port:
+
+```toml
+[network]
+egress = ["openrouter.ai"]
+host = [8000]
+```
+
+That opens TCP 8000 on the host, reachable from the guest as
+`host.microsandbox.internal:8000`, and nothing else - not the host's other
+ports, not another agent's published port. `role apply` warns on every apply,
+and the port you open is as strong as the service behind it.
+
 Put the key in `~/.local/state/reef/secrets.toml` (`chmod 600`):
 
 ```toml
