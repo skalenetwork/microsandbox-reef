@@ -1,20 +1,21 @@
 version = 1
 
-# Fork of roles/clawbits-openclaw.toml, regenerated from it. Changes:
+# Fork of the canonical clawbits-openclaw role. Three changes:
 #   - name, so both can live in reef.db side by side
-#   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144. Measured here: the cap
-#     is a ceiling, not a reservation, and 2048 MiB is NOT enough - OpenClaw's
-#     pressure threshold is ~27% of guest RAM and the guest hangs.
-#   - model pinned to deepseek: the start script re-applies defaults.json on
-#     every boot, so setting it by hand does not survive a restart.
-#   - image ahead of upstream, on Dmytro's word that the tag is good.
-#     Drop this difference once upstream catches up.
+#   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144 (the cap is a ceiling,
+#     not a reservation; 2048 MiB hangs the guest)
+#   - model pinned to deepseek: defaults.json is re-applied on every boot, so
+#     setting it by hand does not survive a restart
 #
-# Regenerate after every pull; never hand-edit. Upstream changes structurally -
-# the `agents` volume that keeps chat sessions was added there on 2026-09-17,
-# and a fork edited by hand would silently keep losing them.
+# The canonical role now lives in the PRIVATE repo skalenetwork/clawbits-reef-store
+# (roles/clawbits-openclaw.toml), no longer in microsandbox-reef - the copy in
+# .claude/clawbits-openclaw-upstream.toml is the last one seen, 2026-09-22.
+# Regenerate from it; never hand-edit. Blocks have appeared there that a hand
+# edit would have missed: the `agents` volume for chat sessions, the premigrate
+# restore, and the guard that deletes a zero-byte openclaw.json (without it an
+# interrupted boot wedges the agent permanently while the VM reports healthy).
 name  = "log-hunter"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.4-pl0.17.27-gdd95c44"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.5-pl0.18.0-g9bea604"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
@@ -39,6 +40,17 @@ if [ "$(id -u)" = 0 ]; then
 else
   oc() { /usr/local/bin/node /app/openclaw.mjs "$@"; }
 fi
+if [ -d /home/node/.openclaw/state/premigrate ]; then
+  cp -a /home/node/.openclaw/state/premigrate/. /home/node/.openclaw/
+  rm -rf /home/node/.openclaw/state/premigrate
+fi
+# A boot interrupted while the engine was writing this file leaves it empty, and
+# every `oc` call then refuses to run ("OpenClaw config is invalid"), starting
+# with the one below — so the agent never recovers on its own, boot after boot,
+# while the VM still reports healthy. The image ships without a config, so
+# removing a zero-byte one is exactly the state a first boot expects.
+cfg=/home/node/.openclaw/openclaw.json
+[ ! -e "$cfg" ] || [ -s "$cfg" ] || rm -f "$cfg"
 oc config set mcp.apps.sandboxOrigin \
   "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
 exec /usr/local/bin/clawbits-start
