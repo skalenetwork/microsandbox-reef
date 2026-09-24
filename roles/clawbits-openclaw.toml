@@ -26,6 +26,13 @@ if [ "$(id -u)" = 0 ]; then
 else
   oc() { /usr/local/bin/node /app/openclaw.mjs "$@"; }
 fi
+# A boot interrupted while the engine was writing this file leaves it empty, and
+# every `oc` call then refuses to run ("OpenClaw config is invalid"), starting
+# with the one below, so the agent never recovers on its own, boot after boot,
+# while the VM still reports healthy. The image ships without a config, so
+# removing a zero-byte one is exactly the state a first boot expects.
+cfg=/home/node/.openclaw/openclaw.json
+[ ! -e "$cfg" ] || [ -s "$cfg" ] || rm -f "$cfg"
 oc config set mcp.apps.sandboxOrigin \
   "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
 exec /usr/local/bin/clawbits-start
