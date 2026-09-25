@@ -103,8 +103,8 @@ The split is compiler-enforced: decision logic cannot touch I/O.
 Flow: `role apply` parses and validates a role (line-and-column errors, all
 problems at once), stores it content-addressed by digest, and marks it active.
 `agent create` writes the record, then reconciles: the pure function
-`plan(Facts) -> &[Action]` decides Create/Modify/Start/Stop/Remove from three
-inputs (desired state, what drifted, observed VM), and the executor applies
+`plan(desired, vm, drift) -> &[Action]` decides Create/Modify/Start/Stop/Remove
+from the desired and observed VM state and what drifted, and the executor applies
 each action through the `Vmm` trait. `msb.rs` is the only module that names a
 microsandbox type: the blast door for a pre-1.0 dependency pinned exactly to
 its latest release, each bump gated on the real-VM smoke test.

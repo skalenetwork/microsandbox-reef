@@ -1,11 +1,10 @@
 use anyhow::{Context, Result, bail};
 use reef_core::SecretRef;
-use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-#[derive(Clone)]
 pub struct Secret(String);
 
 impl Secret {
@@ -20,28 +19,12 @@ impl fmt::Debug for Secret {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(try_from = "String")]
-struct CommandTemplate(String);
-
-impl TryFrom<String> for CommandTemplate {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.trim().is_empty() {
-            return Err("resolver command is empty".to_owned());
-        }
-        if !value.contains("{name}") {
-            return Err(format!("resolver command must contain {{name}}: {value:?}"));
-        }
-        Ok(Self(value))
-    }
-}
+type Stores = BTreeMap<String, BTreeMap<String, String>>;
 
 pub struct Secrets {
     path: PathBuf,
-    resolvers: BTreeMap<String, CommandTemplate>,
-    stores: BTreeMap<String, BTreeMap<String, String>>,
+    resolvers: BTreeMap<String, String>,
+    stores: Stores,
 }
 
 impl Secrets {
@@ -83,27 +66,30 @@ impl Secrets {
     }
 }
 
-type Parsed = (
-    BTreeMap<String, CommandTemplate>,
-    BTreeMap<String, BTreeMap<String, String>>,
-);
-
-fn parse(text: &str) -> Result<Parsed, String> {
+fn parse(text: &str) -> Result<(BTreeMap<String, String>, Stores), String> {
     let mut table: toml::Table = toml::from_str(text).map_err(|e| e.message().to_owned())?;
-    let resolvers = match table.remove("resolvers") {
+    let resolvers: BTreeMap<String, String> = match table.remove("resolvers") {
         Some(value) => value
             .try_into()
             .map_err(|e: toml::de::Error| e.message().to_owned())?,
         None => BTreeMap::new(),
     };
+    if let Some(command) = resolvers
+        .values()
+        .find(|command| !command.contains("{name}"))
+    {
+        return Err(format!(
+            "resolver command must contain {{name}}: {command:?}"
+        ));
+    }
     let stores = toml::Value::Table(table)
         .try_into()
         .map_err(|_: toml::de::Error| "store values must be strings".to_owned())?;
     Ok((resolvers, stores))
 }
 
-fn run(template: &CommandTemplate, secret: &SecretRef) -> Result<Secret> {
-    let command = template.0.replace("{name}", secret.name());
+fn run(template: &str, secret: &SecretRef) -> Result<Secret> {
+    let command = template.replace("{name}", secret.name());
     let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(&command)
@@ -125,9 +111,7 @@ fn run(template: &CommandTemplate, secret: &SecretRef) -> Result<Secret> {
     Ok(Secret(value))
 }
 
-#[cfg(unix)]
 fn require_private(path: &Path, meta: &std::fs::Metadata) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
     let mode = meta.mode();
     if mode & 0o077 != 0 {
         bail!(
@@ -136,11 +120,6 @@ fn require_private(path: &Path, meta: &std::fs::Metadata) -> Result<()> {
             mode & 0o777
         );
     }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn require_private(_path: &Path, _meta: &std::fs::Metadata) -> Result<()> {
     Ok(())
 }
 

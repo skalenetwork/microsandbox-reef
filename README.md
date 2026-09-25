@@ -332,10 +332,9 @@ itself.
 
 The guest is told its own name as `REEF_AGENT` and its published ports as
 `REEF_PORT_<NAME>` (`control-ui` becomes `REEF_PORT_CONTROL_UI`) - between
-them, its own URL, which reef picks and the guest cannot otherwise know. The
-`REEF_` prefix is reserved: role `[env]` and `--env` reject it, so the
-namespace is always reef's. `MSB_` belongs to the runtime and is rejected the
-same way, in role `[env]`, role `[secrets]` and a fleet entry's `env`.
+them, its own URL, which reef picks and the guest cannot otherwise know.
+`REEF_` is reserved for reef and `MSB_` for the runtime: no env or secret key
+may start with either.
 
 ### Volumes
 

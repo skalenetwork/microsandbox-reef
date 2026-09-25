@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,17 +36,17 @@ pub struct Msb {
 }
 
 impl Msb {
-    pub fn new(state_dir: &Path) -> Self {
-        microsandbox::set_default_backend(LocalBackend::lazy());
+    pub fn new(state_dir: &Path) -> Result<Self> {
+        microsandbox::set_default_backend(LocalBackend::lazy()?);
         let canonical = state_dir
             .canonicalize()
             .unwrap_or_else(|_| state_dir.to_owned());
         let hash = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
         let state_id = format!("{hash:x}")[..8].to_owned();
-        Self {
+        Ok(Self {
             state_id,
             host_key: state_dir.join("ssh_host_ed25519_key"),
-        }
+        })
     }
 
     async fn owned(&self) -> Result<Vec<SandboxHandle>> {
@@ -73,7 +74,7 @@ impl Vmm for Msb {
     async fn status(&self, name: &str) -> Result<Option<VmStatus>> {
         match Sandbox::get(name).await {
             Ok(handle) => Ok(Some(map_status(handle.status_snapshot()))),
-            Err(e) if is_not_found(&e) => Ok(None),
+            Err(MicrosandboxError::SandboxNotFound(_)) => Ok(None),
             Err(e) => Err(e.into()),
         }
     }
@@ -139,7 +140,11 @@ impl Vmm for Msb {
                 builder.patch(|patch| patch.text(path.as_str(), file.content(), file.mode(), true));
         }
         let policy = network_policy(&role.network)?;
-        builder = builder.network(|n| n.policy(policy).max_tcp_connections(MAX_TCP_CONNECTIONS));
+        builder = builder.network(|n| {
+            n.policy(policy)
+                .strict(false)
+                .max_tcp_connections(MAX_TCP_CONNECTIONS)
+        });
         for secret in &config.secrets {
             builder = builder.secret(|s| {
                 s.env(secret.key.as_str())
@@ -149,7 +154,7 @@ impl Vmm for Msb {
         }
         match builder.create_detached().await {
             Ok(_) => Ok(()),
-            Err(e) if is_already_exists(&e) => bail!(
+            Err(MicrosandboxError::SandboxAlreadyExists(_)) => bail!(
                 "sandbox {} already exists and this reef state dir does not track it; \
                  refusing to replace it (remove it with `msb rm` if it is really yours)",
                 config.name
@@ -182,7 +187,7 @@ impl Vmm for Msb {
     async fn remove(&self, name: &str) -> Result<()> {
         let Some(handle) = self.owned().await?.into_iter().find(|h| h.name() == name) else {
             return match Sandbox::get(name).await {
-                Err(e) if is_not_found(&e) => Ok(()),
+                Err(MicrosandboxError::SandboxNotFound(_)) => Ok(()),
                 Err(e) => Err(e.into()),
                 Ok(_) => bail!(
                     "sandbox {name} exists but was not created by this reef state dir; \
@@ -517,14 +522,6 @@ fn map_status(status: SandboxStatus) -> VmStatus {
     }
 }
 
-fn is_not_found(error: &MicrosandboxError) -> bool {
-    matches!(error, MicrosandboxError::SandboxNotFound(_))
-}
-
-fn is_already_exists(error: &MicrosandboxError) -> bool {
-    matches!(error, MicrosandboxError::SandboxAlreadyExists(_))
-}
-
 pub fn vm_not_running(sandbox: &str) -> String {
     format!(
         "the VM is not running; read what the guest printed with `msb logs {sandbox} --source all`"
@@ -554,17 +551,13 @@ pub fn doctor() -> Result<()> {
     }
     let home = microsandbox::config::config()?.home();
     println!("state  {}", home.display());
-    #[cfg(unix)]
+    if let Ok(meta) = std::fs::metadata(&home)
+        && meta.mode() & 0o077 != 0
     {
-        use std::os::unix::fs::MetadataExt;
-        if let Ok(meta) = std::fs::metadata(&home)
-            && meta.mode() & 0o077 != 0
-        {
-            println!(
-                "warn   {} is readable by other users; sandbox configs there hold secret values - chmod 700 it",
-                home.display()
-            );
-        }
+        println!(
+            "warn   {} is readable by other users; sandbox configs there hold secret values - chmod 700 it",
+            home.display()
+        );
     }
     Ok(())
 }

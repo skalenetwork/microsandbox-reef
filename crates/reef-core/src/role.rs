@@ -3,7 +3,6 @@ use crate::name::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
 
 const FILES_MAX: usize = 64 * 1024;
 
@@ -85,46 +84,12 @@ pub struct SecretBinding {
     pub host: Host,
 }
 
-#[derive(Debug)]
-pub enum RoleError {
-    Toml(toml::de::Error),
-    Version(u32),
-    Invalid(Vec<String>),
-}
-
-impl fmt::Display for RoleError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Toml(e) => e.fmt(f),
-            Self::Version(v) => {
-                write!(
-                    f,
-                    "unsupported role version {v} (this reef reads version 1)"
-                )
-            }
-            Self::Invalid(problems) => f.write_str(&problems.join("\n")),
-        }
-    }
-}
-
-impl std::error::Error for RoleError {}
-
-#[derive(Deserialize)]
-struct VersionPeek {
-    version: u32,
-}
-
-pub fn parse_role(text: &str) -> Result<Role, RoleError> {
-    let peek: VersionPeek = toml::from_str(text).map_err(RoleError::Toml)?;
-    if peek.version != 1 {
-        return Err(RoleError::Version(peek.version));
-    }
-    let role: Role = toml::from_str(text).map_err(RoleError::Toml)?;
+pub fn parse_role(text: &str) -> Result<Role, String> {
+    let role: Role = crate::parse_v1(text, "role")?;
     let problems = role.problems();
-    if problems.is_empty() {
-        Ok(role)
-    } else {
-        Err(RoleError::Invalid(problems))
+    match problems.is_empty() {
+        true => Ok(role),
+        false => Err(problems.join("\n")),
     }
 }
 
@@ -149,11 +114,6 @@ impl Role {
             }
         }
         for (key, value) in &self.env {
-            if key.as_str().starts_with("MSB_") {
-                out.push(format!(
-                    "env.{key}: the MSB_ prefix is reserved by the runtime"
-                ));
-            }
             if self.secrets.contains_key(key) {
                 out.push(format!("env.{key}: also declared in secrets"));
             }
@@ -231,11 +191,6 @@ impl Role {
             }
         }
         for (key, binding) in &self.secrets {
-            if key.as_str().starts_with("MSB_") {
-                out.push(format!(
-                    "secrets.{key}: the MSB_ prefix is reserved by the runtime"
-                ));
-            }
             let host = binding.host.as_str();
             if !self.network.egress.iter().any(|rule| rule.covers(host)) {
                 out.push(format!(
@@ -252,10 +207,11 @@ mod tests {
     use super::*;
 
     fn invalid(text: &str) -> Vec<String> {
-        match parse_role(text) {
-            Err(RoleError::Invalid(problems)) => problems,
-            other => panic!("expected invalid, got {other:?}"),
-        }
+        parse_role(text)
+            .unwrap_err()
+            .lines()
+            .map(str::to_owned)
+            .collect()
     }
 
     const GOOD: &str = r#"
@@ -302,7 +258,7 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
 
         let err =
             parse_role(&volumes(r#"data = { dest = "opt/data", size-mib = 1 }"#)).unwrap_err();
-        assert!(err.to_string().contains("guest path"), "{err}");
+        assert!(err.contains("guest path"), "{err}");
 
         let problems = invalid(&volumes(r#"data = { dest = "/opt/data", size-mib = 0 }"#));
         assert!(problems[0].contains("size-mib"), "{problems:?}");
@@ -317,18 +273,13 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
     fn rejects_unknown_fields_with_position() {
         let text = GOOD.replace("[resources]", "surprise = true\n[resources]");
         let err = parse_role(&text).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("surprise"), "{msg}");
-        assert!(msg.contains("line"), "{msg}");
+        assert!(err.contains("surprise") && err.contains("line"), "{err}");
     }
 
     #[test]
     fn rejects_future_versions_before_shape_errors() {
         let text = GOOD.replace("version = 1", "version = 2\nnew-field = true");
-        match parse_role(&text) {
-            Err(RoleError::Version(2)) => {}
-            other => panic!("expected version error, got {other:?}"),
-        }
+        assert!(invalid(&text)[0].starts_with("unsupported role version 2"));
     }
 
     #[test]
@@ -348,10 +299,10 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
         let host = |value: &str| GOOD.replace(r#"host = "raw.githubusercontent.com""#, value);
 
         let err = parse_role(&host(r#"host = "*.githubusercontent.com""#)).unwrap_err();
-        assert!(err.to_string().contains("*.githubusercontent.com"), "{err}");
+        assert!(err.contains("*.githubusercontent.com"), "{err}");
 
         let err = parse_role(&host(r#"host = "*""#)).unwrap_err();
-        assert!(err.to_string().contains('*'), "{err}");
+        assert!(err.contains('*'), "{err}");
     }
 
     #[test]
@@ -429,10 +380,10 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
         assert_eq!(role.env.len(), 1);
 
         let text = GOOD.replace("[network]", "[env]\nMSB_HOME = \"/tmp\"\n\n[network]");
-        assert!(invalid(&text)[0].contains("MSB_"));
+        assert!(parse_role(&text).unwrap_err().contains("MSB_HOME"));
 
         let text = GOOD.replace("ANTHROPIC_API_KEY =", "MSB_KEY =");
-        assert!(invalid(&text)[0].contains("MSB_"));
+        assert!(parse_role(&text).unwrap_err().contains("MSB_KEY"));
 
         let text = GOOD.replace("[network]", "[env]\nBAD = \"a\\u0000b\"\n\n[network]");
         assert!(invalid(&text)[0].contains("NUL"));
@@ -466,7 +417,7 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
         assert!(problems[0].contains("0o777"), "{problems:?}");
 
         let err = parse_role(&files(r#""etc/config.json" = "x""#)).unwrap_err();
-        assert!(err.to_string().contains("guest path"), "{err}");
+        assert!(err.contains("guest path"), "{err}");
 
         let shadowed = files(
             r#""/root/.gitconfig" = "x"

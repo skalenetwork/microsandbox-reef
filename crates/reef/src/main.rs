@@ -11,10 +11,10 @@ mod vmm;
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use reef_core::{
-    Agent, AgentName, AgentSpec, Desired, Digest, Domain, EnvKey, Lifecycle, Role, RoleName,
-    SecretRef, VmStatus, parse_fleet, parse_role,
+    Agent, AgentName, AgentSpec, Digest, Domain, EnvKey, Lifecycle, Role, RoleName, SecretRef,
+    VmStatus, parse_fleet, parse_role,
 };
-use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow, host_ports};
+use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow, joined};
 use secrets::Secrets;
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
@@ -64,15 +64,8 @@ enum Command {
     Reconcile,
     /// Show the event log
     Events {
-        /// Only this agent's events
-        #[arg(long)]
-        agent: Option<AgentName>,
-        /// Only events after this id
-        #[arg(long, value_name = "ID")]
-        after: Option<i64>,
-        /// Keep only the newest N
-        #[arg(long, value_name = "N")]
-        limit: Option<u32>,
+        #[command(flatten)]
+        filter: EventFilter,
         /// Print JSON
         #[arg(long)]
         json: bool,
@@ -149,8 +142,8 @@ enum AgentCommand {
         #[arg(long)]
         owner: Option<String>,
         /// KEY=VALUE for this agent, overriding the role's [env] (repeatable)
-        #[arg(long, value_name = "KEY=VALUE")]
-        env: Vec<EnvPair>,
+        #[arg(long, value_name = "KEY=VALUE", value_parser = env_pair)]
+        env: Vec<(EnvKey, String)>,
     },
     /// List agents with their observed VM state
     List {
@@ -178,7 +171,8 @@ enum AgentCommand {
     Forward {
         name: AgentName,
         /// GUEST or LOCAL:GUEST (LOCAL 0 picks a free port); omit to list what the VM is listening on
-        ports: Vec<PortSpec>,
+        #[arg(value_parser = port_pair)]
+        ports: Vec<(u16, u16)>,
     },
     /// Open an interactive terminal in an agent's VM over SSH
     Ssh { name: AgentName },
@@ -199,46 +193,19 @@ enum AgentCommand {
     },
 }
 
-#[derive(Clone)]
-struct EnvPair(EnvKey, String);
-
-impl std::str::FromStr for EnvPair {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let (key, value) = value
-            .split_once('=')
-            .ok_or_else(|| format!("expected KEY=VALUE, got {value:?}"))?;
-        Ok(Self(key.parse()?, value.to_owned()))
-    }
+fn env_pair(value: &str) -> Result<(EnvKey, String), String> {
+    let (key, value) = value
+        .split_once('=')
+        .ok_or_else(|| format!("expected KEY=VALUE, got {value:?}"))?;
+    Ok((key.parse()?, value.to_owned()))
 }
 
-#[derive(Clone, Copy)]
-struct PortSpec {
-    local: u16,
-    guest: u16,
-}
-
-impl std::str::FromStr for PortSpec {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let (local, guest) = match value.split_once(':') {
-            Some((local, guest)) => (local, guest),
-            None => (value, value),
-        };
-        let port = |text: &str| {
-            text.parse::<u16>()
-                .map_err(|_| format!("invalid port: {text:?}"))
-        };
-        let spec = Self {
-            local: port(local)?,
-            guest: port(guest)?,
-        };
-        if spec.guest == 0 {
-            return Err("guest port cannot be 0".to_owned());
-        }
-        Ok(spec)
+fn port_pair(value: &str) -> Result<(u16, u16), String> {
+    let (local, guest) = value.split_once(':').unwrap_or((value, value));
+    let port = |text: &str| text.parse().map_err(|_| format!("invalid port: {text:?}"));
+    match (port(local)?, port(guest)?) {
+        (_, 0) => Err("guest port cannot be 0".to_owned()),
+        pair => Ok(pair),
     }
 }
 
@@ -253,8 +220,12 @@ impl Ctx {
         Ok(Self {
             store: Store::open(&dir.join("reef.db"))?,
             secrets: Secrets::load(&dir.join("secrets.toml"))?,
-            vmm: msb::Msb::new(dir),
+            vmm: msb::Msb::new(dir)?,
         })
+    }
+
+    async fn reconcile(&self, name: &AgentName) -> Result<Agent> {
+        reconcile::reconcile(&self.store, &self.secrets, &self.vmm, name).await
     }
 }
 
@@ -282,20 +253,7 @@ async fn main() -> Result<()> {
         Command::Agent { command } => agent_command(Ctx::open(&dir)?, command).await,
         Command::Fleet { command } => fleet_command(Ctx::open(&dir)?, command).await,
         Command::Secret { command } => secret_command(Ctx::open(&dir)?, command).await,
-        Command::Events {
-            agent,
-            after,
-            limit,
-            json,
-        } => events_command(
-            Ctx::open(&dir)?,
-            EventFilter {
-                agent,
-                after,
-                limit,
-            },
-            json,
-        ),
+        Command::Events { filter, json } => events_command(Ctx::open(&dir)?, filter, json),
         Command::Doctor => {
             msb::doctor()?;
             print_names();
@@ -347,7 +305,7 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                             eprintln!(
                                 "warn   {} reaches the host on {} via host.microsandbox.internal",
                                 role.name,
-                                host_ports(&role.network.host)
+                                joined(&role.network.host)
                             );
                         }
                     }
@@ -404,11 +362,7 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                 agents: names(current),
                 stale: names(stale),
             };
-            emit(json, &detail, || {
-                for (label, value) in detail.rows() {
-                    row(label, value);
-                }
-            })
+            emit(json, &detail, || print_rows(detail.rows()))
         }
         RoleCommand::Rm { names } => {
             if names.is_empty() {
@@ -442,18 +396,14 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     owner: owner.unwrap_or_else(user),
                     role,
                     role_digest: digest,
-                    desired: Desired::Running,
-                    env: env
-                        .into_iter()
-                        .map(|EnvPair(key, value)| (key, value))
-                        .collect(),
+                    desired: VmStatus::Running,
+                    env: env.into_iter().collect(),
                 },
             );
             ctx.store.insert_agent(&agent)?;
             ctx.store
                 .record(&agent.name, "created", &agent.spec.owner)?;
-            let agent =
-                reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &agent.name).await?;
+            let agent = ctx.reconcile(&agent.name).await?;
             println!("{} {}", agent.name, agent.status.lifecycle.label());
             print_urls(&ctx.store, &agent)?;
             Ok(())
@@ -467,7 +417,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .collect();
             let mut agents = Vec::new();
             for agent in ctx.store.list_agents()? {
-                let sandbox = reconcile::sandbox_name(&agent.name);
+                let sandbox = agent.name.sandbox();
                 let vm = ctx.vmm.status(&sandbox).await?;
                 let synced = agent.reconciled();
                 let state = observed(&agent, vm, &sandbox).state();
@@ -524,14 +474,9 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                     agent = require_agent(&ctx, &name)?;
                 }
             }
-            let sandbox = reconcile::sandbox_name(&agent.name);
+            let sandbox = agent.name.sandbox();
             let vm = ctx.vmm.status(&sandbox).await?;
             let lifecycle = observed(&agent, vm, &sandbox);
-            let state = lifecycle.state();
-            let reason = match lifecycle {
-                Lifecycle::Failed { reason } => Some(reason),
-                _ => None,
-            };
             let ports = ctx.store.ports(&agent.name)?;
             let Role {
                 image,
@@ -548,7 +493,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             let volumes = volumes
                 .into_keys()
                 .map(|entry| {
-                    let name = reconcile::volume_name(&agent.name, &entry);
+                    let name = agent.name.volume(&entry);
                     (entry, name)
                 })
                 .collect();
@@ -566,8 +511,8 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 secrets,
                 volumes,
                 desired: agent.spec.desired,
-                state,
-                reason,
+                state: lifecycle.state(),
+                reason: lifecycle.reason().map(str::to_owned),
                 generation: agent.generation,
                 applied_generation: agent.status.applied_generation,
                 applied_digest: agent.status.applied_digest,
@@ -576,11 +521,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 ports,
                 env: agent.spec.env,
             };
-            emit(json, &detail, || {
-                for (label, value) in detail.rows() {
-                    row(label, value);
-                }
-            })?;
+            emit(json, &detail, || print_rows(detail.rows()))?;
             if wait && detail.reason.is_some() {
                 std::process::exit(1);
             }
@@ -588,15 +529,12 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
         }
         AgentCommand::Exec { name, command } => {
             require_agent(&ctx, &name)?;
-            let code = ctx
-                .vmm
-                .exec(&reconcile::sandbox_name(&name), &command)
-                .await?;
+            let code = ctx.vmm.exec(&name.sandbox(), &command).await?;
             std::process::exit(code);
         }
         AgentCommand::Forward { name, ports } if ports.is_empty() => {
             require_agent(&ctx, &name)?;
-            let listening = ctx.vmm.listening(&reconcile::sandbox_name(&name)).await?;
+            let listening = ctx.vmm.listening(&name.sandbox()).await?;
             if listening.is_empty() {
                 println!("{name} is not listening on any port");
                 return Ok(());
@@ -609,18 +547,11 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
         }
         AgentCommand::Forward { name, ports } => {
             require_agent(&ctx, &name)?;
-            let ports: Vec<(u16, u16)> = ports.iter().map(|p| (p.local, p.guest)).collect();
-            ctx.vmm
-                .forward(
-                    &reconcile::sandbox_name(&name),
-                    &reconcile::host_name(&name),
-                    &ports,
-                )
-                .await
+            ctx.vmm.forward(&name.sandbox(), &name.host(), &ports).await
         }
         AgentCommand::Ssh { name } => {
             let agent = require_agent(&ctx, &name)?;
-            let sandbox = reconcile::sandbox_name(&name);
+            let sandbox = name.sandbox();
             if !agent.spec.desired.live(ctx.vmm.status(&sandbox).await?) {
                 bail!("{name} is not running; start it with `reef agent start {name}`");
             }
@@ -645,7 +576,7 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             ctx.store
                 .set_role_digest(&name, &active, agent.generation)?;
             ctx.store.record(&name, "updated", active.as_str())?;
-            let agent = reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &name).await?;
+            let agent = ctx.reconcile(&name).await?;
             println!(
                 "{} {} on {}@{}",
                 agent.name,
@@ -655,8 +586,8 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
             );
             Ok(())
         }
-        AgentCommand::Start { name } => set_desired(&ctx, &name, Desired::Running).await,
-        AgentCommand::Stop { name } => set_desired(&ctx, &name, Desired::Stopped).await,
+        AgentCommand::Start { name } => set_desired(&ctx, &name, VmStatus::Running).await,
+        AgentCommand::Stop { name } => set_desired(&ctx, &name, VmStatus::Stopped).await,
         AgentCommand::Rm { names, volumes } => {
             if names.is_empty() {
                 bail!("no agents given");
@@ -667,10 +598,10 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .collect::<Result<_>>()?;
             for agent in &agents {
                 let name = &agent.name;
-                ctx.vmm.remove(&reconcile::sandbox_name(name)).await?;
+                ctx.vmm.remove(&name.sandbox()).await?;
                 if volumes {
                     for entry in ctx.store.role_volumes(&agent.spec.role)? {
-                        let volume = reconcile::volume_name(name, &entry);
+                        let volume = name.volume(&entry);
                         ctx.vmm.remove_volume(&volume).await?;
                         ctx.store.record(name, "volume-deleted", &volume)?;
                     }
@@ -699,7 +630,7 @@ fn events_command(ctx: Ctx, filter: EventFilter, json: bool) -> Result<()> {
 async fn reconcile_all(ctx: &Ctx) -> Result<()> {
     let mut failed = false;
     for agent in ctx.store.list_agents()? {
-        match reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &agent.name).await {
+        match ctx.reconcile(&agent.name).await {
             Ok(agent) => println!("{} {}", agent.name, agent.status.lifecycle.label()),
             Err(e) => {
                 eprintln!("{}: {e:#}", agent.name);
@@ -713,12 +644,12 @@ async fn reconcile_all(ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-async fn set_desired(ctx: &Ctx, name: &AgentName, desired: Desired) -> Result<()> {
+async fn set_desired(ctx: &Ctx, name: &AgentName, desired: VmStatus) -> Result<()> {
     let agent = require_agent(ctx, name)?;
     if agent.spec.desired != desired {
         ctx.store.set_desired(name, desired, agent.generation)?;
     }
-    let agent = reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, name).await?;
+    let agent = ctx.reconcile(name).await?;
     println!("{} {}", agent.name, agent.status.lifecycle.label());
     print_urls(&ctx.store, &agent)?;
     Ok(())
@@ -750,7 +681,7 @@ fn print_urls(store: &Store, agent: &Agent) -> Result<()> {
         return Ok(());
     }
     let ports = store.ports(&agent.name)?;
-    let host = reconcile::host_name(&agent.name);
+    let host = agent.name.host();
     let width = ports.keys().map(|p| p.as_str().len()).max().unwrap_or(0);
     for (name, port) in &ports {
         println!("  {:width$}  http://{host}:{port}", name.as_str());
@@ -769,8 +700,10 @@ fn print_names() {
     }
 }
 
-fn row(label: &str, value: impl std::fmt::Display) {
-    println!("{label:10} {value}");
+fn print_rows(rows: Vec<(&str, String)>) {
+    for (label, value) in rows {
+        println!("{label:10} {value}");
+    }
 }
 
 fn emit<T: serde::Serialize>(json: bool, value: &T, plain: impl FnOnce()) -> Result<()> {
@@ -819,18 +752,14 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
             eprintln!("{name}: fleet-managed but not declared here; --prune removes it");
             continue;
         }
-        match ctx.vmm.remove(&reconcile::sandbox_name(&name)).await {
-            Ok(()) => {
-                if ctx.store.delete_fleet_agent(&name)? {
-                    ctx.store.record(&name, "deleted", "fleet")?;
-                    println!("{name} removed");
-                }
-            }
-            Err(e) => {
-                eprintln!("{name}: {e:#}");
-                failed = true;
-            }
+        if let Err(e) = ctx.vmm.remove(&name.sandbox()).await {
+            eprintln!("{name}: {e:#}");
+            failed = true;
+            continue;
         }
+        ctx.store.delete_agent(&name)?;
+        ctx.store.record(&name, "deleted", "fleet")?;
+        println!("{name} removed");
     }
     for (name, entry) in desired {
         let digest = digests.remove(&name).expect("resolved above");
@@ -843,7 +772,7 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                         owner: entry.owner.unwrap_or_else(user),
                         role: entry.role,
                         role_digest: digest,
-                        desired: Desired::Running,
+                        desired: VmStatus::Running,
                         env: entry.env,
                     },
                 );
@@ -877,7 +806,7 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                 "updated"
             }
         };
-        match reconcile::reconcile(&ctx.store, &ctx.secrets, &ctx.vmm, &name).await {
+        match ctx.reconcile(&name).await {
             Ok(agent) => {
                 println!("{name} {outcome} ({})", agent.status.lifecycle.label());
                 if outcome == "created" {
@@ -905,7 +834,7 @@ async fn secret_command(ctx: Ctx, command: SecretCommand) -> Result<()> {
     let value = ctx.secrets.resolve(&secret)?;
     let mut failed = false;
     for (name, key, host) in bindings {
-        let sandbox = reconcile::sandbox_name(&name);
+        let sandbox = name.sandbox();
         let Some(vm) = ctx.vmm.status(&sandbox).await? else {
             println!("{name} has no VM; its next create resolves the new value");
             continue;
@@ -937,18 +866,12 @@ mod tests {
 
     #[test]
     fn port_specs_parse() {
-        let spec: PortSpec = "9119".parse().unwrap();
-        assert_eq!((spec.local, spec.guest), (9119, 9119));
-        let spec: PortSpec = "8080:9118".parse().unwrap();
-        assert_eq!((spec.local, spec.guest), (8080, 9118));
-        let spec: PortSpec = "0:80".parse().unwrap();
-        assert_eq!((spec.local, spec.guest), (0, 80));
-        assert!("".parse::<PortSpec>().is_err());
-        assert!("x:80".parse::<PortSpec>().is_err());
-        assert!("80:".parse::<PortSpec>().is_err());
-        assert!("80:0".parse::<PortSpec>().is_err());
-        assert!("0".parse::<PortSpec>().is_err());
-        assert!("70000".parse::<PortSpec>().is_err());
+        assert_eq!(port_pair("9119"), Ok((9119, 9119)));
+        assert_eq!(port_pair("8080:9118"), Ok((8080, 9118)));
+        assert_eq!(port_pair("0:80"), Ok((0, 80)));
+        for bad in ["", "x:80", "80:", "80:0", "0", "70000"] {
+            assert!(port_pair(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]
@@ -971,13 +894,11 @@ network = { egress = ["example.com"] }
 
     #[test]
     fn env_pairs_parse() {
-        let EnvPair(key, value) = "FOO=bar".parse().unwrap();
+        let (key, value) = env_pair("FOO=bar").unwrap();
         assert_eq!((key.as_str(), value.as_str()), ("FOO", "bar"));
-        let EnvPair(_, value) = "FOO=a=b".parse().unwrap();
-        assert_eq!(value, "a=b");
-        let EnvPair(_, value) = "FOO=".parse().unwrap();
-        assert_eq!(value, "");
-        assert!("FOO".parse::<EnvPair>().is_err());
-        assert!("lower=x".parse::<EnvPair>().is_err());
+        assert_eq!(env_pair("FOO=a=b").unwrap().1, "a=b");
+        assert_eq!(env_pair("FOO=").unwrap().1, "");
+        assert!(env_pair("FOO").is_err());
+        assert!(env_pair("lower=x").is_err());
     }
 }

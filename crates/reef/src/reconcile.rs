@@ -3,22 +3,9 @@ use crate::store::Store;
 use crate::vmm::{SecretEnv, VmConfig, Vmm, VolumeMount};
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Action, Agent, AgentName, Desired, EnvKey, Facts, Lifecycle, PortName, Role, VolumeName,
-    allocate_ports, plan,
+    Action, Agent, AgentName, EnvKey, Lifecycle, PortName, Role, allocate_ports, plan,
 };
 use std::collections::BTreeMap;
-
-pub fn sandbox_name(agent: &AgentName) -> String {
-    format!("reef-{agent}")
-}
-
-pub fn host_name(agent: &AgentName) -> String {
-    format!("{agent}.localhost")
-}
-
-pub fn volume_name(agent: &AgentName, entry: &VolumeName) -> String {
-    format!("reef-vol-{agent}-{entry}")
-}
 
 pub async fn reconcile<V: Vmm>(
     store: &Store,
@@ -29,25 +16,18 @@ pub async fn reconcile<V: Vmm>(
     let mut agent = store
         .get_agent(name)?
         .with_context(|| format!("no such agent: {name}"))?;
-    let sandbox = sandbox_name(name);
+    let sandbox = name.sandbox();
     let vm = vmm.status(&sandbox).await?;
     if agent.crashed(vm) {
         store.record(name, "exited", &sandbox)?;
     }
-    let steps = plan(Facts {
-        desired: agent.spec.desired,
-        drift: agent.drift(),
-        vm,
-    });
+    let steps = plan(agent.spec.desired, vm, agent.drift());
 
     let result = run(store, secrets, vmm, &mut agent, &sandbox, steps).await;
     agent.status.lifecycle = match result {
         Ok(()) => {
             agent.status.applied_generation = agent.generation;
-            match agent.spec.desired {
-                Desired::Running => Lifecycle::Running,
-                Desired::Stopped => Lifecycle::Stopped,
-            }
+            agent.spec.desired.into()
         }
         Err(ref e) => {
             let reason = format!("{e:#}");
@@ -68,17 +48,18 @@ async fn run<V: Vmm>(
     steps: &[Action],
 ) -> Result<()> {
     let role = match steps.contains(&Action::Create) || steps.contains(&Action::Modify) {
-        true => {
-            let role = store.role_version(&agent.spec.role_digest)?;
-            for key in agent.spec.env.keys() {
-                if role.secrets.contains_key(key) {
-                    bail!("agent env {key} collides with a role secret");
-                }
-            }
-            Some(role)
-        }
+        true => Some(store.role_version(&agent.spec.role_digest)?),
         false => None,
     };
+    if let Some(role) = &role
+        && let Some(key) = agent
+            .spec
+            .env
+            .keys()
+            .find(|key| role.secrets.contains_key(*key))
+    {
+        bail!("agent env {key} collides with a role secret");
+    }
     let mut config = None;
     if steps.contains(&Action::Create) {
         let role = role.as_ref().expect("plan pairs Create with a role");
@@ -186,7 +167,7 @@ fn vm_config<'a>(
             .volumes
             .iter()
             .map(|(entry, volume)| VolumeMount {
-                name: volume_name(&agent.name, entry),
+                name: agent.name.volume(entry),
                 dest: volume.dest.to_string(),
                 quota_mib: volume.size_mib,
             })
@@ -199,7 +180,7 @@ mod tests {
     use super::*;
     use crate::store::EventFilter;
     use anyhow::bail;
-    use reef_core::{AgentSpec, Desired, Digest, Drift, EnvKey, VmStatus, parse_role};
+    use reef_core::{AgentSpec, Digest, Drift, EnvKey, VmStatus, parse_role};
     use std::collections::HashMap;
     use std::sync::Mutex;
 
@@ -325,12 +306,12 @@ network = { egress = ["example.com"] }
         let vmm = FakeVmm::default();
         reconcile(&store, &secrets, &vmm, &name).await.unwrap();
 
-        store.set_desired(&name, Desired::Stopped, 1).unwrap();
+        store.set_desired(&name, VmStatus::Stopped, 1).unwrap();
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(agent.status.lifecycle, Lifecycle::Stopped);
         assert!(agent.reconciled());
 
-        store.set_desired(&name, Desired::Running, 2).unwrap();
+        store.set_desired(&name, VmStatus::Running, 2).unwrap();
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert!(agent.drift() == Drift::None && agent.reconciled());
         assert_eq!(agent.status.applied_generation, 3);
@@ -361,7 +342,7 @@ network = { egress = ["example.com"] }
         let (store, secrets, _digest, name) = setup();
         let vmm = FakeVmm::default();
         reconcile(&store, &secrets, &vmm, &name).await.unwrap();
-        store.set_desired(&name, Desired::Stopped, 1).unwrap();
+        store.set_desired(&name, VmStatus::Stopped, 1).unwrap();
         reconcile(&store, &secrets, &vmm, &name).await.unwrap();
 
         let next = import(
@@ -373,9 +354,9 @@ network = { egress = ["example.com"] }
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(agent.status.lifecycle, Lifecycle::Stopped);
         assert_eq!(agent.status.applied_digest, None, "no VM carries a role");
-        assert!(vmm.status(&sandbox_name(&name)).await.unwrap().is_none());
+        assert!(vmm.status(&name.sandbox()).await.unwrap().is_none());
 
-        store.set_desired(&name, Desired::Running, 3).unwrap();
+        store.set_desired(&name, VmStatus::Running, 3).unwrap();
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(agent.status.applied_digest, Some(next));
         assert!(agent.drift() == Drift::None && agent.reconciled());
@@ -391,7 +372,7 @@ network = { egress = ["example.com"] }
         vmm.vms
             .lock()
             .unwrap()
-            .insert(sandbox_name(&name), VmStatus::Stopped);
+            .insert(name.sandbox(), VmStatus::Stopped);
         let agent = reconcile(&store, &secrets, &vmm, &name).await.unwrap();
         assert_eq!(agent.status.lifecycle, Lifecycle::Running);
         assert_eq!(kinds(&store, &name), ["create", "exited", "start"]);
@@ -439,7 +420,7 @@ network = { egress = ["example.com"] }
         );
 
         assert_eq!(
-            unbuildable.status(&sandbox_name(&name)).await.unwrap(),
+            unbuildable.status(&name.sandbox()).await.unwrap(),
             Some(VmStatus::Running)
         );
         assert_eq!(kinds(&store, &name), ["create", "failed", "failed"]);
@@ -494,7 +475,7 @@ network = { egress = ["example.com"] }
                     owner: "test".to_owned(),
                     role: "echo".parse().unwrap(),
                     role_digest: digest.clone(),
-                    desired: Desired::Running,
+                    desired: VmStatus::Running,
                     env,
                 },
             ))

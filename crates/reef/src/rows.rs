@@ -1,10 +1,10 @@
-use crate::reconcile::host_name;
 use reef_core::{
-    AgentName, Desired, Digest, Domain, EnvKey, ImageRef, PortName, Resources, Role, RoleName,
+    AgentName, Digest, Domain, EnvKey, ImageRef, PortName, Resources, Role, RoleName,
     SecretBinding, State, VmStatus, VolumeName,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt::Display;
 
 #[derive(Serialize, Deserialize)]
 pub struct RoleRow {
@@ -32,44 +32,24 @@ impl RoleDetail {
             ("digest", self.digest.short().to_owned()),
             ("image", role.image.to_string()),
         ];
-        if let Some(init) = &role.init {
-            rows.push(("init", init.join(" ")));
-        }
+        rows.extend(role.init.as_ref().map(|init| ("init", init.join(" "))));
+        let resources = &role.resources;
         rows.push((
             "resources",
-            capacity(
-                role.resources.vcpus,
-                role.resources.memory_mib,
-                role.resources.disk_gib,
-            ),
+            capacity(resources.vcpus, resources.memory_mib, resources.disk_gib),
         ));
         rows.extend(role.volumes.iter().map(|(name, volume)| {
-            (
-                "volume",
-                format!("{name} {} {} MiB", volume.dest, volume.size_mib),
-            )
+            let size = volume.size_mib;
+            ("volume", format!("{name} {} {size} MiB", volume.dest))
         }));
-        rows.push(("egress", egress(&role.network.egress)));
-        if !role.network.host.is_empty() {
-            rows.push(("host", host_ports(&role.network.host)));
-        }
-        rows.extend(role.secrets.iter().map(|(key, binding)| {
-            (
-                "secret",
-                format!("{key}={} host={}", binding.secret, binding.host),
-            )
-        }));
-        rows.extend(
-            role.expose
-                .iter()
-                .map(|(name, port)| ("expose", format!("{name}={port}"))),
-        );
+        rows.extend(policy(
+            &role.network.egress,
+            &role.network.host,
+            &role.secrets,
+        ));
+        rows.extend(pairs("expose", &role.expose));
         rows.extend(role.files.keys().map(|path| ("file", path.to_string())));
-        rows.extend(
-            role.env
-                .iter()
-                .map(|(key, value)| ("env", format!("{key}={value}"))),
-        );
+        rows.extend(pairs("env", &role.env));
         rows.extend(self.agents.iter().map(|name| ("agent", name.to_string())));
         rows.extend(
             self.stale
@@ -88,7 +68,7 @@ pub struct AgentRow {
     pub role_current: bool,
     pub image: ImageRef,
     pub owner: String,
-    pub desired: Desired,
+    pub desired: VmStatus,
     pub state: State,
     pub vm: Option<VmStatus>,
     pub synced: bool,
@@ -128,7 +108,7 @@ pub struct AgentDetail {
     pub host: Vec<u16>,
     pub secrets: BTreeMap<EnvKey, SecretBinding>,
     pub volumes: BTreeMap<VolumeName, String>,
-    pub desired: Desired,
+    pub desired: VmStatus,
     pub state: State,
     pub reason: Option<String>,
     pub generation: u64,
@@ -147,6 +127,7 @@ impl AgentDetail {
             Some(reason) => format!("{}: {reason}", self.state.label()),
             None => self.state.label().to_owned(),
         };
+        let resources = &self.resources;
         let mut rows = vec![
             ("name", self.name.to_string()),
             (
@@ -161,11 +142,7 @@ impl AgentDetail {
             ("sandbox", self.sandbox.clone()),
             (
                 "resources",
-                capacity(
-                    self.resources.vcpus,
-                    self.resources.memory_mib,
-                    self.resources.disk_gib,
-                ),
+                capacity(resources.vcpus, resources.memory_mib, resources.disk_gib),
             ),
         ];
         rows.extend(
@@ -173,18 +150,9 @@ impl AgentDetail {
                 .iter()
                 .map(|(entry, name)| ("volume", format!("{entry} {name}"))),
         );
-        rows.push(("egress", egress(&self.egress)));
-        if !self.host.is_empty() {
-            rows.push(("host", host_ports(&self.host)));
-        }
-        rows.extend(self.secrets.iter().map(|(key, binding)| {
-            (
-                "secret",
-                format!("{key}={} host={}", binding.secret, binding.host),
-            )
-        }));
+        rows.extend(policy(&self.egress, &self.host, &self.secrets));
         if !self.ports.is_empty() {
-            let host = host_name(&self.name);
+            let host = self.name.host();
             let ports: Vec<String> = self
                 .ports
                 .iter()
@@ -192,11 +160,7 @@ impl AgentDetail {
                 .collect();
             rows.push(("ports", ports.join(" ")));
         }
-        rows.extend(
-            self.env
-                .iter()
-                .map(|(key, value)| ("env", format!("{key}={value}"))),
-        );
+        rows.extend(pairs("env", &self.env));
         let synced = self.generation == self.applied_generation;
         rows.push(("synced", if synced { "yes" } else { "drift" }.to_owned()));
         rows
@@ -208,23 +172,38 @@ fn capacity(vcpus: u8, memory_mib: u32, disk_gib: Option<u32>) -> String {
     format!("{vcpus} vcpu, {memory_mib} MiB{disk}")
 }
 
-pub fn host_ports(ports: &[u16]) -> String {
-    ports
-        .iter()
-        .map(u16::to_string)
-        .collect::<Vec<_>>()
-        .join(" ")
+fn policy(
+    egress: &[Domain],
+    host: &[u16],
+    secrets: &BTreeMap<EnvKey, SecretBinding>,
+) -> Vec<(&'static str, String)> {
+    let egress = match egress {
+        [] => "none".to_owned(),
+        _ => joined(egress),
+    };
+    let mut rows = vec![("egress", egress)];
+    if !host.is_empty() {
+        rows.push(("host", joined(host)));
+    }
+    rows.extend(secrets.iter().map(|(key, binding)| {
+        (
+            "secret",
+            format!("{key}={} host={}", binding.secret, binding.host),
+        )
+    }));
+    rows
 }
 
-fn egress(domains: &[Domain]) -> String {
-    if domains.is_empty() {
-        return "none".to_owned();
-    }
-    domains
-        .iter()
-        .map(Domain::as_str)
-        .collect::<Vec<_>>()
-        .join(" ")
+fn pairs<K: Display, V: Display>(
+    label: &'static str,
+    map: &BTreeMap<K, V>,
+) -> impl Iterator<Item = (&'static str, String)> {
+    map.iter()
+        .map(move |(key, value)| (label, format!("{key}={value}")))
+}
+
+pub fn joined<T: Display>(items: &[T]) -> String {
+    items.iter().map(T::to_string).collect::<Vec<_>>().join(" ")
 }
 
 #[derive(Serialize, Deserialize)]
@@ -306,7 +285,7 @@ egress = ["example.com"]
             role_current: false,
             image: "alpine".parse().unwrap(),
             owner: "dmytro".to_owned(),
-            desired: Desired::Running,
+            desired: VmStatus::Running,
             state: State::Running,
             vm: None,
             synced: true,
@@ -337,7 +316,7 @@ egress = ["example.com"]
             host: vec![8000],
             secrets: BTreeMap::new(),
             volumes: BTreeMap::from([("data".parse().unwrap(), "reef-vol-echo-1-data".to_owned())]),
-            desired: Desired::Running,
+            desired: VmStatus::Running,
             state: State::Failed,
             reason: Some("boom".to_owned()),
             generation: 2,

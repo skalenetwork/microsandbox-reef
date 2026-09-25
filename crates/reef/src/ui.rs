@@ -183,10 +183,6 @@ impl Row {
         }
     }
 
-    fn is_agent(&self) -> bool {
-        matches!(self, Self::Agent(..))
-    }
-
     fn verbs(&self) -> &'static [Verb] {
         match self {
             Self::Agent(..) => &[START, STOP, UPDATE, REMOVE],
@@ -498,7 +494,7 @@ impl App {
                 let [left, right] =
                     Layout::horizontal([Constraint::Min(0), Constraint::Percentage(42)])
                         .areas(body);
-                let split = row.is_agent();
+                let split = matches!(row, Row::Agent(..));
                 let area = if split { left } else { body };
                 frame.render_widget(self.detail(row, detail.as_ref()).scroll((*scroll, 0)), area);
                 if split {
@@ -817,7 +813,6 @@ mod tests {
     use crate::rows::AgentResources;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    use reef_core::Desired;
 
     fn agent(name: &str, state: State, synced: bool, ports: &[(&str, u16)]) -> AgentRow {
         AgentRow {
@@ -827,7 +822,7 @@ mod tests {
             role_current: synced,
             image: "alpine".parse().unwrap(),
             owner: "ana".to_owned(),
-            desired: Desired::Running,
+            desired: VmStatus::Running,
             state,
             vm: (state == State::Running).then_some(VmStatus::Running),
             synced,
@@ -1045,7 +1040,7 @@ mod tests {
             host: Vec::new(),
             secrets: BTreeMap::new(),
             volumes: BTreeMap::new(),
-            desired: Desired::Running,
+            desired: VmStatus::Running,
             state: State::Running,
             reason: None,
             generation: 1,

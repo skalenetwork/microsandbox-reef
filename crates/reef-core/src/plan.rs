@@ -1,4 +1,3 @@
-use crate::agent::Desired;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,6 +14,22 @@ impl VmStatus {
             Self::Stopped => "stopped",
         }
     }
+
+    pub fn live(self, vm: Option<Self>) -> bool {
+        self == Self::Running && vm == Some(Self::Running)
+    }
+}
+
+impl std::str::FromStr for VmStatus {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "running" => Ok(Self::Running),
+            "stopped" => Ok(Self::Stopped),
+            other => Err(format!("invalid vm status: {other:?}")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,13 +37,6 @@ pub enum Drift {
     None,
     Env,
     Role,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Facts {
-    pub desired: Desired,
-    pub drift: Drift,
-    pub vm: Option<VmStatus>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,20 +60,21 @@ impl Action {
     }
 }
 
-pub fn plan(facts: Facts) -> &'static [Action] {
+pub fn plan(desired: VmStatus, vm: Option<VmStatus>, drift: Drift) -> &'static [Action] {
     use Action::*;
-    match (facts.desired, facts.vm, facts.drift) {
-        (Desired::Running, None, _) => &[Create],
-        (Desired::Running, Some(_), Drift::Role) => &[Remove, Create],
-        (Desired::Running, Some(VmStatus::Running), Drift::Env) => &[Stop, Modify, Start],
-        (Desired::Running, Some(VmStatus::Stopped), Drift::Env) => &[Modify, Start],
-        (Desired::Running, Some(VmStatus::Stopped), Drift::None) => &[Start],
-        (Desired::Running, Some(VmStatus::Running), Drift::None) => &[],
-        (Desired::Stopped, Some(_), Drift::Role) => &[Remove],
-        (Desired::Stopped, Some(VmStatus::Running), Drift::Env) => &[Stop, Modify],
-        (Desired::Stopped, Some(VmStatus::Stopped), Drift::Env) => &[Modify],
-        (Desired::Stopped, Some(VmStatus::Running), Drift::None) => &[Stop],
-        (Desired::Stopped, _, _) => &[],
+    use VmStatus::{Running, Stopped};
+    match (desired, vm, drift) {
+        (Running, None, _) => &[Create],
+        (Running, Some(_), Drift::Role) => &[Remove, Create],
+        (Running, Some(Running), Drift::Env) => &[Stop, Modify, Start],
+        (Running, Some(Stopped), Drift::Env) => &[Modify, Start],
+        (Running, Some(Stopped), Drift::None) => &[Start],
+        (Running, Some(Running), Drift::None) => &[],
+        (Stopped, Some(_), Drift::Role) => &[Remove],
+        (Stopped, Some(Running), Drift::Env) => &[Stop, Modify],
+        (Stopped, Some(Stopped), Drift::Env) => &[Modify],
+        (Stopped, Some(Running), Drift::None) => &[Stop],
+        (Stopped, _, _) => &[],
     }
 }
 
@@ -73,39 +82,46 @@ pub fn plan(facts: Facts) -> &'static [Action] {
 mod tests {
     use super::*;
     use Action::*;
-
-    fn facts(desired: Desired, vm: Option<VmStatus>, drift: Drift) -> Facts {
-        Facts { desired, drift, vm }
-    }
+    use VmStatus::{Running, Stopped};
 
     #[test]
     fn every_case() {
-        let running = Desired::Running;
-        let stopped = Desired::Stopped;
-        let up = Some(VmStatus::Running);
-        let down = Some(VmStatus::Stopped);
-        let cases: &[(Facts, &[Action])] = &[
-            (facts(running, None, Drift::None), &[Create]),
-            (facts(running, None, Drift::Env), &[Create]),
-            (facts(running, None, Drift::Role), &[Create]),
-            (facts(running, up, Drift::None), &[]),
-            (facts(running, up, Drift::Env), &[Stop, Modify, Start]),
-            (facts(running, up, Drift::Role), &[Remove, Create]),
-            (facts(running, down, Drift::None), &[Start]),
-            (facts(running, down, Drift::Env), &[Modify, Start]),
-            (facts(running, down, Drift::Role), &[Remove, Create]),
-            (facts(stopped, None, Drift::None), &[]),
-            (facts(stopped, None, Drift::Env), &[]),
-            (facts(stopped, None, Drift::Role), &[]),
-            (facts(stopped, up, Drift::None), &[Stop]),
-            (facts(stopped, up, Drift::Env), &[Stop, Modify]),
-            (facts(stopped, up, Drift::Role), &[Remove]),
-            (facts(stopped, down, Drift::None), &[]),
-            (facts(stopped, down, Drift::Env), &[Modify]),
-            (facts(stopped, down, Drift::Role), &[Remove]),
+        let (up, down) = (Some(Running), Some(Stopped));
+        let cases: &[(VmStatus, Option<VmStatus>, Drift, &[Action])] = &[
+            (Running, None, Drift::None, &[Create]),
+            (Running, None, Drift::Env, &[Create]),
+            (Running, None, Drift::Role, &[Create]),
+            (Running, up, Drift::None, &[]),
+            (Running, up, Drift::Env, &[Stop, Modify, Start]),
+            (Running, up, Drift::Role, &[Remove, Create]),
+            (Running, down, Drift::None, &[Start]),
+            (Running, down, Drift::Env, &[Modify, Start]),
+            (Running, down, Drift::Role, &[Remove, Create]),
+            (Stopped, None, Drift::None, &[]),
+            (Stopped, None, Drift::Env, &[]),
+            (Stopped, None, Drift::Role, &[]),
+            (Stopped, up, Drift::None, &[Stop]),
+            (Stopped, up, Drift::Env, &[Stop, Modify]),
+            (Stopped, up, Drift::Role, &[Remove]),
+            (Stopped, down, Drift::None, &[]),
+            (Stopped, down, Drift::Env, &[Modify]),
+            (Stopped, down, Drift::Role, &[Remove]),
         ];
-        for (input, expected) in cases {
-            assert_eq!(plan(*input), *expected, "{input:?}");
+        for &(desired, vm, drift, expected) in cases {
+            assert_eq!(
+                plan(desired, vm, drift),
+                expected,
+                "{desired:?} {vm:?} {drift:?}"
+            );
         }
+    }
+
+    #[test]
+    fn only_an_agent_meant_to_run_with_its_vm_up_is_live() {
+        assert!(Running.live(Some(Running)));
+        assert!(!Running.live(Some(Stopped)));
+        assert!(!Running.live(None));
+        assert!(!Stopped.live(Some(Running)));
+        assert!(!Stopped.live(None));
     }
 }

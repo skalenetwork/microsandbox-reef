@@ -20,32 +20,17 @@ pub struct FleetAgent {
     pub env: BTreeMap<EnvKey, String>,
 }
 
-#[derive(Deserialize)]
-struct VersionPeek {
-    version: u32,
-}
-
 pub fn parse_fleet(text: &str) -> Result<Fleet, String> {
-    let peek: VersionPeek = toml::from_str(text).map_err(|e| e.to_string())?;
-    if peek.version != 1 {
-        return Err(format!(
-            "unsupported fleet version {} (this reef reads version 1)",
-            peek.version
-        ));
-    }
-    let fleet: Fleet = toml::from_str(text).map_err(|e| e.to_string())?;
+    let fleet: Fleet = crate::parse_v1(text, "fleet")?;
     for (name, agent) in &fleet.agents {
-        for (key, value) in &agent.env {
-            if key.as_str().starts_with("MSB_") {
-                return Err(format!(
-                    "agents.{name}.env.{key}: the MSB_ prefix is reserved by the runtime"
-                ));
-            }
-            if value.contains('\0') {
-                return Err(format!(
-                    "agents.{name}.env.{key}: NUL bytes are not allowed"
-                ));
-            }
+        if let Some(key) = agent
+            .env
+            .iter()
+            .find_map(|(k, v)| v.contains('\0').then_some(k))
+        {
+            return Err(format!(
+                "agents.{name}.env.{key}: NUL bytes are not allowed"
+            ));
         }
     }
     Ok(fleet)
@@ -86,6 +71,6 @@ role = "hermes"
         let nul = "version = 1\n[agents.a]\nrole = \"r\"\nenv = { K = \"a\\u0000b\" }\n";
         assert!(parse_fleet(nul).unwrap_err().contains("NUL"));
         let msb = "version = 1\n[agents.a]\nrole = \"r\"\nenv = { MSB_X = \"y\" }\n";
-        assert!(parse_fleet(msb).unwrap_err().contains("MSB_"));
+        assert!(parse_fleet(msb).unwrap_err().contains("MSB_X"));
     }
 }

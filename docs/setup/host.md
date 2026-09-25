@@ -41,8 +41,7 @@ msb --version
 ```
 
 When the installer runs ahead of reef, `agent create` fails with `no tested
-catalog contract for runtime <version>` on a host `msb` has not used yet, and
-with `no tested sandbox launch contract for runtime <version>` after that.
+sandbox launch contract for runtime <version>`.
 
 `MSB_PATH` points reef at an `msb` outside `~/.microsandbox`, with `libkrunfw`
 beside it, in `../lib`, or at `MSB_LIBKRUNFW_PATH`. When none resolves,

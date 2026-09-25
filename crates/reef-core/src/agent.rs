@@ -3,38 +3,6 @@ use crate::plan::{Drift, VmStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Desired {
-    Running,
-    Stopped,
-}
-
-impl Desired {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Running => "running",
-            Self::Stopped => "stopped",
-        }
-    }
-
-    pub fn live(self, vm: Option<VmStatus>) -> bool {
-        self == Self::Running && vm == Some(VmStatus::Running)
-    }
-}
-
-impl std::str::FromStr for Desired {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "running" => Ok(Self::Running),
-            "stopped" => Ok(Self::Stopped),
-            other => Err(format!("invalid desired state: {other:?}")),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lifecycle {
     Pending,
@@ -55,6 +23,22 @@ impl Lifecycle {
 
     pub fn label(&self) -> &'static str {
         self.state().label()
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            Self::Failed { reason } => Some(reason),
+            _ => None,
+        }
+    }
+}
+
+impl From<VmStatus> for Lifecycle {
+    fn from(status: VmStatus) -> Self {
+        match status {
+            VmStatus::Running => Self::Running,
+            VmStatus::Stopped => Self::Stopped,
+        }
     }
 }
 
@@ -83,7 +67,7 @@ pub struct AgentSpec {
     pub owner: String,
     pub role: RoleName,
     pub role_digest: Digest,
-    pub desired: Desired,
+    pub desired: VmStatus,
     pub env: BTreeMap<EnvKey, String>,
 }
 
@@ -135,17 +119,13 @@ impl Agent {
     }
 
     pub fn crashed(&self, vm: Option<VmStatus>) -> bool {
-        self.spec.desired == Desired::Running
+        self.spec.desired == VmStatus::Running
             && self.status.lifecycle == Lifecycle::Running
             && vm != Some(VmStatus::Running)
     }
 
     pub fn settled(&self) -> bool {
-        self.reconciled()
-            && match self.spec.desired {
-                Desired::Running => self.status.lifecycle == Lifecycle::Running,
-                Desired::Stopped => self.status.lifecycle == Lifecycle::Stopped,
-            }
+        self.reconciled() && self.status.lifecycle == self.spec.desired.into()
     }
 }
 
@@ -153,7 +133,7 @@ impl Agent {
 mod tests {
     use super::*;
 
-    fn agent(desired: Desired, lifecycle: Lifecycle, applied_generation: u64) -> Agent {
+    fn agent(desired: VmStatus, lifecycle: Lifecycle, applied_generation: u64) -> Agent {
         Agent {
             name: "a".parse().unwrap(),
             generation: 2,
@@ -176,33 +156,24 @@ mod tests {
 
     #[test]
     fn a_record_that_claims_running_is_crashed_without_a_running_vm() {
-        let up = agent(Desired::Running, Lifecycle::Running, 2);
+        let up = agent(VmStatus::Running, Lifecycle::Running, 2);
         assert!(!up.crashed(Some(VmStatus::Running)));
         assert!(up.crashed(Some(VmStatus::Stopped)));
         assert!(up.crashed(None));
-        assert!(!agent(Desired::Stopped, Lifecycle::Running, 2).crashed(None));
-        assert!(!agent(Desired::Running, Lifecycle::Pending, 2).crashed(None));
-    }
-
-    #[test]
-    fn only_an_agent_meant_to_run_with_its_vm_up_is_live() {
-        assert!(Desired::Running.live(Some(VmStatus::Running)));
-        assert!(!Desired::Running.live(Some(VmStatus::Stopped)));
-        assert!(!Desired::Running.live(None));
-        assert!(!Desired::Stopped.live(Some(VmStatus::Running)));
-        assert!(!Desired::Stopped.live(None));
+        assert!(!agent(VmStatus::Stopped, Lifecycle::Running, 2).crashed(None));
+        assert!(!agent(VmStatus::Running, Lifecycle::Pending, 2).crashed(None));
     }
 
     #[test]
     fn settled_needs_reconciled_and_matching_lifecycle() {
-        assert!(agent(Desired::Running, Lifecycle::Running, 2).settled());
-        assert!(agent(Desired::Stopped, Lifecycle::Stopped, 2).settled());
-        assert!(!agent(Desired::Running, Lifecycle::Running, 1).settled());
-        assert!(!agent(Desired::Running, Lifecycle::Stopped, 2).settled());
-        assert!(!agent(Desired::Running, Lifecycle::Pending, 2).settled());
+        assert!(agent(VmStatus::Running, Lifecycle::Running, 2).settled());
+        assert!(agent(VmStatus::Stopped, Lifecycle::Stopped, 2).settled());
+        assert!(!agent(VmStatus::Running, Lifecycle::Running, 1).settled());
+        assert!(!agent(VmStatus::Running, Lifecycle::Stopped, 2).settled());
+        assert!(!agent(VmStatus::Running, Lifecycle::Pending, 2).settled());
         let failed = Lifecycle::Failed {
             reason: "boom".to_owned(),
         };
-        assert!(!agent(Desired::Running, failed, 2).settled());
+        assert!(!agent(VmStatus::Running, failed, 2).settled());
     }
 }

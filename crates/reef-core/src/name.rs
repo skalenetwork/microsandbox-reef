@@ -51,12 +51,26 @@ name_type!(RoleName, "role name", is_name);
 name_type!(AgentName, "agent name", is_name);
 name_type!(VolumeName, "volume name", is_name);
 name_type!(PortName, "port name", is_name);
-name_type!(EnvKey, "env key", is_env_key);
+name_type!(EnvKey, "env key (A-Z 0-9 _, not REEF_ or MSB_)", is_env_key);
 name_type!(Domain, "domain", is_domain);
 name_type!(Host, "host", is_host);
 name_type!(ImageRef, "image reference", is_image);
 name_type!(Digest, "digest", is_digest);
 name_type!(GuestPath, "guest path", is_guest_path);
+
+impl AgentName {
+    pub fn sandbox(&self) -> String {
+        format!("reef-{self}")
+    }
+
+    pub fn host(&self) -> String {
+        format!("{self}.localhost")
+    }
+
+    pub fn volume(&self, entry: &VolumeName) -> String {
+        format!("reef-vol-{self}-{entry}")
+    }
+}
 
 impl GuestPath {
     pub fn under(&self, dir: &Self) -> bool {
@@ -162,6 +176,7 @@ fn is_env_key(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 64
         && !s.starts_with("REEF_")
+        && !s.starts_with("MSB_")
         && s.starts_with(|c: char| c.is_ascii_uppercase() || c == '_')
         && s.chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
@@ -239,6 +254,7 @@ mod tests {
         assert!("ANTHROPIC_API_KEY".parse::<EnvKey>().is_ok());
         assert!("lower".parse::<EnvKey>().is_err());
         assert!("REEF_PORT_UI".parse::<EnvKey>().is_err());
+        assert!("MSB_HOME".parse::<EnvKey>().is_err());
         assert!("1X".parse::<EnvKey>().is_err());
     }
 

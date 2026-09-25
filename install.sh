@@ -23,13 +23,9 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 curl -fsSL "$base/$asset" -o "$tmp/$asset"
-
-if curl -fsSL "$base/checksums.sha256" -o "$tmp/checksums.sha256" 2>/dev/null; then
-  if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi
-  (cd "$tmp" && grep " $asset\$" checksums.sha256 | $sum -c - >/dev/null)
-else
-  echo "warning: no checksums published for this release, skipping verification" >&2
-fi
+curl -fsSL "$base/checksums.sha256" -o "$tmp/checksums.sha256"
+if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi
+(cd "$tmp" && grep " $asset\$" checksums.sha256 | $sum -c - >/dev/null)
 
 tar -xzf "$tmp/$asset" -C "$tmp"
 mkdir -p "$bin_dir"

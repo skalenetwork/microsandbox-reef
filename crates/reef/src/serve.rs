@@ -1,5 +1,4 @@
 use crate::msb::Msb;
-use crate::reconcile;
 use crate::store::Store;
 use crate::vmm::Vmm;
 use anyhow::{Context, Result, bail};
@@ -21,7 +20,7 @@ pub async fn run(store: &Store, msb: &Msb) -> Result<()> {
     if !cert.valid_principals().contains(&agent.spec.owner) {
         bail!("access denied: this certificate cannot open {name}");
     }
-    let sandbox = reconcile::sandbox_name(&name);
+    let sandbox = name.sandbox();
     if !agent.spec.desired.live(msb.status(&sandbox).await?) {
         store.record(&name, "refused", &agent.spec.owner)?;
         bail!("{name} is not running; it has to be started on its host first");

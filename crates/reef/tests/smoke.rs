@@ -27,6 +27,10 @@ impl Reef {
         assert!(success, "reef {args:?} failed:\n{text}");
         text
     }
+
+    fn sh(&self, script: &str) -> String {
+        self.ok(&["agent", "exec", &self.agent, "--", "sh", "-c", script])
+    }
 }
 
 impl Drop for Reef {
@@ -94,15 +98,11 @@ fn full_agent_journey() {
         "[demo]\nfake = \"sk-smoke-not-real\"\n",
     )
     .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            state.join("secrets.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
-    }
+    std::fs::set_permissions(
+        state.join("secrets.toml"),
+        std::os::unix::fs::PermissionsExt::from_mode(0o600),
+    )
+    .unwrap();
     let role = state.join("echo.toml");
     std::fs::write(&role, ROLE).unwrap();
 
@@ -132,73 +132,45 @@ fn full_agent_journey() {
     let web = web_port(&got);
     assert!(reef_core::HOST_PORTS.contains(&web), "{got}");
 
-    let pid1 = reef.ok(&["agent", "exec", &reef.agent, "--", "cat", "/proc/1/comm"]);
+    let pid1 = reef.sh("cat /proc/1/comm");
     assert!(
         pid1.contains("sleep"),
         "init handoff did not happen: {pid1}"
     );
 
-    let seeded = reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "cat",
-        "/etc/reef/seed.conf",
-        "/etc/motd",
-    ]);
+    let seeded = reef.sh("cat /etc/reef/seed.conf /etc/motd");
     assert!(seeded.contains("seeded"), "files not seeded: {seeded}");
     assert!(
         seeded.contains("reef-override"),
         "a role file must replace the image's own: {seeded}"
     );
 
-    let secret = reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "sh",
-        "-c",
-        "echo [$FAKE_KEY] $SMOKE_MARK",
-    ]);
+    let secret = reef.sh("echo [$FAKE_KEY] $SMOKE_MARK");
     assert!(secret.contains("[$MSB_FAKE_KEY]"), "value leaked: {secret}");
     assert!(
         secret.contains("agent-wins"),
         "agent env must override role env: {secret}"
     );
 
-    let denied = reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "sh",
-        "-c",
-        "wget -T 5 -qO- https://api.openai.com/ >/dev/null 2>&1 && echo reached || echo refused",
-    ]);
-    assert!(
-        denied.contains("refused") && !denied.contains("reached"),
-        "egress not denied: {denied}"
+    let egress = reef.sh(
+        "for url in https://example.com/ https://api.openai.com/; do \
+         wget -T 5 -qO- $url >/dev/null 2>&1 && echo reached || echo refused; done",
+    );
+    assert_eq!(
+        egress.split_whitespace().collect::<Vec<_>>(),
+        ["reached", "refused"],
+        "allowed egress must pass and the rest be denied"
     );
 
-    reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "sh",
-        "-c",
-        "echo keep > /root/marker",
-    ]);
+    reef.sh("echo keep > /root/marker");
     reef.ok(&["agent", "stop", &reef.agent]);
     reef.ok(&["agent", "start", &reef.agent]);
-    let marker = reef.ok(&["agent", "exec", &reef.agent, "--", "cat", "/root/marker"]);
+    let marker = reef.sh("cat /root/marker");
     assert!(
         marker.contains("keep"),
         "rootfs lost on stop/start: {marker}"
     );
-    let pid1 = reef.ok(&["agent", "exec", &reef.agent, "--", "cat", "/proc/1/comm"]);
+    let pid1 = reef.sh("cat /proc/1/comm");
     assert!(
         pid1.contains("sleep"),
         "init lost across stop/start: {pid1}"
@@ -210,44 +182,21 @@ fn full_agent_journey() {
         "stop/start must not recreate:\n{events}"
     );
 
-    reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "sh",
-        "-c",
-        "echo durable > /data/keep",
-    ]);
+    reef.sh("echo durable > /data/keep");
     std::fs::write(&role, ROLE.replace("memory-mib = 256", "memory-mib = 320")).unwrap();
     reef.ok(&["role", "apply", role.to_str().unwrap()]);
     reef.ok(&["agent", "update", &reef.agent]);
-    let kept = reef.ok(&["agent", "exec", &reef.agent, "--", "cat", "/data/keep"]);
+    let kept = reef.sh("cat /data/keep");
     assert!(kept.contains("durable"), "volume lost on recreate: {kept}");
     let gone = reef.run(&["agent", "exec", &reef.agent, "--", "cat", "/root/marker"]);
     assert!(!gone.1.contains("keep"), "rootfs must not survive recreate");
-    let reseeded = reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "cat",
-        "/etc/reef/seed.conf",
-    ]);
+    let reseeded = reef.sh("cat /etc/reef/seed.conf");
     assert!(
         reseeded.contains("seeded"),
         "files must be re-applied on recreate: {reseeded}"
     );
 
-    reef.ok(&[
-        "agent",
-        "exec",
-        &reef.agent,
-        "--",
-        "sh",
-        "-c",
-        "(while true; do echo reef-forward | nc -l -p 8080; done >/dev/null 2>&1 &)",
-    ]);
+    reef.sh("(while true; do echo reef-forward | nc -l -p 8080; done >/dev/null 2>&1 &)");
     let listening = reef.ok(&["agent", "forward", &reef.agent]);
     assert!(listening.contains("8080"), "{listening}");
 
@@ -358,15 +307,7 @@ network = { egress = ["example.com"] }
             .contains("unchanged"),
         "second apply must be a no-op"
     );
-    member.ok(&[
-        "agent",
-        "exec",
-        &member.agent,
-        "--",
-        "sh",
-        "-c",
-        "echo keep > /root/fleet-marker",
-    ]);
+    member.sh("echo keep > /root/fleet-marker");
     std::fs::write(&fleet, entry("two")).unwrap();
     assert!(
         member
@@ -374,16 +315,9 @@ network = { egress = ["example.com"] }
             .contains("updated"),
         "env change must update"
     );
-    let seen = member.ok(&["agent", "exec", &member.agent, "--", "sh", "-c", "echo $FM"]);
+    let seen = member.sh("echo $FM");
     assert!(seen.contains("two"), "fleet env not applied: {seen}");
-    let marker = member.ok(&[
-        "agent",
-        "exec",
-        &member.agent,
-        "--",
-        "cat",
-        "/root/fleet-marker",
-    ]);
+    let marker = member.sh("cat /root/fleet-marker");
     assert!(
         marker.contains("keep"),
         "env change must not destroy the rootfs: {marker}"
