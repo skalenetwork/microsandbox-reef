@@ -4,10 +4,14 @@ version = 1
 #   - name, so both can live in reef.db side by side
 #   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144 (the cap is a ceiling,
 #     not a reservation; 2048 MiB hangs the guest)
-#   - model pinned to deepseek: defaults.json is re-applied on every boot, so
-#     setting it by hand does not survive a restart. The Clawbits model switcher
-#     picks any OpenRouter model per chat and overrides this pin; the pin is
-#     what cron and monitoring-trigger sessions run on.
+#   - model pinned to qwen3.8-flash with deepseek-v4-pro-0813 as fallback:
+#     defaults.json is re-applied on every boot, so setting it by hand does not
+#     survive a restart. The Clawbits model switcher picks any OpenRouter model
+#     per chat and overrides the pin; the pin is what cron and monitoring-trigger
+#     sessions run on. The fallback exists because OpenRouter serves qwen3.8-flash
+#     from a single provider (Alibaba), which rate-limited a run for forty minutes
+#     on 2026-09-25; the gateway switches models on rate_limited/overloaded/
+#     timeout/billing, so a run finishes on deepseek rather than dying.
 #
 # The canonical role now lives in the PRIVATE repo skalenetwork/clawbits-reef-store
 # (roles/clawbits-openclaw.toml), no longer in microsandbox-reef - the copy in
@@ -62,7 +66,13 @@ exec /usr/local/bin/clawbits-start
 ''' }
 "/etc/openclaw/defaults.json" = '''
 {
-  "agents": { "defaults": { "model": { "primary": "openrouter/deepseek/deepseek-v4-pro-0813" } } },
+  "agents": { "defaults": {
+    "model": {
+      "primary":   "openrouter/qwen/qwen3.8-flash",
+      "fallbacks": ["openrouter/deepseek/deepseek-v4-pro-0813"]
+    },
+    "heartbeat": { "target": "none" }
+  } },
   "browser": { "extraArgs": ["--ignore-certificate-errors"] },
   "gateway": {
     "controlUi": {
