@@ -2,7 +2,7 @@ version = 1
 
 name  = "clawbits-openclaw"
 image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.19.0-g6bc8f3e"
-init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
+init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
 
 [resources]
 vcpus = 4
@@ -17,26 +17,6 @@ NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
 CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [files]
-"/etc/openclaw/start" = { mode = 0o755, content = '''
-#!/bin/sh
-set -e
-if [ "$(id -u)" = 0 ]; then
-  install -d -o node -g node /home/node/.openclaw
-  oc() { /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs "$@"; }
-else
-  oc() { /usr/local/bin/node /app/openclaw.mjs "$@"; }
-fi
-# A boot interrupted while the engine was writing this file leaves it empty, and
-# every `oc` call then refuses to run ("OpenClaw config is invalid"), starting
-# with the one below, so the agent never recovers on its own, boot after boot,
-# while the VM still reports healthy. The image ships without a config, so
-# removing a zero-byte one is exactly the state a first boot expects.
-cfg=/home/node/.openclaw/openclaw.json
-[ ! -e "$cfg" ] || [ -s "$cfg" ] || rm -f "$cfg"
-oc config set mcp.apps.sandboxOrigin \
-  "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
-exec /usr/local/bin/clawbits-start
-''' }
 "/etc/openclaw/defaults.json" = '''
 {
   "agents": { "defaults": { "model": { "primary": "openrouter/auto" } } },
