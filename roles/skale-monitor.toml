@@ -5,17 +5,22 @@ version = 1
 #   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144 (the cap is a ceiling,
 #     not a reservation; 2048 MiB hangs the guest)
 #   - model pinned to deepseek: defaults.json is re-applied on every boot, so
-#     setting it by hand does not survive a restart
+#     setting it by hand does not survive a restart. The Clawbits model switcher
+#     picks any OpenRouter model per chat and overrides this pin; the pin is
+#     what cron and monitoring-trigger sessions run on.
 #
 # The canonical role now lives in the PRIVATE repo skalenetwork/clawbits-reef-store
 # (roles/clawbits-openclaw.toml), no longer in microsandbox-reef - the copy in
-# .claude/clawbits-openclaw-upstream.toml is the last one seen, 2026-09-22.
-# Regenerate from it; never hand-edit. Blocks have appeared there that a hand
-# edit would have missed: the `agents` volume for chat sessions, the premigrate
-# restore, and the guard that deletes a zero-byte openclaw.json (without it an
-# interrupted boot wedges the agent permanently while the VM reports healthy).
+# .claude/clawbits-openclaw-upstream.toml is the last one seen, 2026-09-24.
+# The public roles/clawbits-openclaw.toml in this repo has drifted from it
+# (2026-09-24: the premigrate block is gone there) - never regenerate from it.
+# Regenerate from the .claude copy; never hand-edit. Blocks have appeared there
+# that a hand edit would have missed: the `agents` volume for chat sessions,
+# the premigrate restore, and the guard that deletes a zero-byte openclaw.json
+# (without it an interrupted boot wedges the agent permanently while the VM
+# reports healthy).
 name  = "skale-monitor"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.5-pl0.18.0-g9bea604"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.19.0-g6bc8f3e"
 init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
 
 [resources]
