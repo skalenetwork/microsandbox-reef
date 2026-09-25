@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.17.0] - 2026-09-25
+
+### Fixed
+- Upgrade to microsandbox 0.7.3, keep egress non-strict, simplify core
+
+
 ## [0.16.0] - 2026-09-18
 
 ### Added
