@@ -1,17 +1,24 @@
 version = 1
 
-# Fork of the canonical clawbits-openclaw role. Three changes:
+# Fork of the canonical clawbits-openclaw role. Four changes:
 #   - name, so both can live in reef.db side by side
 #   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144 (the cap is a ceiling,
 #     not a reservation; 2048 MiB hangs the guest)
-#   - model pinned to qwen3.8-flash with deepseek-v4-pro-0813 as fallback:
-#     defaults.json is re-applied on every boot, so setting it by hand does not
-#     survive a restart. The Clawbits model switcher picks any OpenRouter model
-#     per chat and overrides the pin; the pin is what cron and monitoring-trigger
-#     sessions run on. The fallback exists because OpenRouter serves qwen3.8-flash
-#     from a single provider (Alibaba), which rate-limited a run for forty minutes
-#     on 2026-09-25; the gateway switches models on rate_limited/overloaded/
-#     timeout/billing, so a run finishes on deepseek rather than dying.
+#   - model pinned to deepseek-v4-pro-0813 at thinking "high", the baseline of the
+#     evaluation series: defaults.json is re-applied on every boot, so setting it
+#     by hand does not survive a restart. The Clawbits model switcher picks any
+#     OpenRouter model per chat and overrides the pin; the pin is what cron and
+#     monitoring-trigger sessions run on.
+#     The upstream provider is pinned too. Left to itself OpenRouter weighs price
+#     and speed, not cache-read price, and a run landed on Wafer at about ten times
+#     the cache-read price of the three hosts below. They are the cheapest for a
+#     cache-heavy profile among those that do not retain prompts, with no fallback
+#     beyond them; DeepSeek's own endpoint is not routable for this account (it
+#     trains on paid prompts). qwen3.8-flash was the primary until 2026-09-29: its
+#     only provider, Alibaba, rate-limited three runs in a row, and it retains
+#     prompts.
+#   - heartbeat off with "every": "0m". target "none" only mutes delivery; the
+#     poll still runs as a turn in the main session.
 #
 # The canonical role is skalenetwork/clawbits-reef-store roles/clawbits-openclaw.toml;
 # since 2026-09-25 it is mirrored into this repo's roles/clawbits-openclaw.toml
@@ -41,11 +48,20 @@ CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 "/etc/openclaw/defaults.json" = '''
 {
   "agents": { "defaults": {
-    "model": {
-      "primary":   "openrouter/qwen/qwen3.8-flash",
-      "fallbacks": ["openrouter/deepseek/deepseek-v4-pro-0813"]
+    "model": { "primary": "openrouter/deepseek/deepseek-v4-pro-0813", "fallbacks": [] },
+    "models": {
+      "openrouter/deepseek/deepseek-v4-pro-0813": {
+        "params": {
+          "thinking": "high",
+          "provider": {
+            "order": ["novita", "nextbit", "coreweave"],
+            "data_collection": "deny",
+            "allow_fallbacks": false
+          }
+        }
+      }
     },
-    "heartbeat": { "target": "none" }
+    "heartbeat": { "every": "0m", "target": "none" }
   } },
   "browser": { "extraArgs": ["--ignore-certificate-errors"] },
   "gateway": {
