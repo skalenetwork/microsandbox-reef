@@ -17,19 +17,26 @@ version = 1
 #     trains on paid prompts). qwen3.8-flash was the primary until 2026-09-29: its
 #     only provider, Alibaba, rate-limited three runs in a row, and it retains
 #     prompts.
+#     The canon's "thinkingDefault": "medium" is kept: it is the global default,
+#     step 6 of OpenClaw's thinking resolution order (docs/tools/thinking.md),
+#     and loses to this model's params.thinking at step 5, so deepseek stays at
+#     "high". It only reaches models picked in the switcher without an effort.
 #   - heartbeat off with "every": "0m". target "none" only mutes delivery; the
 #     poll still runs as a turn in the main session.
 #
 # The canonical role is skalenetwork/clawbits-reef-store roles/clawbits-openclaw.toml;
 # since 2026-09-25 it is mirrored into this repo's roles/clawbits-openclaw.toml
-# (pushed by Dima), which is what this fork is regenerated from. The copy in
+# (pushed by Dima), which is what this fork is regenerated from.
+# The mirror can lag: on 2026-09-29 it was still pl0.20.0 while the private
+# canon was pl0.21.0, and this fork was regenerated from the private file -
+# compare the image line of both before trusting the mirror. The copy in
 # .claude/clawbits-openclaw-upstream.toml is a snapshot of that file at the last
 # regeneration. Never hand-edit blocks that come from the canon: since pl0.20.0
 # the image boots straight into /usr/local/bin/clawbits-start and the old
 # /etc/openclaw/start wrapper (premigrate restore, zero-byte openclaw.json guard,
 # mcp.apps.sandboxOrigin) lives inside the image.
 name  = "log-hunter"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.20.0-g333f708"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.21.0-gd532a90"
 init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
 
 [resources]
@@ -49,6 +56,7 @@ CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 {
   "agents": { "defaults": {
     "model": { "primary": "openrouter/deepseek/deepseek-v4-pro-0813", "fallbacks": [] },
+    "thinkingDefault": "medium",
     "models": {
       "openrouter/deepseek/deepseek-v4-pro-0813": {
         "params": {

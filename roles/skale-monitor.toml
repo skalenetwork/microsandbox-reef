@@ -1,27 +1,34 @@
 version = 1
 
-# Fork of the canonical clawbits-openclaw role. Three changes:
+# Fork of the canonical clawbits-openclaw role. Four changes:
 #   - name, so both can live in reef.db side by side
 #   - resources: 2 vCPU / 3072 MiB instead of 4 / 6144 (the cap is a ceiling,
 #     not a reservation; 2048 MiB hangs the guest)
-#   - model pinned to deepseek: defaults.json is re-applied on every boot, so
-#     setting it by hand does not survive a restart. The Clawbits model switcher
-#     picks any OpenRouter model per chat and overrides this pin; the pin is
-#     what cron and monitoring-trigger sessions run on.
+#   - model pinned to deepseek-v4-pro-0813: defaults.json is re-applied on every
+#     boot, so setting it by hand does not survive a restart. The Clawbits model
+#     switcher picks any OpenRouter model per chat and overrides the pin; the pin
+#     is what cron and monitoring-trigger sessions run on. Effort is the canon's
+#     "thinkingDefault": "medium".
+#   - the upstream provider is pinned, as in log-hunter: prompts here carry
+#     production DB data, and the three hosts below do not retain prompts
+#     ("data_collection": "deny", no fallback beyond them). They are also the
+#     cheapest for a cache-heavy profile. Heartbeat stays on - there are no long
+#     runs here for it to abort.
 #
-# The canonical role now lives in the PRIVATE repo skalenetwork/clawbits-reef-store
-# (roles/clawbits-openclaw.toml), no longer in microsandbox-reef - the copy in
-# .claude/clawbits-openclaw-upstream.toml is the last one seen, 2026-09-24.
-# The public roles/clawbits-openclaw.toml in this repo has drifted from it
-# (2026-09-24: the premigrate block is gone there) - never regenerate from it.
-# Regenerate from the .claude copy; never hand-edit. Blocks have appeared there
-# that a hand edit would have missed: the `agents` volume for chat sessions,
-# the premigrate restore, and the guard that deletes a zero-byte openclaw.json
-# (without it an interrupted boot wedges the agent permanently while the VM
-# reports healthy).
+# The canonical role is skalenetwork/clawbits-reef-store roles/clawbits-openclaw.toml;
+# since 2026-09-25 it is mirrored into this repo's roles/clawbits-openclaw.toml
+# (pushed by Dima), which is what this fork is regenerated from.
+# The mirror can lag: on 2026-09-29 it was still pl0.20.0 while the private
+# canon was pl0.21.0, and this fork was regenerated from the private file -
+# compare the image line of both before trusting the mirror. The copy in
+# .claude/clawbits-openclaw-upstream.toml is a snapshot of that file at the last
+# regeneration. Never hand-edit blocks that come from the canon: since pl0.20.0
+# the image boots straight into /usr/local/bin/clawbits-start and the old
+# /etc/openclaw/start wrapper (premigrate restore, zero-byte openclaw.json guard,
+# mcp.apps.sandboxOrigin) lives inside the image.
 name  = "skale-monitor"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.19.0-g6bc8f3e"
-init  = ["/usr/bin/tini", "-s", "--", "/etc/openclaw/start"]
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.21.0-gd532a90"
+init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
 
 [resources]
 vcpus = 2
@@ -36,33 +43,23 @@ NODE_EXTRA_CA_CERTS = "/.msb/tls/ca.pem"
 CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 
 [files]
-"/etc/openclaw/start" = { mode = 0o755, content = '''
-#!/bin/sh
-set -e
-if [ "$(id -u)" = 0 ]; then
-  install -d -o node -g node /home/node/.openclaw
-  oc() { /usr/sbin/runuser -u node -- /usr/local/bin/node /app/openclaw.mjs "$@"; }
-else
-  oc() { /usr/local/bin/node /app/openclaw.mjs "$@"; }
-fi
-if [ -d /home/node/.openclaw/state/premigrate ]; then
-  cp -a /home/node/.openclaw/state/premigrate/. /home/node/.openclaw/
-  rm -rf /home/node/.openclaw/state/premigrate
-fi
-# A boot interrupted while the engine was writing this file leaves it empty, and
-# every `oc` call then refuses to run ("OpenClaw config is invalid"), starting
-# with the one below — so the agent never recovers on its own, boot after boot,
-# while the VM still reports healthy. The image ships without a config, so
-# removing a zero-byte one is exactly the state a first boot expects.
-cfg=/home/node/.openclaw/openclaw.json
-[ ! -e "$cfg" ] || [ -s "$cfg" ] || rm -f "$cfg"
-oc config set mcp.apps.sandboxOrigin \
-  "http://$REEF_AGENT.localhost:$REEF_PORT_MCP_SANDBOX"
-exec /usr/local/bin/clawbits-start
-''' }
 "/etc/openclaw/defaults.json" = '''
 {
-  "agents": { "defaults": { "model": { "primary": "openrouter/deepseek/deepseek-v4-pro-0813" } } },
+  "agents": { "defaults": {
+    "model": { "primary": "openrouter/deepseek/deepseek-v4-pro-0813" },
+    "thinkingDefault": "medium",
+    "models": {
+      "openrouter/deepseek/deepseek-v4-pro-0813": {
+        "params": {
+          "provider": {
+            "order": ["novita", "nextbit", "coreweave"],
+            "data_collection": "deny",
+            "allow_fallbacks": false
+          }
+        }
+      }
+    }
+  } },
   "browser": { "extraArgs": ["--ignore-certificate-errors"] },
   "gateway": {
     "controlUi": {
