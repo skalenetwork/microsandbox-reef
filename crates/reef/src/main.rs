@@ -174,6 +174,13 @@ enum AgentCommand {
         #[arg(value_parser = port_pair)]
         ports: Vec<(u16, u16)>,
     },
+    /// Print what an agent's VM wrote, through `msb logs --source all`
+    Logs {
+        name: AgentName,
+        /// Passed to `msb logs`, such as --follow or --tail N
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        flags: Vec<String>,
+    },
     /// Open an interactive terminal in an agent's VM over SSH
     Ssh { name: AgentName },
     /// Bridge one SSH session into the caller's agent (sshd ForceCommand target)
@@ -548,6 +555,10 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
         AgentCommand::Forward { name, ports } => {
             require_agent(&ctx, &name)?;
             ctx.vmm.forward(&name.sandbox(), &name.host(), &ports).await
+        }
+        AgentCommand::Logs { name, flags } => {
+            require_agent(&ctx, &name)?;
+            msb::logs(&name.sandbox(), &flags)
         }
         AgentCommand::Ssh { name } => {
             let agent = require_agent(&ctx, &name)?;

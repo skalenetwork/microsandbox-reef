@@ -112,8 +112,9 @@ its latest release, each bump gated on the real-VM smoke test.
 Console: `ui.rs` is a client of the `--json` rows the CLI prints, nothing more.
 It fetches them by running this binary locally or `ssh ALIAS <reef> agent list
 --json` remotely, polls every five seconds, and runs the same commands an
-operator would type: `agent start`, `stop`, `update` and `rm`, `role rm`, and
-`agent ssh`, which takes the terminal until it exits. Which verbs a row
+operator would type: `agent start`, `stop`, `update` and `rm`, `role rm`,
+`agent logs --follow`, which it reads until Esc kills it, and `agent ssh`, which
+takes the terminal until it exits. Which verbs a row
 accepts is the row's own answer, so the footer and the key dispatch read one
 table. It never opens the store and names no runtime type; a host knows only
 its own agents, and the console merges independent hosts on the laptop. Cells

@@ -4,7 +4,7 @@ pub use host::Alias;
 
 use crate::rows::{AgentDetail, AgentRow, Event, RoleDetail, RoleRow};
 use anyhow::{Context, Result};
-use host::{Failure, Host};
+use host::{Failure, Host, Stream};
 use ratatui::crossterm::cursor::MoveTo;
 use ratatui::crossterm::event::{self, Event as Input, KeyCode, KeyModifiers};
 use ratatui::crossterm::execute;
@@ -211,6 +211,11 @@ enum Screen {
         scroll: u16,
         polled: Instant,
     },
+    Logs {
+        row: Row,
+        stream: Stream,
+        back: u16,
+    },
 }
 
 enum Item<'a> {
@@ -329,6 +334,7 @@ impl App {
         match &self.screen {
             Screen::Detail { row, .. } => Some(row.clone()),
             Screen::Table => self.selected_row(),
+            Screen::Logs { .. } => None,
         }
     }
 
@@ -349,17 +355,20 @@ impl App {
             KeyCode::Enter if table => self.open(),
             KeyCode::Tab if table => self.switch(),
             KeyCode::Char('t') => self.shell = self.target().filter(|row| self.live(row)),
+            KeyCode::Char('l') => self.logs(),
             KeyCode::Char(key) => self.press(key),
             _ => {}
         }
     }
 
     fn step(&mut self, delta: i16) {
-        if let Screen::Detail { scroll, .. } = &mut self.screen {
-            *scroll = scroll.saturating_add_signed(delta);
-            return;
+        match &mut self.screen {
+            Screen::Detail { scroll, .. } => *scroll = scroll.saturating_add_signed(delta),
+            Screen::Logs { back, .. } => *back = back.saturating_add_signed(-delta),
+            Screen::Table => {
+                self.selected = self.clamp(self.selected.saturating_add_signed(delta.into()));
+            }
         }
-        self.selected = self.clamp(self.selected.saturating_add_signed(delta.into()));
     }
 
     fn clamp(&self, index: usize) -> usize {
@@ -409,6 +418,22 @@ impl App {
         };
     }
 
+    fn logs(&mut self) {
+        let Some(row @ Row::Agent(..)) = self.target() else {
+            return;
+        };
+        match self.hosts[row.host()].host.logs(row.name()) {
+            Ok(stream) => {
+                self.screen = Screen::Logs {
+                    row,
+                    stream,
+                    back: 0,
+                }
+            }
+            Err(error) => self.flash = Some(format!("{}: {error}", row.name())),
+        }
+    }
+
     fn fetch(&self, row: Row) {
         let host = self.hosts[row.host()].host.clone();
         let tx = self.tx.clone();
@@ -432,6 +457,7 @@ impl App {
                 *polled = Instant::now();
                 row.clone()
             }
+            Screen::Logs { stream, .. } => return stream.pull(),
             _ => return,
         };
         self.fetch(row);
@@ -500,6 +526,13 @@ impl App {
                 if split {
                     frame.render_widget(self.events(detail.as_ref()), right);
                 }
+            }
+            Screen::Logs { row, stream, back } => {
+                let [head, tail] =
+                    Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(body);
+                let heading = self.heading(format!("logs {}", row.name()));
+                frame.render_widget(Paragraph::new(heading), head);
+                frame.render_widget(self.log(tail, stream, *back), tail);
             }
             Screen::Table => frame.render_widget(self.table(body), body),
         }
@@ -710,6 +743,22 @@ impl App {
         )
     }
 
+    fn log<'a>(&self, area: Rect, stream: &'a Stream, back: u16) -> Paragraph<'a> {
+        let mut lines: Vec<Line<'a>> = stream
+            .lines
+            .iter()
+            .map(|line| line.as_str().into())
+            .collect();
+        if stream.ended {
+            lines.push(Line::styled("ended", self.style(Tone::Muted)));
+        }
+        let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+        let top = paragraph
+            .line_count(area.width)
+            .saturating_sub(usize::from(area.height) + usize::from(back));
+        paragraph.scroll((u16::try_from(top).unwrap_or(u16::MAX), 0))
+    }
+
     fn footer(&self) -> Line<'static> {
         if let Some((verb, row)) = &self.confirm {
             return Line::from(format!(
@@ -736,12 +785,17 @@ impl App {
             true => "t terminal  ",
             false => "",
         };
+        let logs = match row {
+            Some(Row::Agent(..)) => "l logs  ",
+            _ => "",
+        };
         match &self.screen {
             Screen::Table => format!(
-                "j/k move  enter detail  {hints}{terminal}tab {}  q quit",
+                "j/k move  enter detail  {hints}{terminal}{logs}tab {}  q quit",
                 self.view.spec().other
             ),
-            Screen::Detail { .. } => format!("j/k scroll  esc back  {hints}{terminal}q quit"),
+            Screen::Detail { .. } => format!("j/k scroll  esc back  {hints}{terminal}{logs}q quit"),
+            Screen::Logs { .. } => "j/k scroll  esc back  q quit".to_owned(),
         }
     }
 }
@@ -901,7 +955,7 @@ mod tests {
                 " prod-eu   echo-2   echo stale   ana     running   updating   -         drift                                 ",
                 " prod-us   unreachable: ssh: connect refused                                                                  ",
                 "                                                                                                              ",
-                " j/k move  enter detail  s start  x stop  u update  d remove  t terminal  tab roles  q quit                   ",
+                " j/k move  enter detail  s start  x stop  u update  d remove  t terminal  l logs  tab roles  q quit           ",
             ]
         );
     }
@@ -1073,7 +1127,32 @@ mod tests {
                 " role         echo@000000000000                             │                                           ",
                 " image        alpine                                        │                                           ",
                 " owner        ana                                           │                                           ",
-                " j/k scroll  esc back  s start  x stop  u update  d remove  t terminal  q quit                          ",
+                " j/k scroll  esc back  s start  x stop  u update  d remove  t terminal  l logs  q quit                  ",
+            ]
+        );
+    }
+
+    #[test]
+    fn logs_stream_until_the_command_ends() {
+        let echo = Host::Local {
+            exe: "/bin/echo".into(),
+            state: "/var/reef".into(),
+        };
+        let rows = vec![agent("echo-1", State::Failed, true, &[])];
+        let mut app = app(vec![state(echo, Some(Ok(rows)))]);
+        app.key(KeyCode::Char('l'));
+        while !matches!(&app.screen, Screen::Logs { stream, .. } if stream.ended) {
+            app.refresh();
+        }
+        assert_eq!(
+            screen(&app, 60, 6),
+            [
+                " logs echo-1                                                ",
+                " ───────────                                                ",
+                " --state /var/reef agent logs echo-1 --follow --tail 200    ",
+                " --no-color                                                 ",
+                " ended                                                      ",
+                " j/k scroll  esc back  q quit                               ",
             ]
         );
     }

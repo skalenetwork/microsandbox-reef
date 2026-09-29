@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -526,6 +527,16 @@ pub fn vm_not_running(sandbox: &str) -> String {
     format!(
         "the VM is not running; read what the guest printed with `msb logs {sandbox} --source all`"
     )
+}
+
+pub fn logs(sandbox: &str, flags: &[String]) -> Result<()> {
+    let failure = std::process::Command::new(msb_path()?)
+        .env("MSB_BACKEND", "local")
+        .args(["logs", "--source", "all"])
+        .args(flags)
+        .arg(sandbox)
+        .exec();
+    Err(failure).context("cannot run msb")
 }
 
 fn msb_path() -> Result<PathBuf> {

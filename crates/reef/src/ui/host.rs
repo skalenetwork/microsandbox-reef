@@ -1,12 +1,15 @@
 use serde::de::DeserializeOwned;
-use std::io::Read;
+use std::collections::VecDeque;
+use std::io::{BufRead, BufReader, Read};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
+const SCROLLBACK: usize = 2000;
 const SSH_OPTIONS: [&str; 8] = [
     "-o",
     "BatchMode=yes",
@@ -45,6 +48,33 @@ impl std::str::FromStr for Alias {
 pub enum Host {
     Local { exe: PathBuf, state: PathBuf },
     Ssh { alias: Alias, reef: String },
+}
+
+pub struct Stream {
+    child: Child,
+    rx: Receiver<String>,
+    pub lines: VecDeque<String>,
+    pub ended: bool,
+}
+
+impl Stream {
+    pub fn pull(&mut self) {
+        self.ended = loop {
+            match self.rx.try_recv() {
+                Ok(line) => self.lines.push_back(line),
+                Err(error) => break error == TryRecvError::Disconnected,
+            }
+        };
+        self.lines
+            .drain(..self.lines.len().saturating_sub(SCROLLBACK));
+    }
+}
+
+impl Drop for Stream {
+    fn drop(&mut self) {
+        self.child.kill().ok();
+        self.child.wait().ok();
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -87,6 +117,38 @@ impl Host {
         self.command(&["agent", "ssh", name], true)
     }
 
+    pub fn logs(&self, name: &str) -> std::io::Result<Stream> {
+        let args = [
+            "agent",
+            "logs",
+            name,
+            "--follow",
+            "--tail",
+            "200",
+            "--no-color",
+        ];
+        let (reader, writer) = std::io::pipe()?;
+        let child = self
+            .command(&args, true)
+            .stdin(Stdio::null())
+            .stdout(writer.try_clone()?)
+            .stderr(writer)
+            .spawn()?;
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            BufReader::new(reader)
+                .split(b'\n')
+                .map_while(Result::ok)
+                .try_for_each(|line| tx.send(String::from_utf8_lossy(&line).trim_end().to_owned()))
+        });
+        Ok(Stream {
+            child,
+            rx,
+            lines: VecDeque::new(),
+            ended: false,
+        })
+    }
+
     pub fn forward(&self, port: u16) -> Option<String> {
         match self {
             Self::Local { .. } => None,
@@ -122,7 +184,7 @@ impl Host {
                 let mut command = Command::new("ssh");
                 command
                     .args(SSH_OPTIONS)
-                    .arg(if tty { "-t" } else { "-T" })
+                    .arg(if tty { "-tt" } else { "-T" })
                     .arg("--")
                     .arg(alias.as_str())
                     .arg(format!("{reef} {}", args.join(" ")));

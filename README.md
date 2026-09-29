@@ -143,6 +143,7 @@ outlive the VMs, and one console across hosts.
 | `reef agent get reviewer-1 --wait` | One agent in detail; `--wait` blocks until settled |
 | `reef agent exec reviewer-1 -- echo hi` | Run a command inside the VM |
 | `reef agent ssh reviewer-1` | Interactive terminal in the VM |
+| `reef agent logs reviewer-1 --follow` | What the VM printed, every source; other flags go to `msb logs` |
 | `reef agent forward reviewer-1` | No ports: list what the VM is listening on |
 | `reef agent forward reviewer-1 9119` | Tunnel `reviewer-1.localhost:9119` into the VM until Ctrl-C |
 | `reef agent update reviewer-1` | Re-pin to the role's active version and recreate the VM |
@@ -213,7 +214,8 @@ The full pattern - certificates, sshd config, client config - is
 `reef ui` is a full-screen view of every agent on this host: state, VM, drift
 and ports in one table, and `s`, `x`, `u`, `d` to start, stop, update and
 remove the selected agent (update and remove ask first). `t` hands the
-terminal to `agent ssh` until you exit. Enter opens what `agent get` prints,
+terminal to `agent ssh` until you exit, and `l` follows `agent logs` until
+Esc. Enter opens what `agent get` prints,
 with that agent's recent events newest-first in a pane beside it, and keeps
 both refreshing. The same verbs work there, on the agent you opened. Tab
 switches to the roles table - active version, image, and how many agents run

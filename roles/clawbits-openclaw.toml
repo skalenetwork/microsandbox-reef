@@ -1,7 +1,7 @@
 version = 1
 
 name  = "clawbits-openclaw"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.20.0-g333f708"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.9.6-pl0.21.0-gd532a90"
 init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
 
 [resources]
@@ -19,7 +19,7 @@ CLAWBITS_ENDPOINT = "https://app.clawbits.ai"
 [files]
 "/etc/openclaw/defaults.json" = '''
 {
-  "agents": { "defaults": { "model": { "primary": "openrouter/auto" } } },
+  "agents": { "defaults": { "model": { "primary": "openrouter/auto" }, "thinkingDefault": "medium" } },
   "browser": { "extraArgs": ["--ignore-certificate-errors"] },
   "gateway": {
     "controlUi": {
