@@ -1,6 +1,15 @@
 # Changelog
 
 
+## [0.18.0] - 2026-10-05
+
+### Added
+- Pull role images on apply and create new agents first
+
+### Fixed
+- Bump microsandbox to 0.7.6
+
+
 ## [0.17.0] - 2026-09-25
 
 ### Fixed
