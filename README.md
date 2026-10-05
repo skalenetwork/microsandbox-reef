@@ -387,7 +387,8 @@ Each agent records a `rotated` event with the key and ref, never the value.
 
 Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
 listed agents are created, recreated when their role drifts, and restarted
-in place when only their env drifts.
+in place when only their env drifts. New agents go first and removals last,
+so a create never waits behind a rollout or a prune.
 
 ```toml
 version = 1

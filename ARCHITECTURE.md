@@ -101,7 +101,9 @@ crates/reef        the binary: CLI, store, secrets, msb,  deps: reef-core, rusql
 The split is compiler-enforced: decision logic cannot touch I/O.
 
 Flow: `role apply` parses and validates a role (line-and-column errors, all
-problems at once), stores it content-addressed by digest, and marks it active.
+problems at once), stores it content-addressed by digest, marks it active, and
+pulls the image of each version it activates so no create waits on a cold
+pull; a failed pull only warns, since create pulls again.
 `agent create` writes the record, then reconciles: the pure function
 `plan(desired, vm, drift) -> &[Action]` decides Create/Modify/Start/Stop/Remove
 from the desired and observed VM state and what drifted, and the executor applies
