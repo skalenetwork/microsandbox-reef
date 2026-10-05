@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.19.0] - 2026-10-05
+
+### Added
+- Add prune command for agents
+
+
 ## [0.18.0] - 2026-10-05
 
 ### Added
