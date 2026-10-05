@@ -349,8 +349,9 @@ first use with `size-mib` as an enforced quota:
 data = { dest = "/opt/data", size-mib = 10240 }
 ```
 
-A volume survives stop/start, a role change (which recreates the VM), and
-`agent rm`. Only `agent rm --volumes` deletes one, and it deletes every entry
+A volume survives stop/start, a role change (which recreates the VM), `agent
+rm` and a fleet prune. Only `agent rm --volumes` or a fleet `purge` deletes
+one, and it deletes every entry
 any version of the agent's role declares, so a renamed entry leaves nothing
 behind. `agent get` prints a volume's name, so `msb volume rm <name>` can
 delete it without removing the agent. Everything outside a declared path lives
@@ -406,7 +407,18 @@ Removal is opt-in: `--prune` also deletes fleet agents the given files no
 longer declare, so pass it the whole fleet directory - a partial file list
 with `--prune` deletes everything it cannot see. Without the flag, undeclared
 agents are only reported. Hand-made agents are never touched, and volumes
-survive removal.
+survive a prune.
+
+Deleting an agent's data takes an explicit statement, never an absence. A
+fleet file's `purge` list removes each named fleet agent with its volumes,
+with or without `--prune`; a name with no agent is a no-op, so a purge entry
+can stay in the fleet for good. Replace an agent's declaration with its purge
+entry in one change, and a name both declared and purged fails the apply:
+
+```toml
+version = 1
+purge = ["ana-hermes"]
+```
 
 ## State
 

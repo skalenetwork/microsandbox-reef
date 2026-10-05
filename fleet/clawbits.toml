@@ -1,7 +1,8 @@
 version = 1
 
 # The exact shape Clawbits writes to fleet/<host>/<name>.toml, one file per
-# agent, never rewritten after creation. `owner` is who `agent serve` admits for
+# agent, replaced only by `purge = ["<name>"]` when the agent is deleted, which
+# deletes its volumes too. `owner` is who `agent serve` admits for
 # terminals. The signup token is one-time and lives 7 days: the agent spends it
 # at first boot and keeps its own key on the state volume, so the value left
 # here is dead weight. OPENCLAW_PUBLIC_HOST is optional and nothing else goes in

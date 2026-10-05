@@ -54,9 +54,10 @@ Invariants:
   VM read on every command says what is up, and a command that prints a state
   reports `failed` when the two disagree.
 - A volume declared by a role survives everything the VM does not: stop/start,
-  the recreate a role change forces, and `agent rm`. `agent rm --volumes` is
-  the one command that deletes one, and the names it deletes come from reef's
-  own record of the role's versions, never from a scan of what msb holds.
+  the recreate a role change forces, `agent rm` and a prune. Only an explicit
+  statement deletes one, never an absence: `agent rm --volumes`, or a fleet
+  file's `purge` naming the agent. The names deleted come from reef's own
+  record of the role's versions, never from a scan of what msb holds.
 - A secret value never enters the guest (placeholder + host-side TLS
   substitution, bound to one host) and never enters reef's database, events,
   or errors (`Secret` has no `Serialize`; `Debug` redacts).
@@ -86,8 +87,9 @@ Invariants:
   Content is role data, not a secret channel.
 - reef refuses to destroy a sandbox it did not create (a `reef.state` label
   carries the state dir's identity).
-- `fleet apply` removes nothing without `--prune`, and prunes only agents it
-  created; a hand-made agent is never adopted or removed by a fleet file.
+- `fleet apply` removes nothing without `--prune` or `purge`, and removes only
+  agents it created; a hand-made agent is never adopted or removed by a fleet
+  file.
 
 ## Layout
 

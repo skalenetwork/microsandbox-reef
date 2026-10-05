@@ -1,6 +1,6 @@
 use crate::name::{AgentName, EnvKey, RoleName};
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -8,6 +8,8 @@ pub struct Fleet {
     pub version: u32,
     #[serde(default)]
     pub agents: BTreeMap<AgentName, FleetAgent>,
+    #[serde(default)]
+    pub purge: BTreeSet<AgentName>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +65,8 @@ role = "hermes"
         assert_eq!(fleet.agents[&"bob-hermes".parse().unwrap()].owner, None);
 
         assert!(parse_fleet("version = 1\n").unwrap().agents.is_empty());
+        let purge = parse_fleet("version = 1\npurge = [\"ana-hermes\"]\n").unwrap();
+        assert!(purge.purge.contains(&"ana-hermes".parse().unwrap()));
         assert!(
             parse_fleet("version = 2\n")
                 .unwrap_err()

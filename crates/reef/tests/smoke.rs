@@ -46,6 +46,14 @@ fn volume(agent: &str) -> String {
     format!("reef-vol-{agent}-data")
 }
 
+fn volumes() -> String {
+    let out = Command::new("msb")
+        .args(["volume", "list"])
+        .output()
+        .expect("msb runs");
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
 fn web_port(json: &str) -> u16 {
     json.split("\"web\": ")
         .nth(1)
@@ -241,11 +249,7 @@ fn full_agent_journey() {
 
     let removed = reef.ok(&["agent", "rm", "--volumes", &reef.agent]);
     assert!(removed.contains("removed"), "{removed}");
-    let left = Command::new("msb")
-        .args(["volume", "list"])
-        .output()
-        .expect("msb runs");
-    let left = String::from_utf8_lossy(&left.stdout).into_owned();
+    let left = volumes();
     assert!(
         !left.contains(&volume(&reef.agent)),
         "--volumes left the volume behind:\n{left}"
@@ -340,5 +344,26 @@ network = { egress = ["example.com"] }
             .1
             .contains("no such agent"),
         "pruned agent must be gone"
+    );
+    assert!(
+        volumes().contains(&volume(&member.agent)),
+        "prune must keep volumes"
+    );
+    std::fs::write(&fleet, entry("two")).unwrap();
+    member.ok(&["fleet", "apply", fleet_path]);
+    std::fs::write(
+        &fleet,
+        format!("version = 1\npurge = [\"{}\"]\n", member.agent),
+    )
+    .unwrap();
+    assert!(
+        member
+            .ok(&["fleet", "apply", fleet_path])
+            .contains("purged"),
+        "purge must remove without --prune"
+    );
+    assert!(
+        !volumes().contains(&volume(&member.agent)),
+        "purge left the volume behind"
     );
 }

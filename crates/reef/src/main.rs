@@ -611,22 +611,26 @@ async fn agent_command(ctx: Ctx, command: AgentCommand) -> Result<()> {
                 .map(|name| require_agent(&ctx, name))
                 .collect::<Result<_>>()?;
             for agent in &agents {
-                let name = &agent.name;
-                ctx.vmm.remove(&name.sandbox()).await?;
-                if volumes {
-                    for entry in ctx.store.role_volumes(&agent.spec.role)? {
-                        let volume = name.volume(&entry);
-                        ctx.vmm.remove_volume(&volume).await?;
-                        ctx.store.record(name, "volume-deleted", &volume)?;
-                    }
-                }
-                ctx.store.delete_agent(name)?;
-                ctx.store.record(name, "deleted", &agent.spec.owner)?;
-                println!("{name} removed");
+                remove_agent(&ctx, agent, volumes, &agent.spec.owner).await?;
+                println!("{} removed", agent.name);
             }
             Ok(())
         }
     }
+}
+
+async fn remove_agent(ctx: &Ctx, agent: &Agent, volumes: bool, by: &str) -> Result<()> {
+    let name = &agent.name;
+    ctx.vmm.remove(&name.sandbox()).await?;
+    if volumes {
+        for entry in ctx.store.role_volumes(&agent.spec.role)? {
+            let volume = name.volume(&entry);
+            ctx.vmm.remove_volume(&volume).await?;
+            ctx.store.record(name, "volume-deleted", &volume)?;
+        }
+    }
+    ctx.store.delete_agent(name)?;
+    ctx.store.record(name, "deleted", by)
 }
 
 fn events_command(ctx: Ctx, filter: EventFilter, json: bool) -> Result<()> {
@@ -739,6 +743,7 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
         bail!("no fleet files given");
     }
     let mut desired = BTreeMap::new();
+    let mut purge = BTreeSet::new();
     for file in &files {
         let text = std::fs::read_to_string(file)
             .with_context(|| format!("cannot read {}", file.display()))?;
@@ -748,6 +753,10 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                 bail!("{name} is declared in more than one fleet file");
             }
         }
+        purge.extend(fleet.purge);
+    }
+    if let Some(name) = purge.iter().find(|name| desired.contains_key(*name)) {
+        bail!("{name} is both declared and purged");
     }
     let mut digests = BTreeMap::new();
     for (name, entry) in &desired {
@@ -825,18 +834,18 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
         }
     }
     for name in gone {
-        if !prune {
+        let purged = purge.contains(&name);
+        if !(purged || prune) {
             eprintln!("{name}: fleet-managed but not declared here; --prune removes it");
             continue;
         }
-        if let Err(e) = ctx.vmm.remove(&name.sandbox()).await {
-            eprintln!("{name}: {e:#}");
-            failed = true;
-            continue;
+        match remove_agent(&ctx, &require_agent(&ctx, &name)?, purged, "fleet").await {
+            Ok(()) => println!("{name} {}", if purged { "purged" } else { "removed" }),
+            Err(e) => {
+                eprintln!("{name}: {e:#}");
+                failed = true;
+            }
         }
-        ctx.store.delete_agent(&name)?;
-        ctx.store.record(&name, "deleted", "fleet")?;
-        println!("{name} removed");
     }
     if failed {
         bail!("some agents failed to converge");
