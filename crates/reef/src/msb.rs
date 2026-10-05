@@ -13,7 +13,7 @@ use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox,
     SshStdioStream, Volume,
 };
-use reef_core::{Domain, EnvKey, Host, Network, VmStatus};
+use reef_core::{Domain, EnvKey, Host, ImageRef, Network, VmStatus};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -93,19 +93,7 @@ impl Vmm for Msb {
                 Err(e) => return Err(e.into()),
             }
         }
-        let image = config.role.image.as_str();
-        let pulled = std::process::Command::new(msb_path()?)
-            .env("MSB_BACKEND", "local")
-            .args(["pull", "-q", image])
-            .output()
-            .context("cannot run msb")?;
-        if !pulled.status.success() {
-            bail!(
-                "cannot pull {image}: {}",
-                String::from_utf8_lossy(&pulled.stderr).trim()
-            );
-        }
-        Ok(())
+        pull(&config.role.image)
     }
 
     async fn create(&self, config: VmConfig<'_>) -> Result<()> {
@@ -527,6 +515,21 @@ pub fn vm_not_running(sandbox: &str) -> String {
     format!(
         "the VM is not running; read what the guest printed with `msb logs {sandbox} --source all`"
     )
+}
+
+pub fn pull(image: &ImageRef) -> Result<()> {
+    let pulled = std::process::Command::new(msb_path()?)
+        .env("MSB_BACKEND", "local")
+        .args(["pull", "-q", image.as_str()])
+        .output()
+        .context("cannot run msb")?;
+    if !pulled.status.success() {
+        bail!(
+            "cannot pull {image}: {}",
+            String::from_utf8_lossy(&pulled.stderr).trim()
+        );
+    }
+    Ok(())
 }
 
 pub fn logs(sandbox: &str, flags: &[String]) -> Result<()> {

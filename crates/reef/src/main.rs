@@ -17,7 +17,7 @@ use reef_core::{
 use rows::{AgentDetail, AgentRow, RoleDetail, RoleRow, joined};
 use secrets::Secrets;
 use sha2::{Digest as _, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::net::{Ipv4Addr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use store::{EventFilter, Store};
@@ -314,6 +314,9 @@ fn role_command(ctx: Ctx, command: RoleCommand) -> Result<()> {
                                 role.name,
                                 joined(&role.network.host)
                             );
+                        }
+                        if activated && let Err(e) = msb::pull(&role.image) {
+                            eprintln!("warn   {}: {e:#}", role.name);
                         }
                     }
                     Err(e) => {
@@ -755,24 +758,15 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
         digests.insert(name.clone(), digest);
     }
     let mut failed = false;
-    for name in ctx.store.fleet_agents()? {
-        if desired.contains_key(&name) {
-            continue;
-        }
-        if !prune {
-            eprintln!("{name}: fleet-managed but not declared here; --prune removes it");
-            continue;
-        }
-        if let Err(e) = ctx.vmm.remove(&name.sandbox()).await {
-            eprintln!("{name}: {e:#}");
-            failed = true;
-            continue;
-        }
-        ctx.store.delete_agent(&name)?;
-        ctx.store.record(&name, "deleted", "fleet")?;
-        println!("{name} removed");
-    }
-    for (name, entry) in desired {
+    let (gone, known): (BTreeSet<_>, BTreeSet<_>) = ctx
+        .store
+        .fleet_agents()?
+        .into_iter()
+        .partition(|name| !desired.contains_key(name));
+    let (existing, fresh): (Vec<_>, Vec<_>) = desired
+        .into_iter()
+        .partition(|(name, _)| known.contains(name));
+    for (name, entry) in fresh.into_iter().chain(existing) {
         let digest = digests.remove(&name).expect("resolved above");
         let outcome = match ctx.store.get_agent(&name)? {
             None => {
@@ -829,6 +823,20 @@ async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
                 failed = true;
             }
         }
+    }
+    for name in gone {
+        if !prune {
+            eprintln!("{name}: fleet-managed but not declared here; --prune removes it");
+            continue;
+        }
+        if let Err(e) = ctx.vmm.remove(&name.sandbox()).await {
+            eprintln!("{name}: {e:#}");
+            failed = true;
+            continue;
+        }
+        ctx.store.delete_agent(&name)?;
+        ctx.store.record(&name, "deleted", "fleet")?;
+        println!("{name} removed");
     }
     if failed {
         bail!("some agents failed to converge");
