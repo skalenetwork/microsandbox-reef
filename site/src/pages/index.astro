@@ -8,17 +8,10 @@ import Terminals from "../components/Terminals.astro";
 import Store from "../components/Store.astro";
 import Upgrade from "../components/Upgrade.astro";
 import DocsNav from "../components/DocsNav.astro";
-import { blocks, description, install, intro, repo, url } from "../content";
+import { blocks, description, install, intro, quickstart, repo, url } from "../content";
 
-const quickstart = `# a host with KVM or Apple Silicon, msb installed
-curl -fsSL -o role.toml -o fleet.toml \\
-  ${url("/")}{roles,fleet}/openclaw.toml
-# your gateway token goes in fleet.toml: openssl rand -hex 32
-reef role apply role.toml
-reef fleet apply fleet.toml
-# open the printed URL, paste the token, pick a provider`;
-const prompt = `Install reef and create my first agent.
-Start with ${url("/llms.txt")}`;
+const prompt = `I want to start using reef.
+Read ${url("/llms.txt")} and tell me about it.`;
 const visuals = [Egress, Keys, Approve, Terminals, Store, Upgrade];
 const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 ---
@@ -41,6 +34,10 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
     }
   </div>
   <section>
+    <h2>Ask your agent</h2>
+    <Code code={prompt} lang="text" theme="css-variables" wrap class="clear" />
+  </section>
+  <section>
     <h2>Your first agent</h2>
     <Code code={quickstart} lang="sh" theme="css-variables" />
     <p>
@@ -48,10 +45,6 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
       needs. The <a href={`${repo}/blob/main/roles/hermes.toml`}>hermes role</a> lists one domain instead.{" "}
       <a href="/docs/setup/host">Prepare a host</a> covers KVM and msb.
     </p>
-  </section>
-  <section>
-    <h2>Or tell your agent</h2>
-    <Code code={prompt} lang="text" theme="css-variables" wrap class="clear" />
   </section>
   <section>
     <h2>Go deeper</h2>

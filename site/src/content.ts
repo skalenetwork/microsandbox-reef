@@ -12,6 +12,14 @@ export const url = (path: string) => new URL(path, import.meta.env.SITE);
 
 export const install = `curl -fsSL ${url("/install")} | sh`;
 
+export const quickstart = `# a host with KVM or Apple Silicon, msb installed
+curl -fsSL -o role.toml -o fleet.toml \\
+  ${url("/")}{roles,fleet}/openclaw.toml
+# your gateway token goes in fleet.toml: openssl rand -hex 32
+reef role apply role.toml
+reef fleet apply fleet.toml
+# open the printed URL, paste the token, pick a provider`;
+
 export const intro = `[One reviewed file](${repo}/blob/main/roles/hermes.toml) decides what an agent can reach and what it can spend. reef holds every agent to it, in its own microVM on your own servers. Approve the file once and developers create agents from it with one command.`;
 
 export const blocks = [
@@ -42,7 +50,7 @@ export const blocks = [
 ];
 
 export const files = import.meta.glob(
-  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/*.toml", "../../fleet/*.toml"],
+  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/README.md", "../../roles/*.toml", "../../fleet/*.toml"],
   { query: "?raw", import: "default", eager: true },
 );
 
