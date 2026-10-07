@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.19.2] - 2026-10-07
+
+### Changed
+- Remove reef migrate, gate fmt and clippy in CI
+
+
 ## [0.19.1] - 2026-10-07
 
 ### Fixed
