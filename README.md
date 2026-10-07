@@ -36,13 +36,6 @@ in [prepare a host](https://reef.clawbits.ai/docs/setup/host).
 note a newer version on stderr, checked at most once a day; `REEF_NO_UPDATE_CHECK=1`
 turns the notice off.
 
-A host still on reef 0.14 moves once. Pause whatever runs reef on its own
-(cron `fleet apply`, a remote `reef ui`, sshd `agent serve`), install the latest
-`msb`, run `reef update`, then `reef migrate` for each state dir. It upgrades the
-msb store, replaces the old VMs and recreates the running agents from their
-records; stopped ones get a VM on their next `reef agent start`. Volumes stay
-where they are; anything a VM kept outside them is gone.
-
 ## Run OpenClaw in a microVM
 
 ```sh
@@ -156,7 +149,6 @@ outlive the VMs, and one console across hosts.
 | `reef reconcile` | Drive every agent to its record, after a reboot or a crash |
 | `reef events --agent reviewer-1 --limit 20` | The event log, oldest first |
 | `reef ui prod-eu prod-us` | Console: watch and drive agents here or on ssh hosts |
-| `reef migrate` | Move a reef 0.14 host onto the latest msb, volumes kept |
 
 `role list`, `role get`, `agent list`, `agent get`, and `events` take
 `--json`.

@@ -124,7 +124,6 @@ export const status = [
       "Terminals through the microsandbox SSH server, no per-person enrollment",
       "reef reconcile brings agents back after a reboot or a crash",
       "reef secret rotate pushes a changed key into running agents",
-      "reef migrate moves a 0.14 host onto the current runtime, volumes kept",
     ],
   },
   {

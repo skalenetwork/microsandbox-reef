@@ -88,8 +88,6 @@ enum Command {
     },
     /// Replace this binary with the latest release
     Update,
-    /// Move this state dir's agents from reef 0.14 onto the installed msb, keeping volumes
-    Migrate,
 }
 
 #[derive(Subcommand)]
@@ -269,11 +267,6 @@ async fn main() -> Result<()> {
         Command::Ui { hosts, reef } => ui::run(ui::hosts(hosts, reef, dir)?),
         Command::Update => update::run().await,
         Command::Reconcile => reconcile_all(&Ctx::open(&dir)?).await,
-        Command::Migrate => {
-            let ctx = Ctx::open(&dir)?;
-            ctx.vmm.migrate().await?;
-            reconcile_all(&ctx).await
-        }
     };
     if let Some(notice) = notice {
         notice.finish().await;

@@ -7,7 +7,6 @@ use microsandbox::protocol::tcp::{TcpClose, TcpConnect, TcpConnected, TcpData, T
 use microsandbox::sandbox::{
     FsOpenOptions, RlimitResource, SandboxFsOps, SandboxHandle, SandboxStatus,
 };
-use microsandbox::setup::{InstallOptions, resolve_runtime_version};
 use microsandbox::size::SizeExt;
 use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox,
@@ -200,26 +199,6 @@ impl Vmm for Msb {
 }
 
 impl Msb {
-    pub async fn migrate(&self) -> Result<()> {
-        let msb = msb_path()?;
-        let pinned = InstallOptions::default().version;
-        let installed = resolve_runtime_version(&msb)?.map(|version| version.to_string());
-        if installed.as_deref() != Some(pinned.as_str()) {
-            bail!(
-                "reef needs msb {pinned}, but {} is {}; install it first",
-                msb.display(),
-                installed.as_deref().unwrap_or("an older release")
-            );
-        }
-        for handle in self.owned().await? {
-            if map_status(handle.status_snapshot()) == VmStatus::Running {
-                halt(&handle).await?;
-            }
-            handle.remove().await?;
-        }
-        Ok(())
-    }
-
     pub async fn rotate(
         &self,
         name: &str,

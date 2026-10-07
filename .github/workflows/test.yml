@@ -18,4 +18,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
