@@ -48,7 +48,7 @@ beside it, in `../lib`, or at `MSB_LIBKRUNFW_PATH`. When none resolves,
 `reef doctor` fails with `cannot resolve msb: install microsandbox
 (https://microsandbox.dev) or set MSB_PATH`.
 
-`msb` needs `libcap-ng0`, and on aarch64 so does `reef` itself.
+`msb` needs `libcap-ng0`.
 
 ## Virtualization
 
