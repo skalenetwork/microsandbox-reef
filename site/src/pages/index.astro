@@ -8,7 +8,7 @@ import Terminals from "../components/Terminals.astro";
 import Store from "../components/Store.astro";
 import Upgrade from "../components/Upgrade.astro";
 import DocsNav from "../components/DocsNav.astro";
-import { blocks, description, install, intro, quickstart, repo, url } from "../content";
+import { blocks, description, install, intro, url } from "../content";
 
 const prompt = `I want to start using reef.
 Read ${url("/llms.txt")} and tell me about it.`;
@@ -17,7 +17,10 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
 ---
 
 <Layout title={`reef - ${description}`} path="/">
-  <Code code={install} lang="sh" theme="css-variables" class="clear" />
+  <section>
+    <h2>Ask your agent</h2>
+    <Code code={prompt} lang="text" theme="css-variables" wrap class="clear" />
+  </section>
   <p class="intro" set:html={html(intro)} />
   <div class="blocks">
     {
@@ -34,17 +37,8 @@ const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
     }
   </div>
   <section>
-    <h2>Ask your agent</h2>
-    <Code code={prompt} lang="text" theme="css-variables" wrap class="clear" />
-  </section>
-  <section>
-    <h2>Your first agent</h2>
-    <Code code={quickstart} lang="sh" theme="css-variables" />
-    <p>
-      <code>role apply</code> warns that this role opens the whole public internet, which an agent that browses the web
-      needs. The <a href={`${repo}/blob/main/roles/hermes.toml`}>hermes role</a> lists one domain instead.{" "}
-      <a href="/docs/setup/host">Prepare a host</a> covers KVM and msb.
-    </p>
+    <h2>Install it yourself</h2>
+    <Code code={install} lang="sh" theme="css-variables" class="clear" />
   </section>
   <section>
     <h2>Go deeper</h2>

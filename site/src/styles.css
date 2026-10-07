@@ -59,7 +59,9 @@ section {
   gap: 8px;
 }
 
-main > section {
+main > section,
+main > .intro,
+main > .blocks {
   margin-top: 16px;
 }
 

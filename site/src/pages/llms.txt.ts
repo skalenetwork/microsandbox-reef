@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { description, docs, files, install, intro, posts, quickstart, route, url } from "../content";
+import { description, docs, files, install, intro, posts, route, url } from "../content";
 
 export const GET: APIRoute = () => {
   const examples = Object.keys(files)
@@ -20,7 +20,6 @@ reef runs on Linux x86_64/aarch64 with KVM and glibc 2.39 or newer, and on Apple
 ## Start
 
 \`\`\`sh
-curl -fsSL https://install.microsandbox.dev | sh
 ${install}
 reef doctor
 \`\`\`
@@ -28,7 +27,12 @@ reef doctor
 The first agent is an OpenClaw gateway that picks its model provider in the browser:
 
 \`\`\`sh
-${quickstart}
+curl -fsSL -o role.toml -o fleet.toml \\
+  ${url("/")}{roles,fleet}/openclaw.toml
+# your gateway token goes in fleet.toml: openssl rand -hex 32
+reef role apply role.toml
+reef fleet apply fleet.toml
+# open the printed URL, paste the token, pick a provider
 \`\`\`
 
 ## Docs
