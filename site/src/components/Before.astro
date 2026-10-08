@@ -1,31 +1,24 @@
-<svg
-  viewBox="-32 -32 704 344"
-  width="640"
-  height="313"
-  role="img"
-  aria-label="Before: a browser reaches the api on the host through a tunnel and the VM holds the real key sk-a1f3. After: the host pulls from the repo, nothing reaches in, and the VM holds the placeholder $MSB_KEY."
->
+<svg viewBox="-32 -32 704 344" width="640" height="313" role="img" aria-label="v1: clawbits reaches the api on the host through a tunnel, with the admin token. v2: clawbits commits to the repo and the host pulls from it, nothing reaches in.">
   <defs>
-    <marker id="before-arrow" viewBox="0 0 7 6" refX="7" refY="3" markerWidth="7" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+    <marker id="p-arrow" viewBox="0 0 7 6" refX="7" refY="3" markerWidth="7" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
       <polygon class="arrow" points="0,0 7,3 0,6" />
     </marker>
   </defs>
   <text class="muted" x="144" y="12" text-anchor="middle">v1</text>
   <text class="muted" x="496" y="12" text-anchor="middle">v2</text>
   <text class="muted" x="136" y="78" text-anchor="middle">tunnel</text>
-  <path d="M96 96H176" marker-end="url(#before-arrow)" />
   <rect x="0" y="72" width="96" height="48" rx="4" />
-  <text x="48" y="96" text-anchor="middle">browser</text>
+  <text x="48" y="96" text-anchor="middle">clawbits</text>
   <rect class="outer" x="168" y="40" width="112" height="224" rx="4" />
   <text class="muted" x="224" y="56" text-anchor="middle">host</text>
   <rect x="176" y="72" width="96" height="48" rx="4" />
   <text x="224" y="96" text-anchor="middle">api</text>
   <rect x="176" y="152" width="96" height="88" rx="4" />
-  <text x="224" y="180" text-anchor="middle">VM</text>
-  <text class="key" x="224" y="212" text-anchor="middle">sk-a1f3</text>
-  <circle class="in" cx="96" cy="96" r="3" />
-  <text class="muted" x="480" y="78" text-anchor="middle">pulls</text>
-  <path d="M528 96H448" marker-end="url(#before-arrow)" />
+  <text x="224" y="196" text-anchor="middle">VMs</text>
+  <rect x="352" y="0" width="96" height="40" rx="4" />
+  <text x="400" y="20" text-anchor="middle">clawbits</text>
+  <text class="muted" x="412" y="56">commit</text>
+  <text class="muted" x="488" y="78" text-anchor="middle">pull</text>
   <rect x="352" y="72" width="96" height="48" rx="4" />
   <text x="400" y="96" text-anchor="middle">repo</text>
   <rect class="outer" x="520" y="40" width="112" height="224" rx="4" />
@@ -33,119 +26,47 @@
   <rect x="528" y="72" width="96" height="48" rx="4" />
   <text x="576" y="96" text-anchor="middle">reef</text>
   <rect x="528" y="152" width="96" height="88" rx="4" />
-  <text x="576" y="180" text-anchor="middle">VM</text>
-  <text class="placeholder" x="576" y="212" text-anchor="middle">$MSB_KEY</text>
+  <text x="576" y="196" text-anchor="middle">VMs</text>
+  <path d="M96 96H176" marker-end="url(#p-arrow)" />
+  <path d="M400 40V72" marker-end="url(#p-arrow)" />
+  <path d="M528 96H448" marker-end="url(#p-arrow)" />
+  <text class="key" x="136" y="116" text-anchor="middle">token</text>
+  <circle class="in" cx="96" cy="96" r="3" />
+  <circle class="commit" cx="400" cy="40" r="3" />
   <circle class="out" cx="528" cy="96" r="3" />
 </svg>
 
 <style>
-  .arrow {
-    fill: var(--text-2);
-  }
-
-  .outer {
-    stroke: var(--text-2);
-  }
-
-  circle {
-    fill: var(--text);
-    opacity: 0;
-  }
-
-  .in {
-    animation: before-in 6s linear infinite;
-  }
-
-  .out {
-    animation: before-out 6s linear infinite;
-  }
-
-  .key {
-    fill: var(--accent);
-    animation: before-appear 6s linear infinite;
-  }
-
-  .placeholder {
-    animation: before-appear 6s linear infinite;
-  }
-
+  .arrow { fill: var(--text-2); }
+  .outer { stroke: var(--text-2); }
+  circle { fill: var(--text); opacity: 0; }
+  .key { fill: var(--accent); opacity: 0; animation: before-key 6s linear infinite; }
+  .in { animation: before-in 6s linear infinite; }
+  .commit { animation: before-commit 6s linear infinite; }
+  .out { animation: before-out 6s linear infinite; }
   @keyframes before-in {
-    0%,
-    3% {
-      transform: translate(0, 0);
-      opacity: 0;
-      fill: var(--text);
-      animation-timing-function: ease-in-out;
-    }
-    4% {
-      opacity: 1;
-    }
-    15% {
-      transform: translate(80px, 0);
-      opacity: 1;
-      fill: var(--text);
-    }
-    16%,
-    90% {
-      transform: translate(80px, 0);
-      opacity: 1;
-      fill: var(--accent);
-    }
-    93%,
-    100% {
-      transform: translate(80px, 0);
-      opacity: 0;
-      fill: var(--accent);
-    }
+    0%, 3% { transform: translate(0, 0); opacity: 0; fill: var(--text); animation-timing-function: ease-in-out; }
+    4% { opacity: 1; }
+    14% { transform: translate(80px, 0); opacity: 1; fill: var(--text); }
+    15%, 70% { transform: translate(80px, 0); opacity: 1; fill: var(--accent); }
+    74%, 100% { transform: translate(80px, 0); opacity: 0; fill: var(--accent); }
   }
-
+  @keyframes before-key {
+    0%, 14% { opacity: 0; }
+    16%, 70% { opacity: 1; }
+    74%, 100% { opacity: 0; }
+  }
+  @keyframes before-commit {
+    0%, 3% { transform: translate(0, 0); opacity: 0; animation-timing-function: ease-in-out; }
+    4% { opacity: 1; }
+    10%, 11% { transform: translate(0, 32px); opacity: 1; }
+    13%, 100% { transform: translate(0, 32px); opacity: 0; }
+  }
   @keyframes before-out {
-    0%,
-    3% {
-      transform: translate(0, 0);
-      opacity: 0;
-      animation-timing-function: ease-in-out;
-    }
-    4% {
-      opacity: 1;
-    }
-    15%,
-    17% {
-      transform: translate(-80px, 0);
-      opacity: 1;
-      animation-timing-function: ease-in-out;
-    }
-    28%,
-    29% {
-      transform: translate(0, 0);
-      opacity: 1;
-    }
-    31%,
-    100% {
-      transform: translate(0, 0);
-      opacity: 0;
-    }
-  }
-
-  @keyframes before-appear {
-    0%,
-    16% {
-      opacity: 0;
-    }
-    18%,
-    90% {
-      opacity: 1;
-    }
-    93%,
-    100% {
-      opacity: 0;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    text,
-    circle {
-      animation: none;
-    }
+    0%, 17% { transform: translate(0, 0); opacity: 0; animation-timing-function: ease-in-out; }
+    18% { opacity: 1; }
+    28%, 30% { transform: translate(-80px, 0); opacity: 1; animation-timing-function: ease-in-out; }
+    40%, 41% { transform: translate(0, 0); opacity: 1; }
+    44%, 100% { transform: translate(0, 0); opacity: 0; }
   }
 </style>

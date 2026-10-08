@@ -11,8 +11,8 @@
 </div>
 
 A **role** is a TOML file: the image, the resources, the domains an agent may
-reach, and the secrets it may spend. Developers create **agents** from the
-roles you approved, one command each, and every agent runs in its own
+reach, and the secrets it may spend. Every **agent** is created from a role
+you approved and runs in its own
 [microsandbox](https://github.com/superradcompany/microsandbox) microVM on
 your own servers. There is no daemon: every mutating command reconciles
 inline, and the VMs outlive reef.

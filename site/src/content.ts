@@ -1,4 +1,16 @@
 import type { MarkdownInstance } from "astro";
+import workspace from "../../Cargo.toml?raw";
+import crate from "../../crates/reef/Cargo.toml?raw";
+
+const pick = (toml: string, pattern: RegExp, what: string) => {
+  const value = toml.match(pattern)?.[1];
+  if (!value) throw new Error(`Cargo.toml: cannot find ${what}`);
+  return value;
+};
+
+export const version = pick(workspace, /^version = "(.+)"$/m, "the workspace version");
+
+export const msb = pick(crate, /^microsandbox = \{ version = "=(.+?)"/m, "the exact microsandbox pin");
 
 export const description = "Contained AI agents on your servers.";
 
@@ -13,7 +25,7 @@ export const url = (path: string) => new URL(path, import.meta.env.SITE);
 export const install = `curl -fsSL https://install.microsandbox.dev | sh
 curl -fsSL ${url("/install")} | sh`;
 
-export const intro = `[One reviewed file](${repo}/blob/main/roles/hermes.toml) decides what an agent can reach and what it can spend. reef holds every agent to it, in its own microVM on your own servers. Approve the file once and developers create agents from it with one command.`;
+export const intro = `[One reviewed file](${repo}/blob/main/roles/hermes.toml) decides what an agent can reach. reef holds every agent to it, in its own microVM on your own servers. Approve the file once, then create as many agents from it as you need.`;
 
 export const blocks = [
   {
@@ -43,7 +55,7 @@ export const blocks = [
 ];
 
 export const files = import.meta.glob(
-  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/README.md", "../../roles/*.toml", "../../fleet/*.toml"],
+  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/README.md", "../../roles/*.toml", "../../fleet/*.toml", "../../skills/*/SKILL.md"],
   { query: "?raw", import: "default", eager: true },
 );
 

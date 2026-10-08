@@ -1,0 +1,55 @@
+<svg viewBox="-32 -32 704 344" width="640" height="313" role="img" aria-label="Three ways to run agents: a personal agent on a personal laptop with full access, an agent VM in our cloud with the compliance burden, or an agent VM on the org's hardware, managed by the org and connected to the team space. The first two fade to grey; the third stays.">
+  <text class="muted" x="96" y="12" text-anchor="middle">personal agent</text>
+  <text class="muted" x="320" y="12" text-anchor="middle">SaaS</text>
+  <text class="muted" x="544" y="12" text-anchor="middle">hybrid</text>
+  <rect class="r1 outer" x="0" y="40" width="192" height="128" rx="4" />
+  <text class="muted" x="96" y="56" text-anchor="middle">personal laptop</text>
+  <rect class="r1" x="32" y="72" width="128" height="40" rx="4" />
+  <text class="t1" x="96" y="92" text-anchor="middle">agent</text>
+  <text class="k1" x="96" y="140" text-anchor="middle">full access</text>
+  <rect class="r1" x="32" y="208" width="128" height="40" rx="4" />
+  <text class="t1" x="96" y="228" text-anchor="middle">team space</text>
+  <rect class="r2 outer" x="224" y="40" width="192" height="128" rx="4" />
+  <text class="muted" x="320" y="56" text-anchor="middle">our cloud</text>
+  <rect class="r2" x="256" y="72" width="128" height="40" rx="4" />
+  <text class="t2" x="320" y="92" text-anchor="middle">agent VM</text>
+  <text class="k2" x="320" y="140" text-anchor="middle">compliance</text>
+  <rect class="r2" x="256" y="208" width="128" height="40" rx="4" />
+  <text class="t2" x="320" y="228" text-anchor="middle">team space</text>
+  <rect class="outer" x="448" y="40" width="192" height="128" rx="4" />
+  <text class="muted" x="544" y="56" text-anchor="middle">org's hardware</text>
+  <rect x="480" y="72" width="128" height="40" rx="4" />
+  <text x="544" y="92" text-anchor="middle">agent VM</text>
+  <text class="k3 muted" x="544" y="140" text-anchor="middle">managed by the org</text>
+  <rect x="480" y="208" width="128" height="40" rx="4" />
+  <text x="544" y="228" text-anchor="middle">team space</text>
+  <path class="l1s" d="M96 168V208" />
+  <path class="l1d" d="M96 168V208" />
+  <path d="M320 168V208" />
+  <path d="M544 168V208" />
+</svg>
+
+<style>
+  .outer { stroke: var(--text-2); }
+  .l1d { stroke-dasharray: 3 4; opacity: 0; }
+  .k1, .k2 { fill: var(--accent); opacity: 0; }
+  .k3 { opacity: 0; }
+  .r1 { animation: place-r1 6s linear infinite; }
+  .t1 { animation: place-t1 6s linear infinite; }
+  .k1 { animation: place-k1 6s linear infinite; }
+  .l1s { animation: place-l1s 6s linear infinite; }
+  .l1d { animation: place-l1d 6s linear infinite; }
+  .r2 { animation: place-r2 6s linear infinite; }
+  .t2 { animation: place-t2 6s linear infinite; }
+  .k2 { animation: place-k2 6s linear infinite; }
+  .k3 { animation: place-k3 6s linear infinite; }
+  @keyframes place-r1 { 0%, 10% { stroke: var(--text); } 14%, 86% { stroke: var(--text-2); } 90%, 100% { stroke: var(--text); } }
+  @keyframes place-t1 { 0%, 10% { fill: var(--text); } 14%, 86% { fill: var(--text-2); } 90%, 100% { fill: var(--text); } }
+  @keyframes place-k1 { 0%, 10% { opacity: 0; } 14%, 86% { opacity: 1; } 90%, 100% { opacity: 0; } }
+  @keyframes place-l1s { 0%, 10% { opacity: 1; } 14%, 86% { opacity: 0; } 90%, 100% { opacity: 1; } }
+  @keyframes place-l1d { 0%, 10% { opacity: 0; } 14%, 86% { opacity: 1; } 90%, 100% { opacity: 0; } }
+  @keyframes place-r2 { 0%, 30% { stroke: var(--text); } 34%, 86% { stroke: var(--text-2); } 90%, 100% { stroke: var(--text); } }
+  @keyframes place-t2 { 0%, 30% { fill: var(--text); } 34%, 86% { fill: var(--text-2); } 90%, 100% { fill: var(--text); } }
+  @keyframes place-k2 { 0%, 30% { opacity: 0; } 34%, 86% { opacity: 1; } 90%, 100% { opacity: 0; } }
+  @keyframes place-k3 { 0%, 50% { opacity: 0; } 54%, 86% { opacity: 1; } 90%, 100% { opacity: 0; } }
+</style>

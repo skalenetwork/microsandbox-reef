@@ -11,7 +11,7 @@ import DocsNav from "../components/DocsNav.astro";
 import { blocks, description, install, intro, url } from "../content";
 
 const prompt = `I want to start using reef.
-Read ${url("/llms.txt")} and tell me about it.`;
+Read ${url("/llms.txt")}, then tell me whether it fits what we run and what to do first.`;
 const visuals = [Egress, Keys, Approve, Terminals, Store, Upgrade];
 const html = (markdown: string) => markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 ---
