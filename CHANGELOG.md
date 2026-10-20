@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.20.0] - 2026-10-20
+
+### Added
+- Run hosts from git, scope secrets to headers, limit fleet env per role
+
+
 ## [0.19.3] - 2026-10-20
 
 ### Fixed
