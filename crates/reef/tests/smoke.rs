@@ -93,7 +93,7 @@ expose = { web = 8080 }
 volumes = { data = { dest = "/data", size-mib = 64 } }
 resources = { vcpus = 1, memory-mib = 256, max-pids = 128 }
 network = { egress = ["example.com"] }
-secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com" } }
+secrets = { FAKE_KEY = { ref = "reef://demo/fake", host = "example.com", headers = ["authorization"] } }
 "#;
 
 #[test]

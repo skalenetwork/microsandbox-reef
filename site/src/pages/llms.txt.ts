@@ -66,7 +66,7 @@ A role takes any OCI image. Pin it by digest. Without \`init\` the VM boots idle
 ## A team
 
 1. ${link("setup/host")}: KVM, a dedicated account, and agents that come back after a reboot.
-2. Keep roles and fleet files in a repo and review changes there. \`reef --state "$(mktemp -d)" role apply roles/*.toml\` validates role files without booting anything, so CI can run it. On each host, \`reef role apply\` then \`reef fleet apply\` bring the agents to what the repo declares. Give each host its own fleet directory, since every host's state stands alone. Set \`owner\` on every fleet entry. It defaults to whoever runs the apply, which under sudo is the reef account.
+2. Keep roles and fleet files in a repo and review changes there. \`reef --state "$(mktemp -d)" role apply roles/*.toml\` validates role files without booting anything, so CI can run it. On each host, \`reef role apply\` then \`reef fleet apply\` bring the agents to what the repo declares. Give each host its own fleet directory, since every host's state stands alone. Set \`owner\` on every fleet entry. It defaults to whoever runs the apply, which under sudo is the reef account. ${link("setup/gitops")} runs this from one GitHub repository, with a host service that applies it and reports back.
 3. Secrets come from \`secrets.toml\` on each host, as an inline value or a \`[resolvers]\` command whose output is the value, such as \`op read\`. A secret binds to a role, so every agent on that role uses the same key.
 4. ${link("enterprise/terminals")}: each person opens only the agents they own, through the org's SSH CA.
 5. With OpenClaw: ${link("enterprise/team")}, ${link("enterprise/cloudflare-access")} and ${link("enterprise/scopes")}.

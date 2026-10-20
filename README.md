@@ -367,8 +367,10 @@ public address among them: private (RFC 1918, CGNAT, ULA), link-local and cloud
 metadata addresses stay denied, and an upstream DNS answer in a private,
 loopback or link-local range comes back NXDOMAIN.
 Secrets bind to the one host they may be sent to; the VM only ever sees a
-placeholder - the real value is substituted host-side by microsandbox's proxy
-and never enters the guest.
+placeholder, and microsandbox's proxy adds the real value on the way out.
+`headers = ["authorization"]` limits that to the named header fields
+(lowercase). Without it every header is substituted, so a host that echoes a
+request header back hands the guest the value.
 
 A changed value does not reach agents on its own. `reef secret rotate
 reef://store/name` resolves it once and pushes it into every agent VM built
@@ -378,8 +380,9 @@ Each agent records a `rotated` event with the key and ref, never the value.
 
 ## Fleets
 
-Declare the org's agents and converge with `reef fleet apply fleet/*.toml`:
-listed agents are created, recreated when their role drifts, and restarted
+Declare the org's agents and converge with `reef fleet apply fleet/*.toml`,
+or pass the directory itself, whose `*.toml` files are read (an empty one
+declares no agents): listed agents are created, recreated when their role drifts, and restarted
 in place when only their env drifts. New agents go first and removals last,
 so a create never waits behind a rollout or a prune.
 
@@ -394,6 +397,10 @@ env = { HERMES_DASHBOARD_BASIC_AUTH_USERNAME = "ana" }
 
 `owner` names who `agent serve` admits; omitted, an existing agent keeps its
 owner and a new one records the applying user.
+
+A role's top-level `fleet-env = ["KEY", …]` lists the env keys a fleet entry
+may set, and a fleet agent that sets any other key fails to converge. Without
+it, a fleet entry may set any key.
 
 Removal is opt-in: `--prune` also deletes fleet agents the given files no
 longer declare, so pass it the whole fleet directory - a partial file list

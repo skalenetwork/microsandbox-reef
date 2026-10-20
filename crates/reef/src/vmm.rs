@@ -1,6 +1,6 @@
 use crate::secrets::Secret;
 use anyhow::Result;
-use reef_core::{EnvKey, Host, Role, VmStatus};
+use reef_core::{EnvKey, Role, SecretBinding, VmStatus};
 use std::collections::BTreeMap;
 
 pub struct VmConfig<'a> {
@@ -15,7 +15,7 @@ pub struct VmConfig<'a> {
 pub struct SecretEnv<'a> {
     pub key: &'a EnvKey,
     pub value: Secret,
-    pub host: &'a Host,
+    pub binding: &'a SecretBinding,
 }
 
 pub struct VolumeMount {

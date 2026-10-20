@@ -9,7 +9,7 @@ reef lets an organization run AI agents on its own hardware, safely. A platform
 team declares agent **roles** as reviewable TOML files; developers create
 **agents** from those roles without a ticket; every agent runs isolated in its
 own [microsandbox](https://github.com/superradcompany/microsandbox) microVM
-with deny-by-default egress and secrets it can spend but never read.
+with deny-by-default egress and secrets it can spend without holding them.
 
 The bet: what an org actually needs from an agent host is not orchestration:
 it is **containment it can review**. A role file is the whole blast radius:
@@ -66,7 +66,7 @@ Invariants:
   the single rule `"*"`, which must stand alone and which `role apply` warns
   about; private (RFC 1918, CGNAT, ULA), link-local and cloud metadata
   addresses stay denied, and a secret's host binding still holds, so an unrestricted role
-  spends secrets without reading them.
+  spends secrets without holding them.
 - The host is a destination only for the ports a role names. Without
   `network.host` no agent reaches a service the host binds to loopback, another
   agent's published port included, whatever its egress list says; DNS is the one
@@ -140,7 +140,9 @@ parse error). Values resolve host-side at VM create from `secrets.toml`:
 an inline 0600 table, or a `[resolvers]` command template (`op read …`,
 `bao kv get …`, `aws secretsmanager …`) whose stdout is the value. The
 resolver seam is how reef plugs into whatever store the org already runs;
-reef holds no credential for the credential store.
+reef holds no credential for the credential store. A binding's `headers`
+limits substitution to the named header fields, so an allowed host that echoes
+a header back cannot hand the guest the value.
 
 ## Philosophy
 

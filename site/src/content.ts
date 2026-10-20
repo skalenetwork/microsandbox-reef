@@ -55,7 +55,7 @@ export const blocks = [
 ];
 
 export const files = import.meta.glob(
-  ["../../install.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/README.md", "../../roles/*.toml", "../../fleet/*.toml", "../../skills/*/SKILL.md"],
+  ["../../install.sh", "../../gitops/*.sh", "../../README.md", "../../ARCHITECTURE.md", "../../docs/*/*.md", "../../blog/*.md", "../../roles/README.md", "../../roles/*.toml", "../../fleet/*.toml", "../../skills/*/SKILL.md"],
   { query: "?raw", import: "default", eager: true },
 );
 
@@ -66,6 +66,7 @@ export const route = (file: string) =>
 
 const ORDER = [
   "setup/host",
+  "setup/gitops",
   "agents/openclaw",
   "agents/hermes",
   "enterprise/team",

@@ -79,3 +79,20 @@ fn fleet_apply_converges_new_agents_first_and_prunes_last() {
         .collect();
     assert_eq!(order, ["b-new", "a-old", "z-gone", "Error"], "{stderr}");
 }
+
+#[test]
+fn fleet_apply_reads_directories_and_an_empty_one_declares_nothing() {
+    let host = Host::new("fleet-dir");
+    host.reef(&["role", "apply", "role.toml"]);
+    std::fs::create_dir(host.0.join("fleet")).unwrap();
+    host.write(
+        "fleet/one.toml",
+        "version = 1\nagents.one.role = \"echo\"\n",
+    );
+    host.write("fleet/notes.md", "not a fleet file");
+    let (_, stderr) = host.reef(&["fleet", "apply", "fleet"]);
+    assert!(stderr.starts_with("one:"), "{stderr}");
+    std::fs::remove_file(host.0.join("fleet/one.toml")).unwrap();
+    let (ok, stderr) = host.reef(&["fleet", "apply", "fleet", "--prune"]);
+    assert!(ok && stderr.is_empty(), "{stderr}");
+}

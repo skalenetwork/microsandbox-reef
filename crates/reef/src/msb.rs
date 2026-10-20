@@ -10,9 +10,9 @@ use microsandbox::sandbox::{
 use microsandbox::size::SizeExt;
 use microsandbox::{
     AgentClient, ExecEvent, MicrosandboxError, NetworkPolicy, NetworkProfile, Sandbox,
-    SshStdioStream, Volume,
+    SecretSubstitution, SshStdioStream, Volume,
 };
-use reef_core::{Domain, EnvKey, Host, ImageRef, Network, VmStatus};
+use reef_core::{Domain, EnvKey, HeaderName, ImageRef, Network, SecretBinding, VmStatus};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -137,7 +137,10 @@ impl Vmm for Msb {
             builder = builder.secret(|s| {
                 s.env(secret.key.as_str())
                     .value(secret.value.expose())
-                    .allow(secret.host.as_str())
+                    .allow(secret.binding.host.as_str())
+                    .substitute_in_header_fields(
+                        secret.binding.headers.iter().map(HeaderName::as_str),
+                    )
             });
         }
         match builder.create_detached().await {
@@ -204,7 +207,7 @@ impl Msb {
         name: &str,
         key: &EnvKey,
         value: &Secret,
-        host: &Host,
+        binding: &SecretBinding,
     ) -> Result<()> {
         Sandbox::get(name)
             .await?
@@ -212,7 +215,11 @@ impl Msb {
             .secret(|s| {
                 s.env(key.as_str())
                     .value(value.expose())
-                    .allow(host.as_str())
+                    .allow(binding.host.as_str())
+                    .substitution(SecretSubstitution {
+                        header_fields: binding.headers.iter().map(HeaderName::to_string).collect(),
+                        ..Default::default()
+                    })
             })
             .apply()
             .await?;

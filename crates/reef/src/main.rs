@@ -94,7 +94,8 @@ enum Command {
 enum FleetCommand {
     /// Converge agents toward fleet files: create and update
     Apply {
-        files: Vec<PathBuf>,
+        /// Fleet files, or directories whose *.toml files are read
+        paths: Vec<PathBuf>,
         /// Also remove fleet agents these files no longer declare
         #[arg(long)]
         prune: bool,
@@ -731,9 +732,23 @@ fn user() -> String {
 }
 
 async fn fleet_command(ctx: Ctx, command: FleetCommand) -> Result<()> {
-    let FleetCommand::Apply { files, prune } = command;
-    if files.is_empty() {
+    let FleetCommand::Apply { paths, prune } = command;
+    if paths.is_empty() {
         bail!("no fleet files given");
+    }
+    let mut files = Vec::new();
+    for path in paths {
+        if !path.is_dir() {
+            files.push(path);
+            continue;
+        }
+        let mut found = std::fs::read_dir(&path)
+            .with_context(|| format!("cannot read {}", path.display()))?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        found.retain(|file| file.extension().is_some_and(|ext| ext == "toml"));
+        found.sort();
+        files.extend(found);
     }
     let mut desired = BTreeMap::new();
     let mut purge = BTreeSet::new();
@@ -854,13 +869,13 @@ async fn secret_command(ctx: Ctx, command: SecretCommand) -> Result<()> {
     }
     let value = ctx.secrets.resolve(&secret)?;
     let mut failed = false;
-    for (name, key, host) in bindings {
+    for (name, key, binding) in bindings {
         let sandbox = name.sandbox();
         let Some(vm) = ctx.vmm.status(&sandbox).await? else {
             println!("{name} has no VM; its next create resolves the new value");
             continue;
         };
-        match ctx.vmm.rotate(&sandbox, &key, &value, &host).await {
+        match ctx.vmm.rotate(&sandbox, &key, &value, &binding).await {
             Ok(()) => {
                 ctx.store
                     .record(&name, "rotated", &format!("{key} {secret}"))?;
@@ -896,7 +911,7 @@ mod tests {
     }
 
     #[test]
-    fn absent_init_and_env_never_reach_the_digest() {
+    fn absent_optional_fields_never_reach_the_digest() {
         let role = parse_role(
             r#"
 version = 1
@@ -904,13 +919,17 @@ name = "plain"
 image = "alpine"
 resources = { vcpus = 1, memory-mib = 64 }
 network = { egress = ["example.com"] }
+secrets = { KEY = { ref = "reef://demo/key", host = "example.com" } }
 "#,
         )
         .unwrap();
         let (_, definition) = digest_role(&role);
-        assert!(!definition.contains(r#""init""#), "{definition}");
-        assert!(!definition.contains(r#""env""#), "{definition}");
-        assert!(!definition.contains(r#""expose""#), "{definition}");
+        for field in ["init", "env", "expose", "headers", "fleet-env"] {
+            assert!(
+                !definition.contains(&format!("\"{field}\"")),
+                "{definition}"
+            );
+        }
     }
 
     #[test]

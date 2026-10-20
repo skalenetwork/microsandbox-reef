@@ -52,6 +52,11 @@ name_type!(AgentName, "agent name", is_name);
 name_type!(VolumeName, "volume name", is_name);
 name_type!(PortName, "port name", is_name);
 name_type!(EnvKey, "env key (A-Z 0-9 _, not REEF_ or MSB_)", is_env_key);
+name_type!(
+    HeaderName,
+    "header name (lowercase HTTP token)",
+    is_header_name
+);
 name_type!(Domain, "domain", is_domain);
 name_type!(Host, "host", is_host);
 name_type!(ImageRef, "image reference", is_image);
@@ -182,6 +187,12 @@ fn is_env_key(s: &str) -> bool {
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
+fn is_header_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "!#$%&'*+-.^_`|~".contains(c))
+}
+
 fn is_domain(s: &str) -> bool {
     if s == "*" {
         return true;
@@ -256,6 +267,15 @@ mod tests {
         assert!("REEF_PORT_UI".parse::<EnvKey>().is_err());
         assert!("MSB_HOME".parse::<EnvKey>().is_err());
         assert!("1X".parse::<EnvKey>().is_err());
+    }
+
+    #[test]
+    fn header_names_are_lowercase_tokens() {
+        assert!("authorization".parse::<HeaderName>().is_ok());
+        assert!("x-api-key".parse::<HeaderName>().is_ok());
+        for bad in ["", "Authorization", "x api", "a:b"] {
+            assert!(bad.parse::<HeaderName>().is_err(), "{bad:?}");
+        }
     }
 
     #[test]

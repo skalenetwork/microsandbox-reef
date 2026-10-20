@@ -8,8 +8,8 @@ mod role;
 pub use agent::{Agent, AgentSpec, AgentStatus, Lifecycle, State};
 pub use fleet::{Fleet, FleetAgent, parse_fleet};
 pub use name::{
-    AgentName, Digest, Domain, EnvKey, GuestPath, Host, ImageRef, PortName, RoleName, SecretRef,
-    VolumeName,
+    AgentName, Digest, Domain, EnvKey, GuestPath, HeaderName, Host, ImageRef, PortName, RoleName,
+    SecretRef, VolumeName,
 };
 pub use plan::{Action, Drift, VmStatus, plan};
 pub use ports::{HOST_PORTS, allocate_ports};

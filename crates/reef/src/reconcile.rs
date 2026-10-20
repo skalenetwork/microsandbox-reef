@@ -60,6 +60,13 @@ async fn run<V: Vmm>(
     {
         bail!("agent env {key} collides with a role secret");
     }
+    if let Some(role) = &role
+        && agent.fleet
+        && let Some(allowed) = &role.fleet_env
+        && let Some(key) = agent.spec.env.keys().find(|key| !allowed.contains(*key))
+    {
+        bail!("fleet env {key} is not in role {}'s fleet-env", role.name);
+    }
     let mut config = None;
     if steps.contains(&Action::Create) {
         let role = role.as_ref().expect("plan pairs Create with a role");
@@ -140,7 +147,7 @@ fn vm_config<'a>(
             secrets.resolve(&binding.secret).map(|value| SecretEnv {
                 key,
                 value,
-                host: &binding.host,
+                binding,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -538,6 +545,33 @@ network = { egress = ["example.com"] }
         );
         let err = reconcile(&store, &secrets, &vmm, &name).await.unwrap_err();
         assert!(err.to_string().contains("collides"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn fleet_env_limits_what_a_fleet_entry_sets() {
+        let (store, secrets, _digest, _name) = setup();
+        let vmm = FakeVmm::default();
+        let locked = import(
+            &store,
+            &ROLE.replace("resources =", "fleet-env = [\"ORG\"]\nresources ="),
+            "a",
+        );
+        let name: AgentName = "worker-4".parse().unwrap();
+        store
+            .insert_agent(&Agent::new(
+                name.clone(),
+                true,
+                AgentSpec {
+                    owner: "test".to_owned(),
+                    role: "echo".parse().unwrap(),
+                    role_digest: locked,
+                    desired: VmStatus::Running,
+                    env: BTreeMap::from([("NODE_OPTIONS".parse().unwrap(), "x".to_owned())]),
+                },
+            ))
+            .unwrap();
+        let err = reconcile(&store, &secrets, &vmm, &name).await.unwrap_err();
+        assert!(err.to_string().contains("fleet-env"), "{err}");
     }
 
     #[tokio::test]

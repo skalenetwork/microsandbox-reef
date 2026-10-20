@@ -1,8 +1,8 @@
 use crate::rows::Event;
 use anyhow::{Context, Result, bail};
 use reef_core::{
-    Agent, AgentName, AgentSpec, AgentStatus, Digest, EnvKey, Host, ImageRef, Lifecycle, PortName,
-    Role, RoleName, SecretRef, VmStatus, VolumeName,
+    Agent, AgentName, AgentSpec, AgentStatus, Digest, EnvKey, ImageRef, Lifecycle, PortName, Role,
+    RoleName, SecretBinding, SecretRef, VmStatus, VolumeName,
 };
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, Type, ValueRef};
 use rusqlite::{Connection, OptionalExtension, Params, Row, ToSql, params};
@@ -179,14 +179,17 @@ impl Store {
         )
     }
 
-    pub fn secret_bindings(&self, secret: &SecretRef) -> Result<Vec<(AgentName, EnvKey, Host)>> {
+    pub fn secret_bindings(
+        &self,
+        secret: &SecretRef,
+    ) -> Result<Vec<(AgentName, EnvKey, SecretBinding)>> {
         self.all(
-            "SELECT a.name, binding.key, json_extract(binding.value, '$.host')
+            "SELECT a.name, binding.key, binding.value
              FROM agents a, role_versions v, json_each(v.definition, '$.secrets') binding
              WHERE v.digest = a.applied_digest AND json_extract(binding.value, '$.ref') = ?1
              ORDER BY a.name, binding.key",
             [secret.to_string()],
-            |row| Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?)),
+            |row| Ok((text(row, 0)?, text(row, 1)?, json(row, 2)?)),
         )
     }
 
@@ -595,7 +598,7 @@ network = { egress = ["example.com"] }
                 .secret_bindings(&secret.parse().unwrap())
                 .unwrap()
                 .into_iter()
-                .map(|(name, key, host)| format!("{name} {key} {host}"))
+                .map(|(name, key, binding)| format!("{name} {key} {}", binding.host))
                 .collect::<Vec<_>>()
         };
         assert_eq!(

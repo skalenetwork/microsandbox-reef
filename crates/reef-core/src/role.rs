@@ -1,5 +1,6 @@
 use crate::name::{
-    Domain, EnvKey, GuestPath, Host, ImageRef, PortName, RoleName, SecretRef, VolumeName,
+    Domain, EnvKey, GuestPath, HeaderName, Host, ImageRef, PortName, RoleName, SecretRef,
+    VolumeName,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -26,6 +27,8 @@ pub struct Role {
     pub network: Network,
     #[serde(default)]
     pub secrets: BTreeMap<EnvKey, SecretBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fleet_env: Option<BTreeSet<EnvKey>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -82,6 +85,8 @@ pub struct SecretBinding {
     #[serde(rename = "ref")]
     pub secret: SecretRef,
     pub host: Host,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub headers: BTreeSet<HeaderName>,
 }
 
 pub fn parse_role(text: &str) -> Result<Role, String> {
@@ -188,6 +193,11 @@ impl Role {
                     out.push("network.host: 53 is the guest's resolver, not a host port".to_owned())
                 }
                 _ => {}
+            }
+        }
+        for key in self.fleet_env.iter().flatten() {
+            if self.secrets.contains_key(key) {
+                out.push(format!("fleet-env: {key} is also declared in secrets"));
             }
         }
         for (key, binding) in &self.secrets {
@@ -303,6 +313,33 @@ RAW_TOKEN         = { ref = "reef://platform/raw", host = "raw.githubusercontent
 
         let err = parse_role(&host(r#"host = "*""#)).unwrap_err();
         assert!(err.contains('*'), "{err}");
+    }
+
+    #[test]
+    fn secrets_can_be_scoped_to_headers() {
+        let text = GOOD.replace(
+            r#"host = "api.anthropic.com" }"#,
+            r#"host = "api.anthropic.com", headers = ["x-api-key"] }"#,
+        );
+        let key: EnvKey = "ANTHROPIC_API_KEY".parse().unwrap();
+        assert_eq!(parse_role(&text).unwrap().secrets[&key].headers.len(), 1);
+        let err = parse_role(&text.replace("x-api-key", "X-Api-Key")).unwrap_err();
+        assert!(err.contains("header name"), "{err}");
+    }
+
+    #[test]
+    fn fleet_env_lists_settable_keys_apart_from_secrets() {
+        let with = |keys: &str| {
+            GOOD.replacen(
+                "\n[resources]",
+                &format!("fleet-env = [{keys}]\n\n[resources]"),
+                1,
+            )
+        };
+        assert!(parse_role(GOOD).unwrap().fleet_env.is_none());
+        let role = parse_role(&with(r#""ORG_ID""#)).unwrap();
+        assert_eq!(role.fleet_env.unwrap().len(), 1);
+        assert!(invalid(&with(r#""ANTHROPIC_API_KEY""#))[0].contains("fleet-env"));
     }
 
     #[test]
