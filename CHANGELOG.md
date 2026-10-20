@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.19.3] - 2026-10-20
+
+### Fixed
+- Bump microsandbox to 0.7.8
+
+
 ## [0.19.2] - 2026-10-07
 
 ### Changed
