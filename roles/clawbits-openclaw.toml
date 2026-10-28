@@ -1,7 +1,7 @@
 version = 1
 
 name  = "clawbits-openclaw"
-image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.10.5-pl0.24.1-g5784bf1"
+image = "ghcr.io/skalenetwork/clawbits-openclaw:oc2026.10.8-pl0.24.1-g5784bf1"
 init  = ["/usr/bin/tini", "-s", "--", "/usr/local/bin/clawbits-start"]
 
 [resources]
