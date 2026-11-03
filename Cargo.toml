@@ -5,7 +5,7 @@ members = ["crates/reef-core", "crates/reef"]
 [workspace.package]
 version = "0.20.1"
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.94"
 license = "MIT"
 
 [workspace.lints.rust]
