@@ -42,7 +42,7 @@ impl Msb {
             .canonicalize()
             .unwrap_or_else(|_| state_dir.to_owned());
         let hash = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
-        let state_id = format!("{hash:x}")[..8].to_owned();
+        let state_id = hex::encode(hash)[..8].to_owned();
         Ok(Self {
             state_id,
             host_key: state_dir.join("ssh_host_ed25519_key"),

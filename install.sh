@@ -22,12 +22,14 @@ asset="reef-$target.tar.gz"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-curl -fsSL "$base/$asset" -o "$tmp/$asset"
-curl -fsSL "$base/checksums.sha256" -o "$tmp/checksums.sha256"
+curl --proto '=https' --tlsv1.2 -fsSL "$base/$asset" -o "$tmp/$asset"
+curl --proto '=https' --tlsv1.2 -fsSL "$base/checksums.sha256" -o "$tmp/checksums.sha256"
 if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi
-(cd "$tmp" && grep " $asset\$" checksums.sha256 | $sum -c - >/dev/null)
+grep " $asset\$" "$tmp/checksums.sha256" > "$tmp/sum" ||
+  { echo "checksums.sha256 lists no $asset" >&2; exit 1; }
+(cd "$tmp" && $sum -c sum >/dev/null)
 
-tar -xzf "$tmp/$asset" -C "$tmp"
+tar -xzf "$tmp/$asset" -C "$tmp" reef
 mkdir -p "$bin_dir"
 install -m 755 "$tmp/reef" "$bin_dir/reef"
 

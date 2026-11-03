@@ -121,7 +121,11 @@ async fn latest() -> Result<Version> {
 }
 
 async fn get(url: &str) -> Result<Vec<u8>> {
-    let response = reqwest::get(url)
+    let response = reqwest::Client::builder()
+        .https_only(true)
+        .build()?
+        .get(url)
+        .send()
         .await
         .and_then(reqwest::Response::error_for_status)
         .with_context(|| format!("cannot download {url}"))?;
@@ -142,7 +146,7 @@ fn verify(archive: &[u8], checksums: &[u8], asset: &str) -> Result<()> {
         .lines()
         .find_map(|line| line.strip_suffix(asset)?.split_whitespace().next())
         .with_context(|| format!("no checksum published for {asset}"))?;
-    let actual = format!("{:x}", Sha256::digest(archive));
+    let actual = hex::encode(Sha256::digest(archive));
     if actual != expected {
         bail!("checksum mismatch for {asset}");
     }

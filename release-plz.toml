@@ -11,6 +11,7 @@ changelog_update = false
 name = "reef"
 git_tag_enable = true
 git_release_enable = true
+git_release_draft = true
 changelog_update = true
 changelog_path = "CHANGELOG.md"
 changelog_include = ["reef-core"]
