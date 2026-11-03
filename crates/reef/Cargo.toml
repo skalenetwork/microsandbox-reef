@@ -12,7 +12,7 @@ flate2 = "1"
 hex = "0.4"
 microsandbox = { version = "=0.7.13", default-features = false, features = ["local", "net", "ssh"] }
 ratatui = { version = "0.30", default-features = false, features = ["crossterm", "unstable-rendered-line-info"] }
-reef-core = { path = "../reef-core", version = "0.20.1" }
+reef-core = { path = "../reef-core", version = "0.20.2" }
 reqwest = "0.13"
 rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
 semver = "1"

@@ -1,6 +1,14 @@
 # Changelog
 
 
+## [0.20.2] - 2026-11-03
+
+### Fixed
+- Refuse plain-http redirects in reef update
+- Update dependencies past security advisories
+- Upgrade msb to 0.7.13
+
+
 ## [0.20.1] - 2026-10-26
 
 ### Fixed
