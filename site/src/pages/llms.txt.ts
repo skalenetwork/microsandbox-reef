@@ -74,7 +74,7 @@ A role takes any OCI image. Pin it by digest. Without \`init\` the VM boots idle
 
 ## Upgrade
 
-\`reef update\` installs the latest reef. When the msb version at the top of this file is newer than \`msb --version\`, first stop any \`reef ui\`, \`reef agent serve\` and \`reef agent forward\` sessions, back up \`~/.local/state/reef/reef.db\` and \`~/.microsandbox/db/msb.db\`, and install the new msb. Then run \`reef update\`. Running VMs move to the new msb at their next stop and start.
+\`reef update\` installs the latest reef. When the msb version at the top of this file is newer than \`msb --version\`, first stop the \`reef-reconcile\` service on a GitOps host and any \`reef ui\`, \`reef agent serve\` and \`reef agent forward\` sessions, back up \`~/.local/state/reef/reef.db\` and \`~/.microsandbox/db/msb.db\`, and install the new msb. Then run \`reef update\` and start \`reef-reconcile\` again. Running VMs move to the new msb at their next stop and start.
 
 ## Reference
 
