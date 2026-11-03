@@ -4359,7 +4359,7 @@ dependencies = [
 
 [[package]]
 name = "reef"
-version = "0.20.1"
+version = "0.20.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -4382,7 +4382,7 @@ dependencies = [
 
 [[package]]
 name = "reef-core"
-version = "0.20.1"
+version = "0.20.2"
 dependencies = [
  "serde",
  "toml",
