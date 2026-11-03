@@ -27,7 +27,7 @@ grep -qs '^github.com ssh-ed25519' "$HOME_DIR/.ssh/known_hosts" ||
 
 if ! as_reef ssh -o BatchMode=yes -T git@github.com 2>&1 | grep -q 'successfully authenticated'; then
   echo "Add this key to github.com/$REEF_REPO under Settings > Deploy keys, with write access, then run this again:"
-  cat "$KEY.pub"
+  as_reef cat "$KEY.pub"
   exit 1
 fi
 
@@ -38,8 +38,8 @@ for branch in main fleet status; do
 done
 as_reef git -C "$DIR/status" config user.name reef
 as_reef git -C "$DIR/status" config user.email "reef@$REEF_HOST"
-as_reef curl -fsSL "$SRC/reconcile.sh" -o "$DIR/reconcile.sh"
-chmod 755 "$DIR/reconcile.sh"
+as_reef curl --proto '=https' --tlsv1.2 -fsSL "$SRC/reconcile.sh" -o "$DIR/reconcile.sh"
+as_reef chmod 755 "$DIR/reconcile.sh"
 
 cat > /etc/systemd/system/reef-reconcile.service <<UNIT
 [Unit]
