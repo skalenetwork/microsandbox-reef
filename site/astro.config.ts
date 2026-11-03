@@ -6,6 +6,7 @@ export default defineConfig({
   site: "https://reef.clawbits.ai",
   build: { format: "file" },
   devToolbar: { enabled: false },
+  vite: { build: { assetsInlineLimit: (file) => (file.endsWith(".js") ? false : undefined) } },
   markdown: {
     shikiConfig: { theme: "css-variables" },
     processor: satteri({ mdastPlugins: [mermaid] }),
