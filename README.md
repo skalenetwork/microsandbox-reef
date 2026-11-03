@@ -25,7 +25,12 @@ curl -fsSL https://reef.clawbits.ai/install | sh
 
 Latest release to `~/.local/bin`, no sudo; `REEF_INSTALL` overrides the
 directory, `REEF_VERSION=0.10.0` pins a version. Linux x86_64/aarch64 and
-Apple Silicon macOS; the Linux builds are glibc and need 2.39 or newer.
+Apple Silicon macOS; the Linux builds are glibc and need 2.39 or newer. The
+installer checks the tarball against the release's `checksums.sha256`. For
+releases after 0.20.1, `gh attestation verify reef-<target>.tar.gz -R
+skalenetwork/microsandbox-reef --signer-workflow
+skalenetwork/microsandbox-reef/.github/workflows/release-plz.yml --source-ref
+refs/heads/main` also proves the release workflow on `main` built it.
 
 reef drives microsandbox rather than shipping it, so a host needs the `msb`
 bundle this reef pins, which is the latest while reef is current; `MSB_PATH`

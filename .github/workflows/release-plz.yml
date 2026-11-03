@@ -4,40 +4,51 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   release-plz:
     runs-on: ubuntu-latest
+    # release-plz writes through RELEASE_PLZ_TOKEN, not this token
+    permissions:
+      contents: read
     concurrency:
       group: release-plz
       cancel-in-progress: false
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
+      tag: ${{ steps.release-plz.outputs.tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: Swatinem/rust-cache@v2
+          persist-credentials: false
+      # release-plz/action installs an unpinned cargo-binstall with the token in its env
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: release-plz@0.4.3,cargo-semver-checks@0.51
+          fallback: none
       - id: release-plz
-        uses: release-plz/action@v0.5
+        run: |
+          viewer=$(gh api graphql -f query='query { viewer { name login databaseId } }' --jq .data.viewer)
+          git config --global user.name "$(jq -r '(.name | select(. != null and . != "")) // .login' <<< "$viewer")"
+          git config --global user.email "$(jq -r '"\(.databaseId)+\(.login)@users.noreply.github.com"' <<< "$viewer")"
+          release-plz release-pr --git-token "$GITHUB_TOKEN" --repo-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --forge github
+          releases=$(release-plz release --git-token "$GITHUB_TOKEN" --forge github -o json)
+          tag=$(jq -r '.releases[] | select(.package_name == "reef").tag' <<< "$releases")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-      - id: tag
-        run: echo "tag=$(jq -r '.[] | select(.package_name == "reef").tag' <<< "$RELEASES")" >> "$GITHUB_OUTPUT"
-        env:
-          RELEASES: ${{ steps.release-plz.outputs.releases }}
 
   build:
     needs: release-plz
     if: needs.release-plz.outputs.tag
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
@@ -45,25 +56,38 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: cargo build --release --locked
-      - run: tar czf reef-${{ matrix.target }}.tar.gz -C target/release reef
-      - uses: actions/upload-artifact@v7
+      - run: tar czf "reef-$TARGET.tar.gz" -C target/release reef
+        env:
+          TARGET: ${{ matrix.target }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reef-${{ matrix.target }}
           path: reef-${{ matrix.target }}.tar.gz
 
+  # the release stays a draft until this job publishes it; after a failure use
+  # "Re-run failed jobs", since a full re-run finds the tag and skips the build
   release:
     needs: [release-plz, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.release-plz.outputs.tag }}
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           merge-multiple: true
       - run: sha256sum reef-*.tar.gz > checksums.sha256
       - run: gh release upload "$TAG" reef-*.tar.gz checksums.sha256 --clobber
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.release-plz.outputs.tag }}
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: checksums.sha256
+      - run: gh release edit "$TAG" --draft=false --latest
