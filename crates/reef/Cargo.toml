@@ -9,15 +9,16 @@ license.workspace = true
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
+hex = "0.4"
 microsandbox = { version = "=0.7.13", default-features = false, features = ["local", "net", "ssh"] }
 ratatui = { version = "0.30", default-features = false, features = ["crossterm", "unstable-rendered-line-info"] }
 reef-core = { path = "../reef-core", version = "0.20.1" }
 reqwest = "0.13"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 ssh-key = { version = "=0.7.0-rc.11", default-features = false, features = ["alloc"] }
 tar = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

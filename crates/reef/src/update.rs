@@ -142,7 +142,7 @@ fn verify(archive: &[u8], checksums: &[u8], asset: &str) -> Result<()> {
         .lines()
         .find_map(|line| line.strip_suffix(asset)?.split_whitespace().next())
         .with_context(|| format!("no checksum published for {asset}"))?;
-    let actual = format!("{:x}", Sha256::digest(archive));
+    let actual = hex::encode(Sha256::digest(archive));
     if actual != expected {
         bail!("checksum mismatch for {asset}");
     }

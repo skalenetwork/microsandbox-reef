@@ -675,7 +675,7 @@ fn require_agent(ctx: &Ctx, name: &AgentName) -> Result<Agent> {
 
 fn digest_role(role: &Role) -> (Digest, String) {
     let definition = serde_json::to_string(role).expect("roles serialize");
-    let hex = format!("{:x}", Sha256::digest(definition.as_bytes()));
+    let hex = hex::encode(Sha256::digest(definition.as_bytes()));
     (hex.parse().expect("sha256 hex is a digest"), definition)
 }
 
