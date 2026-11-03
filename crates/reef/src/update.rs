@@ -121,7 +121,11 @@ async fn latest() -> Result<Version> {
 }
 
 async fn get(url: &str) -> Result<Vec<u8>> {
-    let response = reqwest::get(url)
+    let response = reqwest::Client::builder()
+        .https_only(true)
+        .build()?
+        .get(url)
+        .send()
         .await
         .and_then(reqwest::Response::error_for_status)
         .with_context(|| format!("cannot download {url}"))?;
